@@ -1,0 +1,355 @@
+{% load tz %}
+<!DOCTYPE html>
+<html lang="es">
+    <head>
+        <meta charset="UTF-8">
+        <title>Reporte de Evento - {{ evento.nombre }}</title>
+        <style>
+            @page {
+                size: A4;
+                margin: 1.5cm;
+            }
+
+            body {
+                font-family: 'Inter', 'Helvetica', 'Arial', sans-serif;
+                color: #0f172a;
+                line-height: 1.4;
+                margin: 0;
+                padding: 0;
+            }
+
+            .header {
+                border-bottom: 3px solid #6366f1;
+                padding-bottom: 20px;
+                margin-bottom: 30px;
+                display: block;
+                width: 100%;
+            }
+
+            .logo-box {
+                float: right;
+                text-align: right;
+            }
+
+            .logo-box img {
+                max-height: 70px;
+            }
+
+            .company-name {
+                font-size: 26px;
+                font-weight: bold;
+                color: #1e1b4b;
+                margin: 0;
+                letter-spacing: -0.5px;
+            }
+
+            .report-subtitle {
+                font-size: 13px;
+                font-weight: bold;
+                color: #6366f1;
+                text-transform: uppercase;
+                letter-spacing: 1.5px;
+                margin-top: 4px;
+            }
+
+            .event-banner {
+                background: #312e81;
+                color: white;
+                padding: 40px;
+                border-radius: 24px;
+                margin-bottom: 35px;
+                position: relative;
+                overflow: hidden;
+                box-shadow: 0 15px 30px -5px rgba(49, 46, 129, 0.2);
+            }
+
+            .event-info {
+                width: 100%;
+                border-collapse: collapse;
+            }
+
+            .event-info td {
+                border: none;
+                padding: 0;
+            }
+
+            .no-attendance-title {
+                margin: 40px 0 20px 0;
+                font-size: 18px;
+                font-weight: 800;
+                color: #ef4444;
+                text-transform: uppercase;
+                border-left: 5px solid #ef4444;
+                padding-left: 15px;
+            }
+
+            .ev-label {
+                font-size: 10px;
+                font-weight: bold;
+                color: #c7d2fe;
+                text-transform: uppercase;
+                margin-bottom: 4px;
+            }
+
+            .ev-val {
+                font-size: 24px;
+                font-weight: 800;
+                color: #ffffff;
+                margin-bottom: 8px;
+                text-decoration: underline;
+            }
+
+            .stats-grid {
+                float: right;
+                width: 250px;
+            }
+
+            .stats-card {
+                background: rgba(255, 255, 255, 0.1);
+                color: white;
+                padding: 10px;
+                text-align: center;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                margin-bottom: 8px;
+                border-radius: 12px;
+                width: 70px;
+                float: left;
+                margin-left: 8px;
+            }
+
+            .stats-num {
+                font-size: 18px;
+                font-weight: 800;
+                color: #ffffff;
+            }
+
+            .stats-label {
+                font-size: 8px;
+                font-weight: 800;
+                color: #c7d2fe;
+                text-transform: uppercase;
+                margin-top: 2px;
+            }
+
+            h2 {
+                font-size: 16px;
+                color: #334155;
+                border-bottom: 2px solid #e2e8f0;
+                padding-bottom: 8px;
+                margin-top: 40px;
+                margin-bottom: 15px;
+                font-weight: bold;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 20px;
+                border: 1px solid #e2e8f0;
+            }
+
+            th {
+                background-color: #4f46e5;
+                color: white;
+                font-size: 10px;
+                font-weight: 800;
+                text-align: left;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                padding: 15px 12px;
+                border-bottom: 2px solid #3730a3;
+            }
+
+            td {
+                padding: 12px;
+                font-size: 11px;
+                border-bottom: 1px solid #f1f5f9;
+                vertical-align: middle;
+            }
+
+            tr:nth-child(even) {
+                background-color: #f8fafc;
+            }
+
+            .badge {
+                font-size: 9px;
+                font-weight: bold;
+                padding: 2px 4px;
+                text-transform: uppercase;
+            }
+
+            .badge-success {
+                background-color: #dcfce7;
+                color: #166534;
+            }
+
+            .badge-danger {
+                background-color: #fee2e2;
+                color: #991b1b;
+            }
+
+            .badge-info {
+                background-color: #e0e7ff;
+                color: #3730a3;
+            }
+
+            .footer {
+                position: fixed;
+                bottom: 0;
+                width: 100%;
+                text-align: center;
+                font-size: 9px;
+                color: #94a3b8;
+                border-top: 1px solid #f1f5f9;
+                padding-top: 15px;
+            }
+
+            .clear {
+                clear: both;
+            }
+
+            .stat-value {
+                font-size: 28px;
+                font-weight: 800;
+                color: #facc15;
+                display: block;
+                margin-top: 5px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <div class="logo-box">
+                {% if logo_base64 %}<img src="data:image/png;base64,{{ logo_base64 }}" alt="Logo">{% endif %}
+            </div>
+            <h1 class="company-name">{{ sistema_config.nombre_institucion|default:"CONTROL DE ASISTENCIA" }}</h1>
+            <p class="report-subtitle">Reporte Ejecutivo por Evento</p>
+        </div>
+        <div class="event-banner">
+            <div class="stats-grid">
+                <div class="stats-card">
+                    <div class="stats-num">{{ total_asistentes }}</div>
+                    <div class="stats-label">Asistentes</div>
+                </div>
+                <div class="stats-card">
+                    <div class="stats-num" style="color: #fca5a5">{{ total_inasistentes }}</div>
+                    <div class="stats-label">Faltaron</div>
+                </div>
+                <div class="stats-card">
+                    <div class="stats-num">{{ porcentaje_asistencia|floatformat:1 }}%</div>
+                    <div class="stats-label">Participación</div>
+                </div>
+            </div>
+            <div class="ev-label">Reporte del Evento</div>
+            <div class="ev-val">{{ evento.nombre }}</div>
+            <div style="font-size: 13px; color: #e2e8f0; margin-top: 8px;">
+                <strong>Fecha Programada:</strong> <span style="color: white">{{ evento.fecha|date:"d M Y" }}</span>
+                <br>
+                <strong>Punto de Control:</strong> <span style="color: white">{{ evento.ubicacion.nombre|default:"General" }}</span>
+                <div class="meta-item"
+                     style="font-size: 10px;
+                            color: #c7d2fe;
+                            margin-top: 5px">Reporte generado el {{ current_date }}</div>
+                {% if filtros.dni or filtros.fecha_inicio or filtros.fecha_fin %}
+                    <div class="meta-item"
+                         style="color: #facc15;
+                                font-weight: 800;
+                                margin-top: 5px;
+                                font-size: 11px">
+                        <span class="meta-label">Filtros aplicados:</span>
+                        {% if filtros.dni %}DNI: {{ filtros.dni }}{% endif %}
+                        {% if filtros.fecha_inicio %}Desde: {{ filtros.fecha_inicio }}{% endif %}
+                        {% if filtros.fecha_fin %}Hasta: {{ filtros.fecha_fin }}{% endif %}
+                    </div>
+                {% endif %}
+            </div>
+            <div class="clear"></div>
+        </div>
+        <h2>
+            <span style="color: #6366f1;">●</span> Socios que Asistieron ({{ asistencias|length }})
+        </h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Socio / Titular</th>
+                    <th>DNI</th>
+                    <th>Ingreso</th>
+                    <th>Salida</th>
+                    <th>Estado</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for asistencia in asistencias %}
+                    <tr>
+                        <td>
+                            <strong>{{ asistencia.usuario.nombre }} {{ asistencia.usuario.apellido }}</strong>
+                        </td>
+                        <td>
+                            <code style="background: #f1f5f9; padding: 2px 4px; border-radius: 3px;">{{ asistencia.usuario.dni }}</code>
+                        </td>
+                        <td style="color: #166534; font-weight: 600;">{{ asistencia.hora_ingreso|date:"H:i"|default:"--" }}</td>
+                        <td style="color: #9a3412; font-weight: 600;">{{ asistencia.hora_salida|date:"H:i"|default:"--" }}</td>
+                        <td>
+                            {% if asistencia.es_justificada %}
+                                {% if asistencia.evidencia_url %}
+                                    <a href="{{ request.scheme }}://{{ request.get_host }}{{ asistencia.evidencia_url }}"
+                                       target="_blank"
+                                       class="badge badge-info"
+                                       style="text-decoration: none">JUSTIFICADA</a>
+                                {% else %}
+                                    <span class="badge badge-info">JUSTIFICADA</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="badge badge-success">ASISTIÓ</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="5"
+                            style="text-align: center;
+                                   padding: 40px;
+                                   color: #94a3b8;
+                                   font-style: italic">No se registraron asistencias para este evento.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% if no_asistentes %}
+            <h2>
+                <span style="color: #ef4444;">●</span> Socios Inasistentes ({{ no_asistentes|length }})
+            </h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Socio / Titular</th>
+                        <th>DNI</th>
+                        <th>Referencia</th>
+                        <th>Estado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for usuario in no_asistentes %}
+                        <tr>
+                            <td>
+                                <strong>{{ usuario.nombre }} {{ usuario.apellido }}</strong>
+                            </td>
+                            <td>
+                                <code style="background: #f1f5f9; padding: 2px 4px; border-radius: 3px;">{{ usuario.dni }}</code>
+                            </td>
+                            <td>{{ usuario.get_estado_display }}</td>
+                            <td>
+                                <span class="badge badge-danger">FALTÓ</span>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
+        <div class="footer">
+            Documento oficial generado por el Sistema de Padron Quiulacocha. Reservados todos los derechos.
+        </div>
+    </body>
+</html>

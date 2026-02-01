@@ -1,0 +1,144 @@
+{% extends 'asistencia/base.html' %}
+{% block title %}Dashboard - Quiulacocha{% endblock %}
+{% block content %}
+    <div class="space-y-12 animate-fade-in">
+        <!-- Header Section -->
+        <div class="flex flex-col md:flex-row md:items-end justify-between gap-6">
+            <div>
+                <h2 class="text-4xl font-extrabold text-slate-900 tracking-tight leading-none mb-3">Panel de Control</h2>
+                <p class="text-slate-500 font-medium italic">Resumen operativo y estadísticas generales</p>
+            </div>
+            <div class="hidden md:block">
+                <span class="px-4 py-2 bg-primary-50 text-primary-700 rounded-full text-xs font-bold border border-primary-100 uppercase tracking-widest">Estado:
+                En Línea</span>
+            </div>
+        </div>
+        <!-- KPI Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <!-- Total Usuarios -->
+            <div class="group bg-white rounded-[2.5rem] p-8 shadow-premium border border-slate-100 hover:border-primary-200 transition-all duration-500 relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-32 h-32 bg-primary-50 rounded-full -mr-16 -mt-16 group-hover:scale-110 transition-transform duration-700 opacity-50">
+                </div>
+                <div class="relative z-10 flex flex-col items-center text-center">
+                    <div class="h-16 w-16 rounded-2xl bg-primary-100 text-primary-600 flex items-center justify-center mb-6 group-hover:rotate-6 transition-all duration-300">
+                        <i class="bi bi-people-fill text-3xl"></i>
+                    </div>
+                    <h3 class="text-5xl font-extrabold text-slate-900 mb-2 tracking-tighter">{{ total_usuarios }}</h3>
+                    <p class="text-slate-400 font-bold uppercase text-[10px] tracking-[0.2em]">Total Usuarios</p>
+                </div>
+                <div class="mt-6 h-1 w-full bg-slate-50 rounded-full overflow-hidden">
+                    <div class="h-full bg-primary-500 w-full opacity-60"></div>
+                </div>
+            </div>
+            <!-- Asistencias Hoy -->
+            <div class="group bg-white rounded-[2.5rem] p-8 shadow-premium border border-slate-100 hover:border-emerald-200 transition-all duration-500 relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-full -mr-16 -mt-16 group-hover:scale-110 transition-transform duration-700 opacity-50">
+                </div>
+                <div class="relative z-10 flex flex-col items-center text-center">
+                    <div class="h-16 w-16 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-6 group-hover:rotate-6 transition-all duration-300">
+                        <i class="bi bi-calendar-check-fill text-3xl"></i>
+                    </div>
+                    <h3 class="text-5xl font-extrabold text-slate-900 mb-2 tracking-tighter">{{ asistencias_hoy }}</h3>
+                    <p class="text-slate-400 font-bold uppercase text-[10px] tracking-[0.2em]">Asistencias Hoy</p>
+                </div>
+                <div class="mt-6 h-1 w-full bg-slate-50 rounded-full overflow-hidden">
+                    <div class="h-full bg-emerald-500 w-2/3 opacity-60"></div>
+                </div>
+            </div>
+            <!-- Eventos Activos -->
+            <div class="group bg-white rounded-[2.5rem] p-8 shadow-premium border border-slate-100 hover:border-amber-200 transition-all duration-500 relative overflow-hidden">
+                <div class="absolute top-0 right-0 w-32 h-32 bg-amber-50 rounded-full -mr-16 -mt-16 group-hover:scale-110 transition-transform duration-700 opacity-50">
+                </div>
+                <div class="relative z-10 flex flex-col items-center text-center">
+                    <div class="h-16 w-16 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mb-6 group-hover:rotate-6 transition-all duration-300">
+                        <i class="bi bi-megaphone-fill text-3xl"></i>
+                    </div>
+                    <h3 class="text-5xl font-extrabold text-slate-900 mb-2 tracking-tighter">{{ eventos_activos }}</h3>
+                    <p class="text-slate-400 font-bold uppercase text-[10px] tracking-[0.2em]">Eventos Activos</p>
+                </div>
+                <div class="mt-6 h-1 w-full bg-slate-50 rounded-full overflow-hidden">
+                    <div class="h-full bg-amber-500 w-1/2 opacity-60"></div>
+                </div>
+            </div>
+        </div>
+        <!-- Quick Actions Panel -->
+        <div class="max-w-4xl mx-auto">
+            <div class="bg-slate-900 rounded-[3rem] p-10 lg:p-14 shadow-2xl relative overflow-hidden">
+                <!-- Decorative accent -->
+                <div class="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-primary-600/10 to-transparent"></div>
+                <div class="relative z-10">
+                    <div class="text-center mb-12">
+                        <h5 class="text-2xl font-extrabold text-white mb-3">Acciones Estratégicas</h5>
+                        <div class="h-1 w-12 bg-primary-500 mx-auto rounded-full"></div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {% if can_scan_qr %}
+                            <a href="{% url 'escanear_qr' %}"
+                               class="group flex items-center gap-6 p-6 bg-white/5 border border-white/10 rounded-[2rem] hover:bg-white/10 transition-all duration-300 transform hover:-translate-y-1">
+                                <div class="h-14 w-14 rounded-2xl bg-primary-600 text-white flex items-center justify-center shadow-lg shadow-primary-600/20 group-hover:scale-110 transition-transform">
+                                    <i class="bi bi-camera-fill text-2xl"></i>
+                                </div>
+                                <div class="text-left">
+                                    <h6 class="text-lg font-bold text-white mb-1">Escanear QR</h6>
+                                    <p class="text-slate-400 text-xs font-medium">Registrar ingreso o salida</p>
+                                </div>
+                                <i class="bi bi-chevron-right ml-auto text-slate-500 group-hover:text-white transition-colors"></i>
+                            </a>
+                        {% endif %}
+                        <a href="{% url 'historial_asistencias' %}"
+                           class="group flex items-center gap-6 p-6 bg-white/5 border border-white/10 rounded-[2rem] hover:bg-white/10 transition-all duration-300 transform hover:-translate-y-1">
+                            <div class="h-14 w-14 rounded-2xl bg-primary-500 text-white flex items-center justify-center shadow-lg shadow-primary-500/20 group-hover:scale-110 transition-transform">
+                                <i class="bi bi-clock-history text-2xl"></i>
+                            </div>
+                            <div class="text-left">
+                                <h6 class="text-lg font-bold text-white mb-1">Ver Historial</h6>
+                                <p class="text-slate-400 text-xs font-medium">Registros de asistencia</p>
+                            </div>
+                            <i class="bi bi-chevron-right ml-auto text-slate-500 group-hover:text-white transition-colors"></i>
+                        </a>
+                        <a href="{% url 'exportar_asistencias_excel' %}"
+                           hx-boost="false"
+                           class="group flex items-center gap-6 p-6 bg-emerald-600/10 border border-emerald-600/20 rounded-[2rem] hover:bg-emerald-600/20 transition-all duration-300 transform hover:-translate-y-1">
+                            <div class="h-14 w-14 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-lg shadow-emerald-600/20 group-hover:scale-110 transition-transform">
+                                <i class="bi bi-file-earmark-excel-fill text-2xl"></i>
+                            </div>
+                            <div class="text-left">
+                                <h6 class="text-lg font-bold text-white mb-1">Exportar Excel</h6>
+                                <p class="text-slate-400 text-xs font-medium">Descargar reporte completo</p>
+                            </div>
+                            <i class="bi bi-download ml-auto text-slate-500 group-hover:text-white transition-colors"></i>
+                        </a>
+                        <a href="{% url 'registrar_usuario' %}"
+                           class="group flex items-center gap-6 p-6 bg-primary-600 rounded-[2rem] hover:bg-primary-700 transition-all duration-300 transform hover:-translate-y-1 shadow-xl shadow-primary-600/20">
+                            <div class="h-14 w-14 rounded-2xl bg-white/20 text-white flex items-center justify-center group-hover:scale-110 transition-transform">
+                                <i class="bi bi-person-plus-fill text-2xl"></i>
+                            </div>
+                            <div class="text-left">
+                                <h6 class="text-lg font-bold text-white mb-1">Registrar Nuevo Usuario</h6>
+                                <p class="text-primary-100/70 text-xs font-medium italic">Enrolamiento rápido</p>
+                            </div>
+                            <i class="bi bi-arrow-right-circle-fill ml-auto text-white text-3xl opacity-50 group-hover:opacity-100 transition-opacity"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <style>
+        @keyframes fade-in {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate-fade-in {
+            animation: fade-in 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+    </style>
+{% endblock %}

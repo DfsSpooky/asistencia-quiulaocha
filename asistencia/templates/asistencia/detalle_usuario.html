@@ -1,0 +1,137 @@
+{% extends 'asistencia/base.html' %}
+{% load static %}
+{% block title %}Credencial de {{ usuario.nombre }} - Quiulacocha{% endblock %}
+{% block content %}
+    <div class="max-w-4xl mx-auto animate-fade-in py-10 px-4">
+        <div class="text-center mb-10 space-y-2">
+            <h2 class="text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight">Credencial Digital</h2>
+            <p class="text-slate-500 font-medium italic">Documento oficial de identificación comunitaria</p>
+        </div>
+        <div class="flex justify-center w-full">
+            <div id="carnet-container" class="relative">
+                <div id="carnet"
+                     class="relative w-[600px] h-[378px] rounded-[2rem] p-8 shadow-2xl overflow-hidden border flex flex-col justify-between mx-auto transition-colors duration-300 bg-white text-slate-900 border-slate-200"
+                     style="background-color: white">
+                    <div class="absolute top-0 right-0 w-64 h-64 bg-primary-500/20 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none">
+                    </div>
+                    <div class="absolute bottom-0 left-0 w-48 h-48 bg-primary-400/20 rounded-full blur-3xl -ml-10 -mb-10 pointer-events-none">
+                    </div>
+                    <div class="absolute inset-0 opacity-10 pointer-events-none"
+                         style="background-image: radial-gradient(circle, currentColor 1px, transparent 1px);
+                                background-size: 20px 20px"></div>
+                    <div class="relative h-full flex flex-col justify-between z-10">
+                        <div class="flex justify-between items-start">
+                            <div class="space-y-1">
+                                <h3 class="text-2xl font-black tracking-tighter uppercase leading-none text-primary-500">
+                                    {{ sistema_config.nombre_institucion|default:"QUIULACOCHA" }}
+                                </h3>
+                                <p class="text-[9px] font-bold tracking-[0.3em] uppercase opacity-60">Sistema de Control</p>
+                            </div>
+                            <div class="h-14 w-14 rounded-xl flex items-center justify-center overflow-hidden border bg-slate-50 border-slate-100">
+                                {% if sistema_config.logo %}
+                                    <img src="{{ sistema_config.logo.url }}"
+                                         crossorigin="anonymous"
+                                         alt="Logo"
+                                         class="h-10 w-10 object-contain">
+                                {% else %}
+                                    <i class="bi bi-shield-check text-3xl text-primary-500"></i>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-6 mt-1">
+                            <div class="shrink-0 relative">
+                                <div class="h-32 w-32 rounded-2xl p-1.5 ring-2 overflow-hidden bg-white ring-primary-400 shadow-lg">
+                                    <img src="{{ usuario.foto_perfil.url }}"
+                                         crossorigin="anonymous"
+                                         alt="Foto"
+                                         class="w-full h-full object-cover rounded-xl grayscale-[0.1]">
+                                </div>
+                            </div>
+                            <div class="flex-1 min-w-0 space-y-2">
+                                <div>
+                                    <h4 class="text-3xl font-black tracking-tight leading-none truncate pb-1">{{ usuario.nombre }}</h4>
+                                    <h4 class="text-xl font-bold tracking-tight leading-none opacity-60 truncate">{{ usuario.apellido }}</h4>
+                                    <div class="mt-2 inline-block px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest border border-slate-300 text-slate-500 bg-slate-100">
+                                        Socio Comunitario
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2 border-t pt-3 mt-1 border-slate-200">
+                                    <div>
+                                        <span class="text-[8px] font-bold uppercase tracking-widest block opacity-50 mb-0.5">DNI</span>
+                                        <span class="text-lg font-mono font-bold tracking-widest">{{ usuario.dni }}</span>
+                                    </div>
+                                    <div>
+                                        <span class="text-[8px] font-bold uppercase tracking-widest block opacity-50 mb-0.5">Estado</span>
+                                        <span class="text-[10px] font-black uppercase tracking-widest text-emerald-500">{{ usuario.get_estado_display }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="hidden sm:block shrink-0 bg-white p-1.5 rounded-xl shadow-lg border border-slate-100">
+                                <img src="{{ usuario.qr_code.url }}"
+                                     crossorigin="anonymous"
+                                     alt="QR"
+                                     class="h-55 w-55 object-contain">
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between pt-3 mt-1 border-t opacity-40 border-slate-300">
+                            <p class="text-[7px] font-bold tracking-widest uppercase font-mono">UID: {{ usuario.id }}</p>
+                            <p class="text-[7px] font-bold tracking-widest uppercase">
+                                © {{ sistema_config.nombre_institucion|default:"Quiulacocha" }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="flex flex-col md:flex-row gap-4 mt-12 justify-center print:hidden">
+            <button onclick="printCarnet()"
+                    id="btnPrint"
+                    class="flex-1 max-w-xs py-4 bg-slate-900 text-white rounded-xl font-bold uppercase text-xs tracking-widest hover:bg-black transition-all shadow-xl shadow-slate-900/10 flex items-center justify-center gap-3 hover:-translate-y-1">
+                <i class="bi bi-printer-fill text-lg"></i>
+                <span>Imprimir Credencial</span>
+            </button>
+            <a href="{% url 'lista_usuarios' %}"
+               class="flex-1 max-w-xs py-4 bg-slate-100 text-slate-500 rounded-xl font-bold uppercase text-xs tracking-widest hover:bg-slate-200 transition-all text-center hover:-translate-y-1">
+                Volver
+            </a>
+        </div>
+    </div>
+    <style>
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+
+            #carnet-container,
+            #carnet-container * {
+                visibility: visible;
+            }
+
+            #carnet-container {
+                position: absolute;
+                left: 50%;
+                top: 50%;
+                transform: translate(-50%, -50%);
+                width: 600px;
+                height: 378px;
+            }
+
+            #carnet {
+                border: none !important;
+                box-shadow: none !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+
+            @page {
+                size: landscape;
+                margin: 0;
+            }
+        }
+    </style>
+    <script>
+    function printCarnet() {
+        window.print();
+    }
+    </script>
+{% endblock %}

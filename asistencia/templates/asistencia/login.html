@@ -1,0 +1,165 @@
+{% extends 'asistencia/base.html' %}
+{% block title %}Iniciar Sesión - Quiulacocha{% endblock %}
+{% block content %}
+    <div class="min-h-[80vh] flex items-center justify-center -mt-8">
+        <div class="w-full max-w-5xl bg-white rounded-[2.5rem] shadow-premium overflow-hidden border border-slate-100 flex flex-col md:flex-row animate-fade-in">
+            <!-- Left Side: Visual Branding -->
+            <div class="w-full md:w-1/2 p-12 lg:p-16 bg-gradient-to-br from-primary-600 to-primary-900 text-white flex flex-col justify-between relative overflow-hidden">
+                <!-- Decorative blobs -->
+                <div class="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-20 -mt-20"></div>
+                <div class="absolute bottom-0 left-0 w-64 h-64 bg-primary-400/20 rounded-full blur-3xl -ml-20 -mb-20"></div>
+                <div class="relative z-10">
+                    <div class="h-14 w-14 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mb-8 border border-white/30">
+                        <i class="bi bi-shield-lock-fill text-2xl"></i>
+                    </div>
+                    <h1 class="text-4xl lg:text-5xl font-extrabold tracking-tight mb-6 leading-tight">
+                        Acceso al
+                        <br>
+                        Sistema
+                        Central
+                    </h1>
+                    <p class="text-primary-100 text-lg font-medium max-w-md">
+                        Bienvenido a la plataforma de gestión de la
+                        Comunidad Campesina de Quiulacocha.
+                    </p>
+                </div>
+                <div class="relative z-10 pt-12">
+                    <div class="space-y-4">
+                        <div class="flex items-center gap-4">
+                            <div class="h-10 w-10 flex-shrink-0 bg-white/10 rounded-xl flex items-center justify-center">
+                                <i class="bi bi-qr-code text-xl"></i>
+                            </div>
+                            <span class="font-bold text-sm tracking-wide">Control mediante QR</span>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <div class="h-10 w-10 flex-shrink-0 bg-white/10 rounded-xl flex items-center justify-center">
+                                <i class="bi bi-graph-up-arrow text-xl"></i>
+                            </div>
+                            <span class="font-bold text-sm tracking-wide">Reportes en tiempo real</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Right Side: Login Form -->
+            <div class="w-full md:w-1/2 p-12 lg:p-16 flex flex-col justify-center bg-white">
+                <div class="max-w-md mx-auto w-full">
+                    <div class="mb-10 text-center md:text-left">
+                        <h2 class="text-3xl font-extrabold text-slate-900 mb-2 tracking-tight">Iniciar Sesión</h2>
+                        <p class="text-slate-500 font-medium italic">Ingresa tus credenciales de acceso</p>
+                    </div>
+                    <form method="post"
+                          class="space-y-6"
+                          action="{% url 'login' %}"
+                          hx-boost="false">
+                        {% csrf_token %}
+                        {% if form.non_field_errors %}
+                            <div class="p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-sm font-bold flex items-center gap-3 animate-shake">
+                                <i class="bi bi-exclamation-triangle-fill text-lg"></i>
+                                {{ form.non_field_errors.0 }}
+                            </div>
+                        {% endif %}
+                        <!-- Username -->
+                        <div class="space-y-2 group">
+                            <label for="id_username"
+                                   class="block text-sm font-bold text-slate-700 ml-1 transition-colors group-focus-within:text-primary-600">
+                                Usuario
+                            </label>
+                            <div class="relative">
+                                <div class="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary-500 transition-colors">
+                                    <i class="bi bi-person-fill text-lg"></i>
+                                </div>
+                                <input type="text"
+                                       name="username"
+                                       id="id_username"
+                                       required
+                                       autofocus
+                                       class="w-full pl-12 pr-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none transition-all font-semibold text-slate-900 placeholder:text-slate-400"
+                                       placeholder="Ej: admin">
+                            </div>
+                        </div>
+                        <!-- Password -->
+                        <div class="space-y-2 group" x-data="{ show: false }">
+                            <div class="flex justify-between items-center ml-1">
+                                <label for="id_password"
+                                       class="block text-sm font-bold text-slate-700 transition-colors group-focus-within:text-primary-600">
+                                    Contraseña
+                                </label>
+                            </div>
+                            <div class="relative">
+                                <div class="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none text-slate-400 group-focus-within:text-primary-500 transition-colors">
+                                    <i class="bi bi-lock-fill text-lg"></i>
+                                </div>
+                                <input :type="show ? 'text' : 'password'"
+                                       name="password"
+                                       id="id_password"
+                                       required
+                                       class="w-full pl-12 pr-12 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none transition-all font-semibold text-slate-900 placeholder:text-slate-400"
+                                       placeholder="••••••••">
+                                <button type="button"
+                                        @click="show = !show"
+                                        class="absolute inset-y-0 right-0 pr-5 flex items-center text-slate-400 hover:text-primary-500 transition-colors">
+                                    <i class="bi" :class="show ? 'bi-eye-slash-fill' : 'bi-eye-fill'"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="pt-4">
+                            <button type="submit"
+                                    class="w-full py-4 bg-primary-600 hover:bg-primary-700 text-white rounded-2xl font-extrabold text-lg shadow-xl shadow-primary-600/25 transition-all transform hover:-translate-y-1 active:scale-95 flex items-center justify-center gap-3">
+                                <span>Entrar al Sistema</span>
+                                <i class="bi bi-arrow-right text-xl"></i>
+                            </button>
+                        </div>
+                    </form>
+                    <div class="mt-12 pt-8 border-t border-slate-100 flex flex-col items-center gap-4">
+                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none">
+                            Seguridad
+                            Quiulacocha
+                        </p>
+                        <div class="flex gap-4">
+                            <div class="h-10 w-10 grayscale opacity-30 hover:grayscale-0 hover:opacity-100 transition-all cursor-crosshair">
+                                <i class="bi bi-patch-check-fill text-2xl text-emerald-500"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <style>
+        @keyframes fade-in {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: translateX(0);
+            }
+
+            25% {
+                transform: translateX(-5px);
+            }
+
+            75% {
+                transform: translateX(5px);
+            }
+        }
+
+        .animate-fade-in {
+            animation: fade-in 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .animate-shake {
+            animation: shake 0.4s ease-in-out 3;
+        }
+    </style>
+{% endblock %}

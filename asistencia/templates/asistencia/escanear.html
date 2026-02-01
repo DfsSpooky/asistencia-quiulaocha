@@ -1,0 +1,476 @@
+{% extends "asistencia/base.html" %}
+{% block title %}
+    Escanear - Quiulacocha
+{% endblock title %}
+{% block content %}
+    <div class="max-w-4xl mx-auto space-y-8 animate-fade-in"
+         x-data="qrScanner()">
+        <!-- Header & Controls -->
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div>
+                <h2 class="text-4xl font-extrabold text-slate-900 tracking-tight leading-none mb-3">Escaneo de Acceso</h2>
+                <p class="text-slate-500 font-medium italic">Captura instantánea de credenciales QR</p>
+            </div>
+            <button @click="showHelp = true"
+                    class="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
+                <i class="bi bi-question-circle text-lg"></i>
+                <span>Centro de Ayuda</span>
+            </button>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-10">
+            <!-- Configuration Column -->
+            <div class="lg:col-span-5 space-y-6">
+                <div class="bg-white rounded-[2.5rem] p-8 shadow-premium border border-slate-100 space-y-6">
+                    <!-- Event Selection -->
+                    <div class="space-y-2 group">
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                            Evento de
+                            Control
+                        </label>
+                        <div class="relative">
+                            <select x-model="config.evento_id"
+                                    class="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none transition-all font-bold text-slate-700 appearance-none cursor-pointer">
+                                <option value="">-- Seleccionar Evento --</option>
+                                {% for evento in eventos %}
+                                    <option value="{{ evento.id }}">{{ evento.nombre }} ({{ evento.fecha }})</option>
+                                {% endfor %}
+                            </select>
+                            <div class="absolute inset-y-0 right-0 pr-5 flex items-center pointer-events-none text-slate-400">
+                                <i class="bi bi-chevron-down"></i>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Scan Type -->
+                    <div class="space-y-2 group">
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                            Tipo de
+                            Registro
+                        </label>
+                        <div class="grid grid-cols-2 gap-4">
+                            <button @click="config.tipo_escaneo = 'ingreso'"
+                                    :class="config.tipo_escaneo === 'ingreso' ? 'bg-emerald-600 text-white border-emerald-600 shadow-lg shadow-emerald-600/20' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'"
+                                    class="py-4 rounded-2xl font-black text-xs uppercase tracking-widest border transition-all flex flex-col items-center gap-2">
+                                <i class="bi bi-box-arrow-in-right text-xl"></i>
+                                <span>Ingreso</span>
+                            </button>
+                            <button @click="config.tipo_escaneo = 'salida'"
+                                    :class="config.tipo_escaneo === 'salida' ? 'bg-amber-600 text-white border-amber-600 shadow-lg shadow-amber-600/20' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'"
+                                    class="py-4 rounded-2xl font-black text-xs uppercase tracking-widest border transition-all flex flex-col items-center gap-2">
+                                <i class="bi bi-box-arrow-left text-xl"></i>
+                                <span>Salida</span>
+                            </button>
+                        </div>
+                    </div>
+                    <!-- Location -->
+                    <div class="space-y-2 group">
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                            Punto de Control
+                            (Opcional)
+                        </label>
+                        <div class="relative">
+                            <select x-model="config.ubicacion_id"
+                                    class="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none transition-all font-bold text-slate-700 appearance-none cursor-pointer">
+                                <option value="">-- Por defecto --</option>
+                                {% for ubicacion in ubicaciones %}<option value="{{ ubicacion.id }}">{{ ubicacion.nombre }}</option>{% endfor %}
+                            </select>
+                            <div class="absolute inset-y-0 right-0 pr-5 flex items-center pointer-events-none text-slate-400">
+                                <i class="bi bi-geo-alt-fill"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <!-- Dashboard Stats shortcut -->
+                <div class="bg-slate-900 rounded-[2rem] p-6 text-white flex items-center justify-between border border-white/5">
+                    <div>
+                        <h6 class="text-xs font-black uppercase tracking-widest text-slate-400 mb-1">Última captura</h6>
+                        <p class="text-sm font-bold"
+                           x-text="lastScannedName || 'Esperando datos...'"></p>
+                    </div>
+                    <div class="h-10 w-10 bg-white/10 rounded-xl flex items-center justify-center">
+                        <i class="bi bi-clock-history text-lg"></i>
+                    </div>
+                </div>
+            </div>
+            <!-- Scanner Column -->
+            <div class="lg:col-span-7">
+                <div class="relative aspect-video lg:aspect-square bg-slate-950 rounded-[3rem] overflow-hidden shadow-2xl border-8 border-white group">
+                    <!-- Video Feed -->
+                    <video x-ref="video"
+                           class="w-full h-full object-cover grayscale-[0.2] brightness-125 transition-all duration-700 group-hover:grayscale-0"
+                           autoplay
+                           playsinline>
+                    </video>
+                    <canvas x-ref="canvas" class="hidden"></canvas>
+                    <!-- Futuristic HUD Overlay -->
+                    <div class="absolute inset-0 pointer-events-none">
+                        <!-- Scanning Grid Background -->
+                        <div class="absolute inset-0 opacity-10 scanning-grid"></div>
+                        <!-- Scan Frame -->
+                        <div class="absolute inset-0 flex items-center justify-center">
+                            <div class="w-64 h-64 md:w-80 md:h-80 relative">
+                                <!-- Corners -->
+                                <div class="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-primary-500 rounded-tl-3xl"></div>
+                                <div class="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-primary-500 rounded-tr-3xl"></div>
+                                <div class="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-primary-500 rounded-bl-3xl"></div>
+                                <div class="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-primary-500 rounded-br-3xl"></div>
+                                <!-- Animated Line -->
+                                <div class="absolute top-0 left-4 right-4 h-1 bg-primary-500 shadow-[0_0_20px_#eab308] rounded-full animate-scan">
+                                </div>
+                                <!-- Internal Guide -->
+                                <div class="absolute inset-8 border border-white/10 rounded-2xl flex items-center justify-center">
+                                    <i class="bi bi-qr-code text-white/5 text-8xl"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- HUD Data -->
+                        <div class="absolute bottom-10 left-10 right-10 flex justify-between items-end backdrop-blur-md bg-white/5 p-4 rounded-2xl border border-white/10">
+                            <div class="space-y-1">
+                                <span class="text-[8px] font-black text-primary-400 uppercase tracking-widest block">Camera
+                                Stream</span>
+                                <div class="flex items-center gap-2">
+                                    <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                                    <span class="text-xs font-bold text-white uppercase tracking-tight">Active_Environment</span>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-[8px] font-black text-slate-400 uppercase tracking-widest block">AI_Processing</span>
+                                <span class="text-xs font-mono font-bold text-white tracking-widest"
+                                      x-text="'FPS: ' + fps"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- State Overlays -->
+                    <template x-if="processing">
+                        <div class="absolute inset-0 bg-primary-950/40 backdrop-blur-sm flex items-center justify-center z-20">
+                            <div class="flex flex-col items-center gap-4">
+                                <div class="w-16 h-16 border-4 border-white/10 border-t-white rounded-full animate-spin"></div>
+                                <span class="text-xs font-black text-white uppercase tracking-[0.3em] animate-pulse">Procesando...</span>
+                            </div>
+                        </div>
+                    </template>
+                    <!-- Scan Flash -->
+                    <div x-show="flash"
+                         x-transition:enter="transition-opacity duration-75"
+                         x-transition:enter-start="opacity-0"
+                         x-transition:enter-end="opacity-100"
+                         x-transition:leave="transition-opacity duration-300"
+                         x-transition:leave-start="opacity-100"
+                         x-transition:leave-end="opacity-0"
+                         class="absolute inset-0 bg-white z-30 pointer-events-none"></div>
+                    <template x-if="error">
+                        <div class="absolute inset-0 bg-red-600/20 backdrop-blur-sm flex items-center justify-center z-20 transition-all duration-300">
+                            <div class="bg-white rounded-3xl p-8 shadow-2xl flex flex-col items-center gap-4 max-w-xs text-center border-t-8 border-red-500">
+                                <div class="h-16 w-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center">
+                                    <i class="bi bi-x-circle-fill text-3xl"></i>
+                                </div>
+                                <p class="font-extrabold text-slate-900" x-text="error"></p>
+                                <button @click="error = null"
+                                        class="px-6 py-2 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest">
+                                    Reintentar
+                                </button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+        <!-- Help Modal -->
+        <template x-if="showHelp">
+            <div class="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-950/80 backdrop-blur-xl animate-fade-in"
+                 @click.self="showHelp = false">
+                <div class="bg-white rounded-[3rem] p-10 lg:p-14 max-w-xl w-full shadow-2xl relative">
+                    <button @click="showHelp = false"
+                            class="absolute top-10 right-10 h-10 w-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                    <h3 class="text-3xl font-black text-slate-900 mb-8 tracking-tight">Guía de Operación</h3>
+                    <div class="space-y-6">
+                        <div class="flex gap-4">
+                            <div class="h-10 w-10 shrink-0 bg-primary-100 text-primary-600 rounded-xl flex items-center justify-center font-black">
+                                1
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-slate-800">Seleccionar Contexto</h4>
+                                <p class="text-sm text-slate-500 italic">
+                                    Elija el evento y si es un registro de entrada o de
+                                    salida.
+                                </p>
+                            </div>
+                        </div>
+                        <div class="flex gap-4">
+                            <div class="h-10 w-10 shrink-0 bg-primary-100 text-primary-600 rounded-xl flex items-center justify-center font-black">
+                                2
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-slate-800">Alinear el Código</h4>
+                                <p class="text-sm text-slate-500 italic">
+                                    Posicione el QR del socio dentro del marco central
+                                    de la cámara.
+                                </p>
+                            </div>
+                        </div>
+                        <div class="flex gap-4">
+                            <div class="h-10 w-10 shrink-0 bg-primary-100 text-primary-600 rounded-xl flex items-center justify-center font-black">
+                                3
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-slate-800">Confirmación Visual</h4>
+                                <p class="text-sm text-slate-500 italic">
+                                    El sistema emitirá un sonido y mostrará una alerta
+                                    de éxito al capturar.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-10 pt-8 border-t border-slate-100">
+                        <button @click="showHelp = false"
+                                class="w-full py-4 bg-primary-600 text-white rounded-2xl font-black shadow-xl shadow-primary-600/20">
+                            Entendido
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </template>
+        <audio x-ref="successSound"
+               src="https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3"
+               preload="auto"></audio>
+    </div>
+    <script>
+    (function() {
+        function qrScannerComponent() {
+            return {
+                config: {
+                    evento_id: '{{ selected_evento_id|default:"" }}',
+                    tipo_escaneo: 'ingreso', // default
+                    ubicacion_id: ''
+                },
+                processing: false,
+                flash: false,
+                error: null,
+                showHelp: false,
+                lastScannedDni: null,
+                lastScannedName: '',
+                lastScanTime: 0,
+                debounceTime: 5000,
+                fps: 0,
+                frameCount: 0,
+                lastFpsUpdate: 0,
+                stream: null,
+
+                init() {
+                    // Esperar un tick para asegurar que los $refs están listos
+                    // y que el DOM se ha asentado tras el swap de HTMX
+                    setTimeout(() => {
+                        this.startCamera();
+                    }, 100);
+                },
+
+                destroy() {
+                    this.stopCamera();
+                },
+
+                stopCamera() {
+                    if (this.stream) {
+                        this.stream.getTracks().forEach(track => track.stop());
+                        this.stream = null;
+                        if (this.$refs && this.$refs.video) {
+                            this.$refs.video.srcObject = null;
+                        }
+                    }
+                },
+
+                async startCamera() {
+                    if (!this.$refs || !this.$refs.video) {
+                        console.warn('Video ref not ready, retrying startCamera...');
+                        setTimeout(() => this.startCamera(), 200);
+                        return;
+                    }
+
+                    try {
+                        this.stream = await navigator.mediaDevices.getUserMedia({
+                            video: { 
+                                facingMode: 'environment', 
+                                width: { ideal: 1280 }, 
+                                height: { ideal: 1280 } 
+                            }
+                        });
+                        if (this.$refs.video) {
+                            this.$refs.video.srcObject = this.stream;
+                        }
+                        this.lastFpsUpdate = Date.now();
+                        this.tick();
+                    } catch (err) {
+                        this.error = "No se puede acceder a la cámara. Verifique los permisos.";
+                        console.error(err);
+                    }
+                },
+
+                tick() {
+                    const video = this.$refs.video;
+                    const canvas = this.$refs.canvas;
+                    
+                    if (!video) return; // Component might have been destroyed
+
+                    // Calculate FPS
+                    this.frameCount++;
+                    const now = Date.now();
+                    if (now - this.lastFpsUpdate > 1000) {
+                        this.fps = this.frameCount;
+                        this.frameCount = 0;
+                        this.lastFpsUpdate = now;
+                    }
+
+                    if (video.readyState === video.HAVE_ENOUGH_DATA && !this.processing && !this.error) {
+                        const ctx = canvas.getContext('2d', { alpha: false });
+                        canvas.height = video.videoHeight;
+                        canvas.width = video.videoWidth;
+                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                            inversionAttempts: "dontInvert",
+                        });
+
+                        if (code) {
+                            const currentTime = Date.now();
+                            if (code.data !== this.lastScannedDni || (currentTime - this.lastScanTime) > this.debounceTime) {
+                                // Feedback visual inmediato
+                                this.flash = true;
+                                setTimeout(() => this.flash = false, 150);
+                                
+                                this.registerAttendance(code.data);
+                                this.lastScannedDni = code.data;
+                                this.lastScanTime = currentTime;
+                            }
+                        }
+                    }
+                    
+                    // Solo continuar si el stream está activo
+                    if (this.stream && this.stream.active) {
+                        requestAnimationFrame(() => this.tick());
+                    }
+                },
+
+                async registerAttendance(dni) {
+                    if (!this.config.evento_id) {
+                        this.error = "Seleccione un evento antes de escanear.";
+                        setTimeout(() => this.error = null, 3000);
+                        return;
+                    }
+
+                    this.processing = true;
+                    this.error = null;
+
+                    try {
+                        const response = await fetch('/api/registrar-asistencia/', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': this.getCsrfToken(),
+                            },
+                            body: JSON.stringify({
+                                dni: dni,
+                                ...this.config
+                            }),
+                        });
+
+                        const data = await response.json();
+
+                        if (response.ok) {
+                            this.$refs.successSound.play();
+                            this.lastScannedName = data.message.split(' para ')[1] || data.message;
+
+                            Swal.fire({
+                                icon: 'success',
+                                title: 'ACCESO CONCEDIDO',
+                                text: data.message,
+                                timer: 2000,
+                                showConfirmButton: false,
+                                position: 'top',
+                                toast: true,
+                                background: '#0f172a',
+                                color: '#ffffff',
+                                customClass: {
+                                    popup: 'rounded-[1.5rem] border border-emerald-500/50 shadow-2xl shadow-emerald-500/20'
+                                }
+                            });
+                        } else {
+                            this.error = data.error || "Error en el servidor";
+                            setTimeout(() => this.error = null, 5000);
+                        }
+                    } catch (err) {
+                        this.error = "Fallo en la comunicación con el servidor.";
+                        setTimeout(() => this.error = null, 5000);
+                    } finally {
+                        this.processing = false;
+                    }
+                },
+
+                getCsrfToken() {
+                    return document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
+                        document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
+                }
+            };
+        }
+
+        // Register with Alpine
+        if (window.Alpine) {
+            Alpine.data('qrScanner', qrScannerComponent);
+        } else {
+            document.addEventListener('alpine:init', () => {
+                Alpine.data('qrScanner', qrScannerComponent);
+            });
+        }
+    })();
+    </script>
+    <style>
+        .scanning-grid {
+            background-image: radial-gradient(circle at 2px 2px, #fff 1px, transparent 0);
+            background-size: 40px 40px;
+        }
+
+        @keyframes scan {
+            0% {
+                transform: translateY(0);
+                opacity: 0.5;
+            }
+
+            50% {
+                transform: translateY(320px);
+                opacity: 1;
+            }
+
+            100% {
+                transform: translateY(0);
+                opacity: 0.5;
+            }
+        }
+
+        .animate-scan {
+            animation: scan 3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        }
+
+        @media (max-width: 768px) {
+            @keyframes scan-mobile {
+                0% {
+                    transform: translateY(0);
+                    opacity: 0.5;
+                }
+
+                50% {
+                    transform: translateY(256px);
+                    opacity: 1;
+                }
+
+                100% {
+                    transform: translateY(0);
+                    opacity: 0.5;
+                }
+            }
+
+            .animate-scan {
+                animation: scan-mobile 3s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+            }
+        }
+    </style>
+{% endblock content %}

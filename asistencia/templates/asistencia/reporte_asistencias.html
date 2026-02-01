@@ -1,0 +1,353 @@
+{% load tz %}
+<!DOCTYPE html>
+<html lang="es">
+    <head>
+        <meta charset="UTF-8">
+        <title>Reporte de Asistencias - Quiulacocha</title>
+        <style>
+            @page {
+                size: A4;
+                margin: 1.5cm;
+            }
+
+            body {
+                font-family: 'Inter', 'Helvetica', 'Arial', sans-serif;
+                color: #0f172a;
+                line-height: 1.4;
+                margin: 0;
+                padding: 0;
+            }
+
+            .header {
+                border-bottom: 4px solid #4f46e5;
+                padding-bottom: 25px;
+                margin-bottom: 30px;
+            }
+
+            .logo-box {
+                float: right;
+                text-align: right;
+            }
+
+            .logo-box img {
+                max-height: 60px;
+            }
+
+            .company-name {
+                font-size: 26px;
+                font-weight: 800;
+                color: #312e81;
+                margin: 0;
+                text-transform: uppercase;
+            }
+
+            .report-subtitle {
+                font-size: 12px;
+                font-weight: 600;
+                color: #6366f1;
+                text-transform: uppercase;
+                letter-spacing: 2px;
+                margin-top: 5px;
+            }
+
+            .info-section {
+                margin-bottom: 30px;
+                background: #eef2ff;
+                padding: 24px;
+                border-radius: 16px;
+                border: 1px solid #c7d2fe;
+            }
+
+            .info-grid {
+                width: 100%;
+                border-collapse: collapse;
+            }
+
+            .info-grid td {
+                border: none;
+                padding: 0;
+            }
+
+            .info-label {
+                font-size: 9px;
+                font-weight: 700;
+                color: #4338ca;
+                text-transform: uppercase;
+                margin-bottom: 4px;
+            }
+
+            .info-value {
+                font-size: 14px;
+                font-weight: 700;
+                color: #0f172a;
+            }
+
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 30px;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            }
+
+            th {
+                background-color: #312e81;
+                color: white;
+                font-size: 10px;
+                font-weight: 800;
+                text-align: left;
+                text-transform: uppercase;
+                padding: 12px;
+                border-bottom: 2px solid #1e1b4b;
+            }
+
+            td {
+                padding: 12px;
+                font-size: 11px;
+                border-bottom: 1px solid #f1f5f9;
+            }
+
+            tr:nth-child(even) {
+                background-color: #fafafa;
+            }
+
+            .status-badge {
+                font-size: 9px;
+                font-weight: 800;
+                padding: 4px 8px;
+                border-radius: 9999px;
+                text-transform: uppercase;
+            }
+
+            .status-yes {
+                background-color: #dcfce7;
+                color: #166534;
+            }
+
+            .status-no {
+                background-color: #fef3c7;
+                color: #92400e;
+            }
+
+            .footer {
+                position: fixed;
+                bottom: 0;
+                width: 100%;
+                text-align: center;
+                font-size: 9px;
+                color: #94a3b8;
+                border-top: 1px solid #f1f5f9;
+                padding-top: 10px;
+            }
+
+            /* Stats Banner styles from reporte_evento */
+            .stats-banner {
+                background: #312e81;
+                color: white;
+                padding: 30px;
+                border-radius: 20px;
+                margin-bottom: 30px;
+                overflow: hidden;
+            }
+
+            .stats-grid {
+                float: right;
+                width: 240px;
+            }
+
+            .stats-card {
+                background: rgba(255, 255, 255, 0.1);
+                color: white;
+                padding: 10px;
+                text-align: center;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                margin-bottom: 8px;
+                border-radius: 12px;
+                width: 65px;
+                float: left;
+                margin-left: 8px;
+            }
+
+            .stats-num {
+                font-size: 16px;
+                font-weight: 800;
+                color: #ffffff;
+            }
+
+            .stats-label {
+                font-size: 8px;
+                font-weight: 800;
+                color: #c7d2fe;
+                text-transform: uppercase;
+                margin-top: 2px;
+            }
+
+            .banner-content {
+                margin-right: 250px;
+            }
+
+            .banner-title {
+                font-size: 11px;
+                font-weight: bold;
+                color: #c7d2fe;
+                text-transform: uppercase;
+                margin-bottom: 4px;
+            }
+
+            .banner-value {
+                font-size: 18px;
+                font-weight: 800;
+                color: #ffffff;
+            }
+
+            .clear {
+                clear: both;
+            }
+
+            h2 {
+                font-size: 14px;
+                color: #334155;
+                border-bottom: 2px solid #e2e8f0;
+                padding-bottom: 8px;
+                margin-top: 30px;
+                margin-bottom: 15px;
+                font-weight: bold;
+                text-transform: uppercase;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <div class="logo-box">
+                {% if logo_base64 %}<img src="data:image/png;base64,{{ logo_base64 }}" alt="Logo">{% endif %}
+            </div>
+            <h1 class="company-name">COMUNIDAD DE {{ sistema_config.nombre_institucion|default:"QUIULACOCHA" }}</h1>
+            <p class="report-subtitle">Reporte Consolidado de Asistencias</p>
+        </div>
+        <div class="stats-banner">
+            <div class="stats-grid">
+                <div class="stats-card">
+                    <div class="stats-num">{{ total_asistentes }}</div>
+                    <div class="stats-label">Asistentes</div>
+                </div>
+                <div class="stats-card">
+                    <div class="stats-num" style="color: #fca5a5">{{ total_inasistentes }}</div>
+                    <div class="stats-label">Faltaron</div>
+                </div>
+                <div class="stats-card">
+                    <div class="stats-num">{{ porcentaje_asistencia|floatformat:1 }}%</div>
+                    <div class="stats-label">Participación</div>
+                </div>
+            </div>
+            <div class="banner-content">
+                <div class="banner-title">Resumen de Actividad General</div>
+                <div class="banner-value">
+                    Periodo: {{ filtros.fecha_inicio|default:"Inicio" }} - {{ filtros.fecha_fin|default:"Hoy" }}
+                </div>
+                <div style="font-size: 10px; color: #c7d2fe; margin-top: 5px;">
+                    Reporte generado el {{ current_date }}
+                    {% if filtros.evento %}
+                        <br>
+                        <strong>Evento:</strong> {{ filtros.evento.nombre }}
+                    {% endif %}
+                    {% if filtros.dni %}
+                        <br>
+                        <strong>Filtrado por DNI:</strong> {{ filtros.dni }}
+                    {% endif %}
+                </div>
+            </div>
+            <div class="clear"></div>
+        </div>
+        {% if asistencias %}
+            <h2>Registros de Asistencia</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Socio / Titular</th>
+                        <th>DNI</th>
+                        <th>Fecha</th>
+                        <th>Ingreso</th>
+                        <th>Salida</th>
+                        <th>Lugar</th>
+                        <th>Conf.</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for asistencia in asistencias %}
+                        <tr>
+                            <td>
+                                <strong>{{ asistencia.usuario.nombre }} {{ asistencia.usuario.apellido }}</strong>
+                            </td>
+                            <td>
+                                <code style="background: #f1f5f9; padding: 2px 4px; border-radius: 3px;">{{ asistencia.usuario.dni }}</code>
+                            </td>
+                            <td>{{ asistencia.fecha|date:"d/m/Y" }}</td>
+                            <td style="color: #166534; font-weight: 700;">{{ asistencia.hora_ingreso|time:"H:i"|default:"--" }}</td>
+                            <td style="color: #9a3412; font-weight: 700;">{{ asistencia.hora_salida|time:"H:i"|default:"--" }}</td>
+                            <td>{{ asistencia.ubicacion.nombre|default:"General" }}</td>
+                            <td style="text-align: center;">
+                                {% if asistencia.es_justificada %}
+                                    {% if asistencia.evidencia_url %}
+                                        <a href="{{ request.scheme }}://{{ request.get_host }}{{ asistencia.evidencia_url }}"
+                                           target="_blank"
+                                           class="status-badge"
+                                           style="background-color: #e0e7ff;
+                                                  color: #3730a3;
+                                                  text-decoration: none">JUSTIFICADA</a>
+                                    {% else %}
+                                        <span class="status-badge"
+                                              style="background-color: #e0e7ff;
+                                                     color: #3730a3">JUSTIFICADA</span>
+                                    {% endif %}
+                                {% else %}
+                                    <span class="status-badge {% if asistencia.confirmada %}status-yes{% else %}status-no{% endif %}">
+                                        {{ asistencia.confirmada|yesno:"SÍ,NO" }}
+                                    </span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
+        {% if no_asistentes %}
+            <h2>Inasistencias Reportadas</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Socio / Titular</th>
+                        <th>DNI</th>
+                        <th>Estado en Sistema</th>
+                        <th>Referencia</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for usuario in no_asistentes %}
+                        <tr>
+                            <td>
+                                <strong>{{ usuario.nombre }} {{ usuario.apellido }}</strong>
+                            </td>
+                            <td>
+                                <code style="background: #f1f5f9; padding: 2px 4px; border-radius: 3px;">{{ usuario.dni }}</code>
+                            </td>
+                            <td>{{ usuario.get_estado_display }}</td>
+                            <td>
+                                <span class="status-badge status-no">FALTÓ</span>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% endif %}
+        {% if not asistencias and not no_asistentes %}
+            <div style="text-align: center;
+                        padding: 100px;
+                        color: #94a3b8;
+                        font-style: italic">
+                No se encontraron registros que coincidan con los criterios seleccionados.
+            </div>
+        {% endif %}
+        <div class="footer">
+            Este documento es un reporte oficial íntegramente generado por el Sistema de Asistencia Quiulacocha.
+        </div>
+    </body>
+</html>

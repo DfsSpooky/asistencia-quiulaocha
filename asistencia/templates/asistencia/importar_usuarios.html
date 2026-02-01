@@ -1,0 +1,196 @@
+{% extends 'asistencia/base.html' %}
+
+{% block title %}Importar - Quiulacocha{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto space-y-10 animate-fade-in">
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div>
+            <h2 class="text-4xl font-extrabold text-slate-900 tracking-tight leading-none mb-3">Ingesta de Datos</h2>
+            <p class="text-slate-500 font-medium italic">Sincronización masiva de socios vía CSV</p>
+        </div>
+        <a href="{% url 'lista_usuarios' %}"
+            class="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 rounded-2xl font-bold text-slate-600 hover:bg-slate-50 transition-all shadow-sm">
+            <i class="bi bi-arrow-left"></i>
+            <span>Volver a la lista</span>
+        </a>
+    </div>
+
+    <!-- Feedback Messages -->
+    {% if messages %}
+    <div class="space-y-4">
+        {% for message in messages %}
+        <div
+            class="p-6 rounded-[2rem] border {% if message.tags == 'success' %}bg-emerald-50 border-emerald-100 text-emerald-800{% else %}bg-amber-50 border-amber-100 text-amber-800{% endif %} flex items-center gap-4 animate-slide-up">
+            <div
+                class="h-10 w-10 shrink-0 rounded-xl {% if message.tags == 'success' %}bg-emerald-100 text-emerald-600{% else %}bg-amber-100 text-amber-600{% endif %} flex items-center justify-center">
+                <i
+                    class="bi {% if message.tags == 'success' %}bi-check-circle-fill{% else %}bi-exclamation-triangle-fill{% endif %} text-xl"></i>
+            </div>
+            <p class="font-bold text-sm">{{ message }}</p>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if success %}
+    <div
+        class="p-8 rounded-[2.5rem] bg-emerald-600 text-white shadow-2xl shadow-emerald-600/20 border border-white/10 animate-slide-up">
+        <div class="flex flex-col md:flex-row md:items-center gap-8">
+            <div
+                class="h-20 w-20 shrink-0 bg-white/20 rounded-[2rem] flex items-center justify-center backdrop-blur-md">
+                <i class="bi bi-cloud-check-fill text-4xl"></i>
+            </div>
+            <div class="space-y-1 flex-1">
+                <h3 class="text-2xl font-black tracking-tight italic">¡Importación Exitosa!</h3>
+                <p class="text-emerald-50 font-medium">Se han integrado <strong>{{ usuarios_importados }}</strong>
+                    nuevos perfiles al sistema central.</p>
+            </div>
+            {% if errores %}
+            <div class="bg-black/10 p-5 rounded-3xl border border-white/5 max-w-sm">
+                <p class="text-[10px] font-black uppercase tracking-widest text-emerald-200 mb-2">Advertencias
+                    detectadas</p>
+                <ul class="text-[11px] space-y-1 text-emerald-100 font-medium italic">
+                    {% for error in errores %}
+                    <li>• {{ error }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-10">
+        <!-- Instructions Column -->
+        <div class="lg:col-span-4 space-y-6">
+            <div class="bg-white rounded-[2.5rem] p-8 shadow-premium border border-slate-100">
+                <h4 class="text-lg font-black text-slate-900 tracking-tight mb-6">Especificaciones</h4>
+
+                <div class="space-y-6">
+                    <div class="space-y-2">
+                        <div class="flex items-center gap-2">
+                            <span class="w-1.5 h-1.5 rounded-full bg-primary-500"></span>
+                            <span class="text-xs font-black text-slate-400 uppercase tracking-widest">Atributos
+                                Obligatorios</span>
+                        </div>
+                        <p class="text-[11px] font-bold text-slate-500 italic leading-relaxed">nombre, apellido, dni (8
+                            dígitos numéricos).</p>
+                    </div>
+
+                    <div class="space-y-2">
+                        <div class="flex items-center gap-2">
+                            <span class="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                            <span class="text-xs font-black text-slate-400 uppercase tracking-widest">Metadata
+                                Opcional</span>
+                        </div>
+                        <p class="text-[11px] font-bold text-slate-500 italic leading-relaxed">fecha_nacimiento
+                            (YYYY-MM-DD), estado (ACTIVO, PASIVO, EXONERADO).</p>
+                    </div>
+
+                    <div class="pt-6 border-t border-slate-50">
+                        <p class="text-[9px] font-black text-primary-500 uppercase tracking-widest mb-3">Ejemplo de
+                            Estructura</p>
+                        <div
+                            class="bg-slate-900 rounded-2xl p-4 font-mono text-[10px] text-slate-300 leading-relaxed overflow-x-auto">
+                            <span class="text-primary-400">nombre</span>,<span
+                                class="text-primary-400">apellido</span>,<span
+                                class="text-primary-400">dni</span>...<br>
+                            Juan,Perez,12345678,1980-05-15<br>
+                            Maria,Gomez,87654321,1992-10-20
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-amber-50 rounded-[2rem] p-6 border border-amber-100">
+                <div class="flex gap-4">
+                    <div
+                        class="h-10 w-10 shrink-0 bg-amber-100 text-amber-600 rounded-xl flex items-center justify-center">
+                        <i class="bi bi-info-circle-fill"></i>
+                    </div>
+                    <p class="text-[11px] font-bold text-amber-800 leading-relaxed italic">
+                        El sistema clasifica automáticamente como <strong>EXONERADO</strong> a socios de 65 años o más.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Upload Form Column -->
+        <div class="lg:col-span-8">
+            <div
+                class="bg-white rounded-[3rem] p-10 lg:p-14 shadow-premium border border-slate-100 h-full flex flex-col justify-center">
+                <form method="post" enctype="multipart/form-data" class="space-y-10">
+                    {% csrf_token %}
+
+                    <div class="space-y-4">
+                        <label
+                            class="text-xs font-black text-slate-400 uppercase tracking-[0.3em] block text-center">Subir
+                            Archivo Fuente</label>
+                        <div class="relative group">
+                            <input type="file" name="archivo_csv" id="{{ form.archivo_csv.id_for_label }}"
+                                class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+                            <div
+                                class="border-4 border-dashed border-slate-100 group-hover:border-primary-200 group-hover:bg-primary-50/30 rounded-[2.5rem] p-16 transition-all duration-300 flex flex-col items-center justify-center text-center">
+                                <div
+                                    class="h-20 w-20 bg-slate-50 group-hover:bg-white group-hover:scale-110 group-hover:shadow-xl rounded-[2rem] flex items-center justify-center text-slate-300 group-hover:text-primary-500 transition-all duration-300 mb-6">
+                                    <i class="bi bi-file-earmark-spreadsheet text-4xl"></i>
+                                </div>
+                                <h5 class="text-xl font-black text-slate-900 mb-2">Seleccionar CSV</h5>
+                                <p class="text-sm font-medium text-slate-400 italic">Arrastra el archivo aquí o haz clic
+                                    para explorar</p>
+                                <div id="file-name-display"
+                                    class="mt-4 px-4 py-2 bg-primary-100 text-primary-700 rounded-xl text-xs font-bold hidden animate-fade-in">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-col md:flex-row gap-4">
+                        <button type="submit"
+                            class="flex-1 py-5 bg-slate-900 text-white rounded-[1.5rem] font-black uppercase text-xs tracking-[0.3em] hover:bg-black transition-all shadow-xl shadow-slate-900/10">
+                            Ejecutar Importación
+                        </button>
+                        <a href="{% url 'lista_usuarios' %}"
+                            class="px-10 py-5 bg-slate-100 text-slate-500 rounded-[1.5rem] font-black uppercase text-xs tracking-[0.2em] hover:bg-slate-200 transition-all text-center">
+                            Cancelar
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.getElementById('{{ form.archivo_csv.id_for_label }}').addEventListener('change', function (e) {
+        const fileName = e.target.files[0]?.name;
+        const display = document.getElementById('file-name-display');
+        if (fileName) {
+            display.textContent = 'Archivo: ' + fileName;
+            display.classList.remove('hidden');
+        } else {
+            display.classList.add('hidden');
+        }
+    });
+</script>
+
+<style>
+    @keyframes slide-up {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .animate-slide-up {
+        animation: slide-up 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+    }
+</style>
+{% endblock %}

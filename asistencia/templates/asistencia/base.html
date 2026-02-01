@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>
+            {% block title %}Quiulacocha - Sistema de Asistencia{% endblock %}
+        </title>
+        <!-- Core Dependencies -->
+        <script src="https://cdn.tailwindcss.com"></script>
+        <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+        <script>
+        document.addEventListener('htmx:configRequest', (event) => {
+            event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
+        });
+        </script>
+        <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+        <!-- Fonts & Icons -->
+        <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap"
+              rel="stylesheet">
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css"
+              rel="stylesheet">
+        <!-- Select2 Modern Search -->
+        <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css"
+              rel="stylesheet" />
+        <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+        <!-- QR Scanning & UI Libraries -->
+        <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+        {% block extra_css %}{% endblock %}
+        <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#fefce8',
+                            100: '#fef9c3',
+                            200: '#fef08a',
+                            300: '#fde047',
+                            400: '#facc15',
+                            500: '#eab308', // Primary Yellow (Amber based for readability)
+                            600: '#ca8a04',
+                            700: '#a16207',
+                            800: '#854d0e',
+                            900: '#713f12',
+                        },
+                        slate: {
+                            850: '#1e293b',
+                            950: '#0f172a',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['"Plus Jakarta Sans"', 'Inter', 'sans-serif'],
+                    },
+                    boxShadow: {
+                        'premium': '0 10px 40px -10px rgba(0, 0, 0, 0.05), 0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+                        'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.07)',
+                    }
+                }
+            }
+        }
+        </script>
+        <style type="text/tailwindcss">
+            @layer base {
+                body {
+                    @apply antialiased text-slate-900 bg-[#f8fafc];
+                }
+            }
+
+            @layer components {
+                .nav-item {
+                    @apply flex items-center px-4 py-2.5 rounded-xl transition-all duration-300 font-semibold text-slate-500 hover:text-primary-600 hover:bg-primary-50 relative overflow-hidden;
+                }
+
+                .nav-item.active {
+                    @apply text-primary-600 bg-primary-100/50 shadow-sm border border-primary-200/50;
+                }
+
+                .glass-panel {
+                    @apply bg-white/80 backdrop-blur-xl border border-white/50 shadow-glass;
+                }
+
+                .btn-action {
+                    @apply px-6 py-3 rounded-2xl font-bold transition-all duration-300 transform hover:-translate-y-1 active:scale-95 shadow-lg flex items-center justify-center gap-2;
+                }
+            }
+
+            /* Smooth Page Transitions */
+            .htmx-indicator {
+                display: none;
+                pointer-events: none;
+            }
+
+            .htmx-request .htmx-indicator {
+                display: flex;
+                pointer-events: all;
+            }
+
+            .htmx-indicator.htmx-request {
+                display: flex;
+                pointer-events: all;
+            }
+
+            .htmx-settling #main-content {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+
+            #main-content {
+                transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+        </style>
+        <style>
+            /* Custom scrollbar */
+            ::-webkit-scrollbar {
+                width: 8px;
+            }
+
+            ::-webkit-scrollbar-track {
+                background: transparent;
+            }
+
+            ::-webkit-scrollbar-thumb {
+                background: #e2e8f0;
+                border-radius: 9999px;
+            }
+
+            ::-webkit-scrollbar-thumb:hover {
+                background: #cbd5e1;
+            }
+
+            /* Select2 Modern Search Adjustments */
+            .select2-container--default .select2-selection--single {
+                height: auto !important;
+                background-color: #f8fafc !important;
+                border: 1px solid #e2e8f0 !important;
+                border-radius: 1rem !important;
+                padding: 1rem 1.25rem !important;
+                display: flex !important;
+                align-items: center !important;
+                transition: all 0.2s !important;
+            }
+
+            .select2-container--default .select2-selection--single .select2-selection__rendered {
+                color: #334155 !important;
+                font-weight: 700 !important;
+                padding: 0 !important;
+                line-height: normal !important;
+            }
+
+            .select2-container--default .select2-selection--single .select2-selection__arrow {
+                height: 100% !important;
+                right: 1rem !important;
+                display: flex !important;
+                align-items: center !important;
+            }
+
+            .select2-container--default.select2-container--focus .select2-selection--single {
+                background-color: #ffffff !important;
+                border-color: #eab308 !important;
+                box-shadow: 0 0 0 4px rgba(234, 179, 8, 0.1) !important;
+            }
+
+            .select2-dropdown {
+                background-color: #ffffff !important;
+                border: 1px solid #e2e8f0 !important;
+                border-radius: 1rem !important;
+                box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.05), 0 20px 25px -5px rgba(0, 0, 0, 0.1) !important;
+                overflow: hidden !important;
+                margin-top: 0.5rem !important;
+            }
+
+            .select2-search--dropdown .select2-search__field {
+                background-color: #f8fafc !important;
+                border: 1px solid #f1f5f9 !important;
+                border-radius: 0.75rem !important;
+                padding: 0.5rem 1rem !important;
+                outline: none !important;
+                margin-bottom: 0.5rem !important;
+            }
+
+            .select2-results__option {
+                padding: 0.75rem 1.25rem !important;
+                color: #475569 !important;
+                font-weight: 500 !important;
+            }
+
+            .select2-results__option--highlighted[aria-selected] {
+                background-color: #fefce8 !important;
+                color: #a16207 !important;
+            }
+
+            .select2-results__option[aria-selected=true] {
+                background-color: #fef9c3 !important;
+                color: #854d0e !important;
+            }
+        </style>
+    </head>
+    <body class="h-full antialiased text-slate-900"
+          hx-boost="true"
+          x-data="{ mobileMenuOpen: false }">
+        <!-- Loading Overlay -->
+        <div id="loader"
+             class="fixed inset-0 z-[100] flex items-center justify-center bg-white/60 backdrop-blur-sm htmx-indicator">
+            <div class="relative">
+                <div class="h-16 w-16 rounded-full border-4 border-primary-100 border-t-primary-600 animate-spin"></div>
+                <div class="absolute inset-0 flex items-center justify-center">
+                    <i class="bi bi-qr-code text-primary-600 text-xl animate-pulse"></i>
+                </div>
+            </div>
+        </div>
+        <div class="flex flex-col min-h-screen">
+            <!-- Modern Header -->
+            <header class="sticky top-0 z-40 w-full glass-panel border-b border-slate-200/60">
+                <div class="container mx-auto px-4 lg:px-8">
+                    <div class="flex h-20 items-center justify-between">
+                        <!-- Brand Section -->
+                        <a href="{% url 'dashboard' %}" class="flex items-center gap-3 group">
+                            <div class="h-11 w-11 bg-primary-500 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/20 group-hover:rotate-6 transition-transform">
+                                <i class="bi bi-shield-check text-slate-900 text-2xl"></i>
+                            </div>
+                            <div class="flex flex-col">
+                                <span class="text-xl font-extrabold tracking-tight text-slate-900 leading-none">{{ sistema_config.nombre_institucion|default:"QUIULACOCHA" }}</span>
+                                <span class="text-[10px] font-bold text-slate-400 tracking-widest uppercase mt-1">SISTEMA
+                                ASISTENCIA</span>
+                            </div>
+                        </a>
+                        <!-- Desktop Nav -->
+                        <nav class="hidden lg:flex items-center gap-2">
+                            {% if user.is_authenticated %}
+                                <a href="{% url 'dashboard' %}"
+                                   class="nav-item {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+                                    <i class="bi bi-grid-1x2-fill mr-2"></i> Dashboard
+                                </a>
+                                {% if can_scan_qr %}
+                                    <a href="{% url 'escanear_qr' %}"
+                                       class="nav-item group {% if request.resolver_match.url_name == 'escanear_qr' %}active{% endif %}">
+                                        <div class="px-3 py-1 bg-primary-600 text-white rounded-lg group-hover:bg-primary-700 transition-colors shadow-sm">
+                                            <i class="bi bi-qr-code-scan mr-2"></i> Escanear
+                                        </div>
+                                    </a>
+                                {% endif %}
+                                <a href="{% url 'lista_usuarios' %}"
+                                   class="nav-item {% if request.resolver_match.url_name == 'lista_usuarios' %}active{% endif %}">
+                                    <i class="bi bi-people-fill mr-2"></i> Usuarios
+                                </a>
+                                <a href="{% url 'historial_asistencias' %}"
+                                   class="nav-item {% if request.resolver_match.url_name == 'historial_asistencias' %}active{% endif %}">
+                                    <i class="bi bi-calendar3-range mr-2"></i> Historial
+                                </a>
+                                <!-- User Actions -->
+                                <div class="h-8 w-[1px] bg-slate-200 mx-2"></div>
+                                <div class="relative"
+                                     x-data="{ profileOpen: false }"
+                                     @click.away="profileOpen = false">
+                                    <button @click="profileOpen = !profileOpen"
+                                            class="flex items-center gap-2 p-1 pl-3 rounded-2xl hover:bg-slate-100 transition-colors">
+                                        <div class="text-right">
+                                            <p class="text-xs font-bold text-slate-700 my-0 leading-none">{{ user.username }}</p>
+                                            <p class="text-[10px] font-medium text-slate-400 capitalize">
+                                                {% if user.is_staff %}
+                                                    Administrador
+                                                {% else %}
+                                                    Usuario
+                                                {% endif %}
+                                            </p>
+                                        </div>
+                                        <div class="h-9 w-9 bg-slate-100 rounded-xl flex items-center justify-center text-slate-500 font-bold border border-slate-200">
+                                            {{ user.username|first|upper }}
+                                        </div>
+                                    </button>
+                                    <div x-show="profileOpen"
+                                         x-transition:enter="transition ease-out duration-200"
+                                         x-transition:enter-start="opacity-0 translate-y-2 scale-95"
+                                         x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+                                         class="absolute right-0 mt-3 w-56 glass-panel rounded-2xl shadow-premium overflow-hidden z-50 py-2">
+                                        <a href="{% url 'perfil_usuario' %}"
+                                           class="flex items-center px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 hover:text-primary-600 font-semibold transition-colors">
+                                            <i class="bi bi-person-badge mr-3"></i> Mi Perfil
+                                        </a>
+                                        {% if user.is_staff %}
+                                            <a href="{% url 'admin:index' %}"
+                                               hx-disable
+                                               class="flex items-center px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 hover:text-primary-600 font-semibold transition-colors">
+                                                <i class="bi bi-gear mr-3"></i> Configuración
+                                            </a>
+                                        {% endif %}
+                                        <div class="h-[1px] bg-slate-100 my-2"></div>
+                                        <form method="post" action="{% url 'logout' %}" hx-boost="false" hx-disable>
+                                            {% csrf_token %}
+                                            <button type="submit"
+                                                    class="w-full text-left px-4 py-3 text-sm text-red-500 hover:bg-red-50 font-bold transition-colors">
+                                                <i class="bi bi-box-arrow-right mr-3"></i> Cerrar Sesión
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            {% else %}
+                                <a href="{% url 'login' %}"
+                                   class="bg-primary-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-primary-700 transition-all shadow-lg shadow-primary-600/20 active:scale-95">
+                                    Iniciar Sesión
+                                </a>
+                            {% endif %}
+                        </nav>
+                        <!-- Mobile Toggle -->
+                        <button @click="mobileMenuOpen = !mobileMenuOpen"
+                                class="lg:hidden p-2 rounded-xl bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
+                            <i class="bi" :class="mobileMenuOpen ? 'bi-x-lg' : 'bi-list'"></i>
+                        </button>
+                    </div>
+                </div>
+                <!-- Mobile Menu -->
+                <div x-show="mobileMenuOpen"
+                     x-transition:enter="transition ease-out duration-300"
+                     x-transition:enter-start="opacity-0 -translate-y-4"
+                     x-transition:enter-end="opacity-100 translate-y-0"
+                     class="lg:hidden border-t border-slate-100 p-4 space-y-2 bg-white/90 backdrop-blur-md">
+                    {% if user.is_authenticated %}
+                        <a href="{% url 'dashboard' %}"
+                           class="flex items-center p-4 rounded-xl font-bold {% if request.resolver_match.url_name == 'dashboard' %}bg-primary-50 text-primary-600{% else %}text-slate-600 hover:bg-slate-50{% endif %}">
+                            <i class="bi bi-grid-1x2-fill mr-4"></i> Dashboard
+                        </a>
+                        {% if can_scan_qr %}
+                            <a href="{% url 'escanear_qr' %}"
+                               class="flex items-center p-4 rounded-xl font-bold bg-primary-600 text-white shadow-lg shadow-primary-600/20">
+                                <i class="bi bi-qr-code-scan mr-4"></i> Escanear QR
+                            </a>
+                        {% endif %}
+                        <a href="{% url 'lista_usuarios' %}"
+                           class="flex items-center p-4 rounded-xl font-bold text-slate-600 hover:bg-slate-50">
+                            <i class="bi bi-people-fill mr-4"></i> Usuarios
+                        </a>
+                        <a href="{% url 'historial_asistencias' %}"
+                           class="flex items-center p-4 rounded-xl font-bold text-slate-600 hover:bg-slate-50">
+                            <i class="bi bi-calendar3-range mr-4"></i> Historial
+                        </a>
+                        <div class="h-[1px] bg-slate-100 my-2"></div>
+                        <form method="post" action="{% url 'logout' %}" hx-boost="false" hx-disable>
+                            {% csrf_token %}
+                            <button type="submit"
+                                    class="w-full flex items-center p-4 rounded-xl font-bold text-red-500 hover:bg-red-50">
+                                <i class="bi bi-box-arrow-right mr-4"></i> Salir
+                            </button>
+                        </form>
+                    {% else %}
+                        <a href="{% url 'login' %}"
+                           class="flex items-center justify-center p-4 rounded-xl font-bold bg-primary-600 text-white">
+                            Iniciar Sesión
+                        </a>
+                    {% endif %}
+                </div>
+            </header>
+            <!-- Dynamic Main Content -->
+            <main id="main-content"
+                  class="flex-grow container mx-auto px-4 lg:px-8 py-8 lg:py-12">
+                <!-- Content Wrapper -->
+                <div class="max-w-7xl mx-auto">
+                    {% block content %}{% endblock %}
+                </div>
+            </main>
+            <!-- Minimal Footer -->
+            <footer class="py-10 border-t border-slate-200 bg-white/50">
+                <div class="container mx-auto px-4 text-center">
+                    <p class="text-sm font-bold text-slate-400">
+                        &copy; 2026 Quiulacocha <span class="mx-2">•</span> Sistema de Gestión de Asistencias
+                    </p>
+                </div>
+            </footer>
+        </div>
+        <!-- Scripts -->
+        <script>
+        // Smooth scroll implementation for hash links if any
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                document.querySelector(this.getAttribute('href')).scrollIntoView({
+                    behavior: 'smooth'
+                });
+            });
+        });
+
+        // HTMX behavior adjustment
+        document.body.addEventListener('htmx:beforeRequest', function (evt) {
+            // Optional: Handle pre-request logic
+        });
+
+        document.body.addEventListener('htmx:afterSettle', function (evt) {
+            // Scroll to top only on full page (body) navigation
+            if (evt.detail.target === document.body) {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        });
+
+        // Ensure Alpine.js re-initializes content swapped by HTMX
+        document.body.addEventListener('htmx:afterSwap', function(evt) {
+            if (window.Alpine && evt.detail.target) {
+                Alpine.discoverUninitializedComponents((el) => {
+                    Alpine.initializeComponent(el);
+                });
+            }
+        });
+        </script>
+        {% block extra_js %}
+        {% endblock %}
+    </body>
+</html>

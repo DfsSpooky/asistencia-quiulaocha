@@ -1,0 +1,249 @@
+{% load tz %}
+<!DOCTYPE html>
+<html lang="es">
+    <head>
+        <meta charset="UTF-8">
+        <title>Reporte Individual - {{ usuario.dni }}</title>
+        <style>
+            @page {
+                size: A4;
+                margin: 1.5cm;
+            }
+
+            body {
+                font-family: 'Inter', 'Helvetica', 'Arial', sans-serif;
+                color: #1e293b;
+                line-height: 1.4;
+                margin: 0;
+                padding: 0;
+            }
+
+            .header {
+                border-bottom: 3px solid #6366f1;
+                padding-bottom: 20px;
+                margin-bottom: 30px;
+            }
+
+            .logo-box {
+                float: right;
+                text-align: right;
+            }
+
+            .logo-box img {
+                max-height: 60px;
+            }
+
+            .company-name {
+                font-size: 24px;
+                font-weight: 800;
+                color: #1e1b4b;
+                margin: 0;
+            }
+
+            .report-subtitle {
+                font-size: 12px;
+                font-weight: 600;
+                color: #6366f1;
+                text-transform: uppercase;
+                letter-spacing: 2px;
+                margin-top: 5px;
+            }
+
+            .profile-card {
+                margin-bottom: 30px;
+                background: #1e293b;
+                color: white;
+                padding: 24px;
+                border-radius: 16px;
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            }
+
+            .profile-grid {
+                width: 100%;
+                border-collapse: collapse;
+            }
+
+            .prof-label {
+                font-size: 9px;
+                font-weight: 700;
+                color: #818cf8;
+                text-transform: uppercase;
+                margin-bottom: 4px;
+                letter-spacing: 1px;
+            }
+
+            .prof-val {
+                font-size: 20px;
+                font-weight: 800;
+                color: #ffffff;
+            }
+
+            .prof-sub {
+                font-size: 13px;
+                color: #cbd5e1;
+                margin-top: 2px;
+            }
+
+            .status-pill {
+                display: inline-block;
+                padding: 4px 12px;
+                background: rgba(52, 211, 153, 0.2);
+                color: #34d399;
+                border-radius: 9999px;
+                font-size: 11px;
+                font-weight: 700;
+                text-transform: uppercase;
+            }
+
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 30px;
+                border-radius: 12px;
+                overflow: hidden;
+                border: 1px solid #e2e8f0;
+            }
+
+            th {
+                background-color: #f1f5f9;
+                color: #475569;
+                font-size: 10px;
+                font-weight: 800;
+                text-align: left;
+                text-transform: uppercase;
+                padding: 12px;
+                border-bottom: 2px solid #e2e8f0;
+            }
+
+            td {
+                padding: 12px;
+                font-size: 11px;
+                border-bottom: 1px solid #f1f5f9;
+            }
+
+            tr:nth-child(even) {
+                background-color: #f8fafc;
+            }
+
+            .badge {
+                font-size: 9px;
+                font-weight: 800;
+                padding: 4px 8px;
+                border-radius: 6px;
+                text-transform: uppercase;
+            }
+
+            .badge-confirmed {
+                background-color: #dcfce7;
+                color: #166534;
+            }
+
+            .badge-pending {
+                background-color: #fef3c7;
+                color: #92400e;
+            }
+
+            .badge-justified {
+                background-color: #e0e7ff;
+                color: #3730a3;
+            }
+
+            .footer {
+                position: fixed;
+                bottom: 0;
+                width: 100%;
+                text-align: center;
+                font-size: 9px;
+                color: #94a3b8;
+                border-top: 1px solid #f1f5f9;
+                padding-top: 10px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <div class="logo-box">
+                {% if logo_base64 %}<img src="data:image/png;base64,{{ logo_base64 }}" alt="Logo">{% endif %}
+            </div>
+            <h1 class="company-name">{{ sistema_config.nombre_institucion|default:"QUIULACOCHA" }}</h1>
+            <p class="report-subtitle">Expediente Individual de Asistencia</p>
+        </div>
+        <div class="profile-card">
+            <table class="profile-grid">
+                <tr>
+                    <td width="60%" style="border-bottom: none; padding: 0;">
+                        <div class="prof-label">Socio Consultando</div>
+                        <div class="prof-val">{{ usuario.nombre }} {{ usuario.apellido }}</div>
+                        <div class="prof-sub">Identificación DNI: {{ usuario.dni }}</div>
+                        <div class="prof-sub">Total Actividades: {{ asistencias.count }}</div>
+                    </td>
+                    <td width="40%"
+                        style="border-bottom: none;
+                               padding: 0;
+                               text-align: right;
+                               vertical-align: middle">
+                        <div class="prof-label">Estado de Padrón</div>
+                        <div class="status-pill">{{ usuario.get_estado_display }}</div>
+                        <div class="prof-sub" style="font-size: 10px; margin-top: 8px;">Emitido el: {{ current_date }}</div>
+                    </td>
+                </tr>
+            </table>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Fecha Actividad</th>
+                    <th>Ingreso</th>
+                    <th>Salida</th>
+                    <th>Lugar / Evento</th>
+                    <th>Certificación</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for asistencia in asistencias %}
+                    <tr>
+                        <td>
+                            <strong>{{ asistencia.fecha|date:"d/m/Y" }}</strong>
+                        </td>
+                        <td style="color: #166534; font-weight: 700;">{{ asistencia.hora_ingreso|time:"H:i"|default:"--" }}</td>
+                        <td style="color: #9a3412; font-weight: 700;">{{ asistencia.hora_salida|time:"H:i"|default:"--" }}</td>
+                        <td>
+                            <strong>{{ asistencia.ubicacion.nombre|default:"General" }}</strong>
+                            <br>
+                            <small style="color: #64748b;">{{ asistencia.evento.nombre|default:"Sin evento específico" }}</small>
+                        </td>
+                        <td style="text-align: center;">
+                            {% if asistencia.es_justificada %}
+                                {% if asistencia.evidencia_url %}
+                                    <a href="{{ request.scheme }}://{{ request.get_host }}{{ asistencia.evidencia_url }}"
+                                       target="_blank"
+                                       class="badge badge-justified"
+                                       style="text-decoration: none">JUSTIFICADA</a>
+                                {% else %}
+                                    <span class="badge badge-justified">JUSTIFICADA</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="badge {% if asistencia.confirmada %}badge-confirmed{% else %}badge-pending{% endif %}">
+                                    {{ asistencia.confirmada|yesno:"CONFIRMADO,PENDIENTE" }}
+                                </span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="5"
+                            style="text-align: center;
+                                   padding: 40px;
+                                   color: #94a3b8;
+                                   font-style: italic">
+                            Este socio no registra actividades en el historial consultado.
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="footer">
+            Reporte generado automáticamente por la oficina de Control QR - {{ current_date|date:"d/m/Y H:i:s" }}
+        </div>
+    </body>
+</html>

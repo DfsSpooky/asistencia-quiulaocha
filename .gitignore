@@ -1,0 +1,34 @@
+
+# Python
+*.pyc
+__pycache__/
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+media/
+staticfiles/
+venv/
+.venv/
+env/
+.env/
+
+# Mac
+.DS_Store
+
+# Flutter / Dart
+asistencia_scanner_app/.dart_tool/
+asistencia_scanner_app/.pub-cache/
+asistencia_scanner_app/.flutter-plugins
+asistencia_scanner_app/.flutter-plugins-dependencies
+asistencia_scanner_app/build/
+asistencia_scanner_app/android/app/build/
+
+# Android
+asistencia_scanner_app/android/.gradle
+asistencia_scanner_app/android/local.properties
+
+# iOS
+asistencia_scanner_app/ios/.generated/
+asistencia_scanner_app/ios/Flutter/Generated.xcconfig
+asistencia_scanner_app/ios/Flutter/app.flx
+asistencia_scanner_app/ios/Flutter/gen_snapshot

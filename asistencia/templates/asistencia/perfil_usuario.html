@@ -1,0 +1,144 @@
+{% extends "asistencia/base.html" %}
+{% load tz %}
+{% block title %}
+    Mi Perfil - Quiulacocha
+{% endblock title %}
+{% block content %}
+    <div class="max-w-4xl mx-auto space-y-10 animate-fade-in">
+        <!-- Profile Header/Card -->
+        <div class="relative overflow-hidden bg-slate-900 rounded-[3rem] p-10 lg:p-14 text-white shadow-2xl border border-white/5 group">
+            <!-- Abstract Background Deco -->
+            <div class="absolute top-0 right-0 w-64 h-64 bg-primary-500/10 rounded-full blur-3xl -mr-20 -mt-20 group-hover:bg-primary-500/20 transition-all duration-700">
+            </div>
+            <div class="absolute bottom-0 left-0 w-48 h-48 bg-primary-500/10 rounded-full blur-3xl -ml-10 -mb-10 group-hover:bg-primary-500/20 transition-all duration-700">
+            </div>
+            <div class="relative flex flex-col md:flex-row items-center gap-10">
+                <div class="h-32 w-32 rounded-3xl bg-gradient-to-br from-primary-500 to-primary-800 p-1 shadow-2xl ring-4 ring-white/10 group-hover:scale-105 transition-transform duration-500">
+                    <div class="w-full h-full bg-slate-900 rounded-[1.4rem] flex items-center justify-center">
+                        <i class="bi bi-person-circle text-6xl text-primary-400"></i>
+                    </div>
+                </div>
+                <div class="text-center md:text-left space-y-2">
+                    <h6 class="text-[10px] font-black uppercase tracking-[0.4em] text-primary-400 mb-2">Credencial de Socio</h6>
+                    <h2 class="text-4xl lg:text-5xl font-extrabold tracking-tight">{{ usuario.nombre }} {{ usuario.apellido }}</h2>
+                    <div class="flex items-center justify-center md:justify-start gap-4 pt-4">
+                        <div class="px-5 py-2 bg-white/5 border border-white/10 rounded-2xl backdrop-blur-md">
+                            <span class="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1">Documento
+                            DNI</span>
+                            <span class="text-lg font-mono font-bold tracking-widest text-primary-300">{{ usuario.dni }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Personal Activity History -->
+        <div class="space-y-6">
+            <div class="flex items-center justify-between px-4">
+                <div>
+                    <h3 class="text-2xl font-black text-slate-900 tracking-tight">Mi Historial de Asistencias</h3>
+                    <p class="text-sm font-medium text-slate-500 italic">Cronología personal de participaciones</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <a href="{% url 'solicitar_justificacion' %}"
+                       class="px-5 py-2.5 bg-primary-50 text-primary-700 rounded-xl font-bold border border-primary-100 hover:bg-primary-100 transition-all text-xs uppercase tracking-widest flex items-center gap-2">
+                        <i class="bi bi-patch-exclamation-fill"></i>
+                        <span>Justificar Falta</span>
+                    </a>
+                    <div class="h-10 w-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400">
+                        <i class="bi bi-calendar3"></i>
+                    </div>
+                </div>
+            </div>
+            {% if error %}
+                <div class="bg-red-50 border border-red-100 text-red-600 p-8 rounded-[2.5rem] text-center font-bold">
+                    <i class="bi bi-exclamation-triangle-fill text-2xl mb-2 block"></i>
+                    {{ error }}
+                </div>
+            {% else %}
+                <div class="bg-white rounded-[2.5rem] shadow-premium overflow-hidden border border-slate-100">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="bg-slate-50/50 border-b border-slate-100">
+                                    <th class="px-10 py-5 text-[9px] font-black text-slate-400 uppercase tracking-widest">Fecha</th>
+                                    <th class="px-6 py-5 text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Ingreso</th>
+                                    <th class="px-6 py-5 text-[9px] font-black text-slate-400 uppercase tracking-widest text-center">Salida</th>
+                                    <th class="px-6 py-5 text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                        Lugar /
+                                        Evento
+                                    </th>
+                                    <th class="px-10 py-5 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Confirmado</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-50">
+                                {% for asistencia in asistencias %}
+                                    <tr class="hover:bg-slate-50/50 transition-colors">
+                                        <td class="px-10 py-6">
+                                            <span class="font-bold text-slate-900">{{ asistencia.fecha|date:"d/m/Y" }}</span>
+                                        </td>
+                                        <td class="px-6 py-6 text-center">
+                                            <span class="text-xs font-black text-emerald-600 bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-100/50">{{ asistencia.hora_ingreso|default:"--" }}</span>
+                                        </td>
+                                        <td class="px-6 py-6 text-center">
+                                            <span class="text-xs font-black text-amber-500 bg-amber-50 px-3 py-1 rounded-lg border border-amber-100/50">{{ asistencia.hora_salida|default:"--" }}</span>
+                                        </td>
+                                        <td class="px-6 py-6">
+                                            <div class="space-y-1">
+                                                <div class="flex items-center gap-2">
+                                                    <i class="bi bi-geo-alt text-primary-400 text-[10px]"></i>
+                                                    <span class="text-xs font-bold text-slate-600">{{ asistencia.ubicacion.nombre|default:"General" }}</span>
+                                                </div>
+                                                <p class="text-[10px] text-slate-400 italic ml-4">{{ asistencia.evento.nombre|default:"Sin evento" }}</p>
+                                            </div>
+                                        </td>
+                                        <td class="px-10 py-6 text-right">
+                                            {% if asistencia.es_justificada %}
+                                                <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-primary-50 text-primary-600 border border-primary-100">
+                                                    <i class="bi bi-info-circle-fill"></i> JUSTIFICADA
+                                                </span>
+                                            {% elif asistencia.confirmada %}
+                                                <div class="inline-flex h-8 w-8 items-center justify-center bg-emerald-100 text-emerald-600 rounded-lg">
+                                                    <i class="bi bi-check2-all text-lg"></i>
+                                                </div>
+                                            {% else %}
+                                                <div class="inline-flex h-8 w-8 items-center justify-center bg-amber-100 text-amber-600 rounded-lg">
+                                                    <i class="bi bi-clock-history"></i>
+                                                </div>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% empty %}
+                                    <tr>
+                                        <td colspan="5" class="px-10 py-20 text-center text-slate-400">
+                                            <div class="h-16 w-16 bg-slate-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                                <i class="bi bi-info-circle text-2xl"></i>
+                                            </div>
+                                            <p class="font-bold italic">No hay asistencias registradas aún.</p>
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+    <style>
+        @keyframes fade-in {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .animate-fade-in {
+            animation: fade-in 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+    </style>
+{% endblock %}
