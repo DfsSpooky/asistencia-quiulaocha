@@ -1,5 +1,6 @@
 import csv
 import base64
+import functools
 from datetime import datetime
 import io
 from django.http import HttpResponse, FileResponse
@@ -54,8 +55,9 @@ def get_filtered_attendance_data(filters):
         asistencias = asistencias.none()
         # Si hay evento, calcular inasistentes de ese evento
         if evento:
-            asistentes_ids = Asistencia.objects.filter(evento=evento).values_list('usuario__id', flat=True)
-            usuarios_no_asistentes = Usuario.objects.filter(estado=Usuario.ESTADO_ACTIVO).exclude(id__in=asistentes_ids)
+            # Usar subquery SQL en lugar de evaluar a lista de Python
+            asistentes_subquery = Asistencia.objects.filter(evento=evento).values('usuario__id')
+            usuarios_no_asistentes = Usuario.objects.filter(estado=Usuario.ESTADO_ACTIVO).exclude(id__in=asistentes_subquery)
             if dni:
                 usuarios_no_asistentes = usuarios_no_asistentes.filter(dni__icontains=dni)
             usuarios_no_asistentes = usuarios_no_asistentes.order_by('apellido', 'nombre')
@@ -65,8 +67,9 @@ def get_filtered_attendance_data(filters):
     else:
         # Sin filtro de estado: mostrar ambos si hay evento
         if evento:
-            asistentes_ids = Asistencia.objects.filter(evento=evento).values_list('usuario__id', flat=True)
-            usuarios_no_asistentes = Usuario.objects.filter(estado=Usuario.ESTADO_ACTIVO).exclude(id__in=asistentes_ids)
+            # Usar subquery SQL en lugar de evaluar a lista de Python
+            asistentes_subquery = Asistencia.objects.filter(evento=evento).values('usuario__id')
+            usuarios_no_asistentes = Usuario.objects.filter(estado=Usuario.ESTADO_ACTIVO).exclude(id__in=asistentes_subquery)
             if dni:
                 usuarios_no_asistentes = usuarios_no_asistentes.filter(dni__icontains=dni)
             usuarios_no_asistentes = usuarios_no_asistentes.order_by('apellido', 'nombre')
@@ -225,12 +228,22 @@ def generate_pdf_report(template_name, context, filename):
             
         return HttpResponse(f"Error al generar el reporte: {str(e)}", status=500)
 
+@functools.lru_cache(maxsize=1)
 def get_logo_base64():
-    config = ConfiguracionSistema.objects.first()
-    if config and config.logo:
-        try:
-            with open(config.logo.path, "rb") as image_file:
-                return base64.b64encode(image_file.read()).decode('utf-8')
-        except Exception:
-            return None
+    """
+    Obtiene el logo en formato base64 con caché en memoria.
+    El caché se invalida automáticamente al reiniciar el servidor.
+    """
+    try:
+        config = ConfiguracionSistema.objects.first()
+        if config and config.logo:
+            try:
+                with open(config.logo.path, "rb") as image_file:
+                    return base64.b64encode(image_file.read()).decode('utf-8')
+            except (FileNotFoundError, IOError, OSError):
+                # Logo configurado pero archivo no existe
+                return None
+    except Exception:
+        # ConfiguracionSistema no existe o error de base de datos
+        return None
     return None

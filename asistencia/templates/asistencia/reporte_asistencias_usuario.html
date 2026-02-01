@@ -1,4 +1,5 @@
 {% load tz %}
+
 <!DOCTYPE html>
 <html lang="es">
     <head>
@@ -223,7 +224,12 @@
                                     <span class="badge badge-justified">JUSTIFICADA</span>
                                 {% endif %}
                             {% else %}
-                                <span class="badge {% if asistencia.confirmada %}badge-confirmed{% else %}badge-pending{% endif %}">
+                                <span class="badge
+                                             {% if asistencia.confirmada %}
+                                                 badge-confirmed
+                                             {% else %}
+                                                 badge-pending
+                                             {% endif %}">
                                     {{ asistencia.confirmada|yesno:"CONFIRMADO,PENDIENTE" }}
                                 </span>
                             {% endif %}

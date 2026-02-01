@@ -1,4 +1,5 @@
 {% extends "asistencia/base.html" %}
+
 {% block title %}
     Usuarios - Quiulacocha
 {% endblock title %}
@@ -171,8 +172,22 @@
                                             </div>
                                         </td>
                                         <td class="px-8 py-6 text-center">
-                                            <span class="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider {% if usuario.estado == 'ACTIVO' %}bg-emerald-50 text-emerald-700 border border-emerald-100 {% elif usuario.estado == 'EXONERADO' %}bg-cyan-50 text-cyan-700 border border-cyan-100 {% else %}bg-slate-100 text-slate-600 border border-slate-200{% endif %}">
-                                                <span class="w-1.5 h-1.5 rounded-full {% if usuario.estado == 'ACTIVO' %}bg-emerald-500 {% elif usuario.estado == 'EXONERADO' %}bg-cyan-500 {% else %}bg-slate-500{% endif %}"></span>
+                                            <span class="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider
+                                                         {% if usuario.estado == 'ACTIVO' %}
+                                                             bg-emerald-50 text-emerald-700 border border-emerald-100
+                                                         {% elif usuario.estado == 'EXONERADO' %}
+                                                             bg-cyan-50 text-cyan-700 border border-cyan-100
+                                                         {% else %}
+                                                             bg-slate-100 text-slate-600 border border-slate-200
+                                                         {% endif %}">
+                                                <span class="w-1.5 h-1.5 rounded-full
+                                                             {% if usuario.estado == 'ACTIVO' %}
+                                                                 bg-emerald-500
+                                                             {% elif usuario.estado == 'EXONERADO' %}
+                                                                 bg-cyan-500
+                                                             {% else %}
+                                                                 bg-slate-500
+                                                             {% endif %}"></span>
                                                 {{ usuario.get_estado_display }}
                                             </span>
                                         </td>
@@ -285,23 +300,27 @@
 {% endblock %}
 {% block extra_js %}
     <script>
-    function initSelect2() {
-        if (typeof $ !== 'undefined') {
-            $('.select2-searchable').each(function() {
-                $(this).select2({
-                    placeholder: $(this).find('option:first').text() || 'Seleccionar...',
-                    allowClear: true,
-                    width: '100%',
-                    language: {
-                        noResults: function() { return "No se encontraron resultados"; }
-                    }
-                }).on('change', function() {
-                    this.dispatchEvent(new Event('change', { bubbles: true }));
+        function initSelect2() {
+            if (typeof $ !== 'undefined') {
+                $('.select2-searchable').each(function() {
+                    $(this).select2({
+                        placeholder: $(this).find('option:first').text() || 'Seleccionar...',
+                        allowClear: true,
+                        width: '100%',
+                        language: {
+                            noResults: function() {
+                                return "No se encontraron resultados";
+                            }
+                        }
+                    }).on('change', function() {
+                        this.dispatchEvent(new Event('change', {
+                            bubbles: true
+                        }));
+                    });
                 });
-            });
+            }
         }
-    }
-    $(document).ready(initSelect2);
-    document.body.addEventListener('htmx:afterSettle', initSelect2);
+        $(document).ready(initSelect2);
+        document.body.addEventListener('htmx:afterSettle', initSelect2);
     </script>
 {% endblock %}

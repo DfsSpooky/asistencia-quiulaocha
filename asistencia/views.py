@@ -5,6 +5,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.views import LoginView, LogoutView
 from django.contrib import messages
+from django.core.exceptions import ValidationError
 from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from django.views.decorators.http import require_POST
 from django.utils.decorators import method_decorator
@@ -208,117 +209,107 @@ def admin_solicitar_justificacion(request):
 @permission_classes([IsAuthenticated])
 class RegistrarAsistencia(APIView):
     def post(self, request):
-        print("Usuario autenticado:", request.user)
-        print("¿Está autenticado?:", request.user.is_authenticated)
+        # Validación de autenticación y permisos (capa HTTP)
         if not request.user.is_authenticated:
-            print("Error: El usuario no está autenticado.")
-            return Response({'error': 'No estás autenticado. Por favor, inicia sesión.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {'error': 'No estás autenticado. Por favor, inicia sesión.'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
         
         if not request.user.has_perm('asistencia.can_scan_qr'):
-            print(f"Error: El usuario {request.user.username} no tiene permiso para escanear.")
-            return Response({'error': 'No tienes permiso para registrar asistencias.'}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {'error': 'No tienes permiso para registrar asistencias.'}, 
+                status=status.HTTP_403_FORBIDDEN
+            )
         
-        print("Solicitud POST recibida:", request.data)
+        # Extraer datos del request
         encoded_dni = request.data.get('dni')
         ubicacion_id = request.data.get('ubicacion_id')
         evento_id = request.data.get('evento_id')
         tipo_escaneo = request.data.get('tipo_escaneo')
-        try:
-            dni = base64.b64decode(encoded_dni).decode()
-            print("DNI decodificado:", dni)
-            usuario = Usuario.objects.get(dni=dni)
-            if usuario.estado not in [Usuario.ESTADO_ACTIVO, Usuario.ESTADO_PASIVO]:
-                return Response({
-                    'error': f'El usuario {usuario.nombre} {usuario.apellido} no tiene permiso (Estado: {usuario.get_estado_display()}). Solo Activos y Pasivos pueden marcar.'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            today = date.today()
-            evento = Evento.objects.get(id=evento_id, activo=True) if evento_id else None
-            if evento and evento.fecha != today:
-                return Response({
-                    'error': f'El evento {evento.nombre} no está programado para hoy.'
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            existing_asistencia = Asistencia.objects.filter(
-                usuario=usuario,
-                evento=evento,
-                fecha=today
-            ).first()
-
-            current_time = datetime.now().time()
-
-            if tipo_escaneo == 'ingreso':
-                if existing_asistencia and existing_asistencia.hora_ingreso:
-                    return Response({
-                        'error': f'{usuario.nombre} {usuario.apellido} ya registró su ingreso para el evento {evento.nombre} hoy a las {existing_asistencia.hora_ingreso}.'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-                if existing_asistencia:
-                    existing_asistencia.hora_ingreso = current_time
-                    existing_asistencia.save()
-                    asistencia = existing_asistencia
-                else:
-                    ubicacion = Ubicacion.objects.get(id=ubicacion_id) if ubicacion_id else None
-                    asistencia = Asistencia.objects.create(
-                        usuario=usuario,
-                        hora_ingreso=current_time,
-                        ubicacion=ubicacion,
-                        evento=evento
-                    )
-                message = f'Ingreso registrado para {usuario.nombre} {usuario.apellido} en el evento {evento.nombre if evento else "sin evento"} con éxito.'
-                hora = asistencia.hora_ingreso
-            elif tipo_escaneo == 'salida':
-                if not existing_asistencia or not existing_asistencia.hora_ingreso:
-                    return Response({
-                        'error': f'{usuario.nombre} {usuario.apellido} no tiene un ingreso registrado para el evento {evento.nombre} hoy.'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-                if existing_asistencia.hora_salida:
-                    return Response({
-                        'error': f'{usuario.nombre} {usuario.apellido} ya registró su salida para el evento {evento.nombre} hoy a las {existing_asistencia.hora_salida}.'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-                current_datetime = datetime.combine(today, current_time)
-                ingreso_datetime = datetime.combine(today, existing_asistencia.hora_ingreso)
-                if current_datetime < ingreso_datetime:
-                    return Response({
-                        'error': f'La hora de salida no puede ser anterior a la hora de ingreso ({existing_asistencia.hora_ingreso}).'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-                time_difference = current_datetime - ingreso_datetime
-                if time_difference < timedelta(minutes=5):
-                    return Response({
-                        'error': 'Debe haber al menos 5 minutos entre el ingreso y la salida.'
-                    }, status=status.HTTP_400_BAD_REQUEST)
-                existing_asistencia.hora_salida = current_time
-                existing_asistencia.save()
-                asistencia = existing_asistencia
-                message = f'Salida registrada para {usuario.nombre} {usuario.apellido} en el evento {evento.nombre if evento else "sin evento"} con éxito.'
-                hora = asistencia.hora_salida
-            else:
-                return Response({
-                    'error': 'Tipo de escaneo no válido. Debe ser "ingreso" o "salida".'
-                }, status=status.HTTP_400_BAD_REQUEST)
-
-            LogAccion.objects.create(
-                usuario=request.user,
-                accion=f"Registrar {tipo_escaneo}",
-                descripcion=f"{request.user.username} registró {tipo_escaneo} para {usuario.nombre} {usuario.apellido} en el evento {evento.nombre if evento else 'sin evento'}."
+        
+        # Validar tipo de escaneo
+        if tipo_escaneo not in ['ingreso', 'salida']:
+            return Response(
+                {'error': 'Tipo de escaneo no válido. Debe ser "ingreso" o "salida".'}, 
+                status=status.HTTP_400_BAD_REQUEST
             )
-
+        
+        try:
+            # Decodificar DNI y obtener usuario
+            dni = base64.b64decode(encoded_dni).decode()
+            usuario = Usuario.objects.get(dni=dni)
+            
+            # Obtener evento si fue especificado
+            evento = None
+            if evento_id:
+                evento = Evento.objects.get(id=evento_id, activo=True)
+            
+            # Obtener ubicación si fue especificada
+            ubicacion = None
+            if ubicacion_id:
+                ubicacion = Ubicacion.objects.get(id=ubicacion_id)
+            
+            # Delegar la lógica de negocio al servicio
+            from .services import AsistenciaService
+            
+            if tipo_escaneo == 'ingreso':
+                asistencia, message, hora = AsistenciaService.registrar_ingreso(
+                    usuario=usuario,
+                    evento=evento,
+                    ubicacion=ubicacion,
+                    request_user=request.user
+                )
+            else:  # tipo_escaneo == 'salida'
+                asistencia, message, hora = AsistenciaService.registrar_salida(
+                    usuario=usuario,
+                    evento=evento,
+                    request_user=request.user
+                )
+            
+            # Retornar respuesta exitosa
             return Response({
                 'message': message,
                 'hora': hora.strftime('%H:%M:%S') if hora else 'No registrado',
                 'nombre': f"{usuario.nombre} {usuario.apellido}",
                 'foto_perfil': request.build_absolute_uri(usuario.foto_perfil.url) if usuario.foto_perfil else None
             }, status=status.HTTP_201_CREATED)
+            
+        except ValidationError as e:
+            # Errores de validación de negocio
+            return Response({'error': str(e.message)}, status=status.HTTP_400_BAD_REQUEST)
+        
         except Usuario.DoesNotExist:
-            print("Error: Usuario no encontrado")
-            return Response({'error': 'El DNI escaneado no corresponde a ningún usuario registrado.'}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {'error': 'El DNI escaneado no corresponde a ningún usuario registrado.'}, 
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
         except Evento.DoesNotExist:
-            print("Error: Evento no encontrado o no activo")
-            return Response({'error': 'El evento seleccionado no es válido o no está activo.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': 'El evento seleccionado no es válido o no está activo.'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
         except Ubicacion.DoesNotExist:
-            print("Error: Ubicación no encontrada")
-            return Response({'error': 'La ubicación seleccionada no es válida.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': 'La ubicación seleccionada no es válida.'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
         except base64.binascii.Error:
-            print("Error: QR inválido")
-            return Response({'error': 'El código QR escaneado es inválido.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': 'El código QR escaneado es inválido.'}, 
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        except Exception as e:
+            # Manejar cualquier error inesperado
+            return Response(
+                {'error': f'Error inesperado: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
 
 class ListEventosActivos(APIView):
     permission_classes = [IsAuthenticated]
@@ -630,12 +621,8 @@ def registrar_usuario(request):
     if request.method == 'POST':
         form = UsuarioRegistroForm(request.POST, request.FILES)
         if form.is_valid():
+            # Form's save() method now handles EXONERADO logic automatically
             usuario = form.save(commit=False)
-            if usuario.fecha_nacimiento:
-                today = date.today()
-                age = today.year - usuario.fecha_nacimiento.year - ((today.month, today.day) < (usuario.fecha_nacimiento.month, usuario.fecha_nacimiento.day))
-                if age >= 65:
-                    usuario.estado = Usuario.ESTADO_EXONERADO
             user = User.objects.create_user(
                 username=usuario.dni,
                 password=form.cleaned_data['password']

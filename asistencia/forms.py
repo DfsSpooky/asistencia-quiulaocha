@@ -6,16 +6,20 @@ class JustificacionForm(forms.ModelForm):
         model = Justificacion
         fields = ['evento', 'motivo', 'evidencia']
         widgets = {
-            'evento': forms.Select(attrs={'class': 'select2-searchable w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none transition-all font-bold text-slate-700'}),
-            'motivo': forms.Textarea(attrs={'class': 'w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none transition-all font-bold text-slate-700', 'rows': 4, 'placeholder': 'Explica brevemente por qué no pudiste asistir...'}),
-            'evidencia': forms.ClearableFileInput(attrs={'class': 'w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none transition-all font-bold text-slate-700'}),
+            'evento': forms.Select(),
+            'motivo': forms.Textarea(attrs={
+                'rows': 4,
+                'placeholder': 'Explica brevemente por qué no pudiste asistir...'
+            }),
+            'evidencia': forms.ClearableFileInput(),
         }
 
 class AdminJustificacionForm(JustificacionForm):
     usuario = forms.ModelChoiceField(
-        queryset=Usuario.objects.all().order_by('apellido', 'nombre'),
+        # Optimize queryset: only load necessary fields to reduce memory usage
+        queryset=Usuario.objects.only('id', 'nombre', 'apellido', 'dni').order_by('apellido', 'nombre'),
         label='Socio a Justificar',
-        widget=forms.Select(attrs={'class': 'select2-searchable w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none transition-all font-bold text-slate-700'})
+        widget=forms.Select()
     )
 
     class Meta(JustificacionForm.Meta):
@@ -98,3 +102,24 @@ class UsuarioRegistroForm(forms.ModelForm):
         if password and password_confirm and password != password_confirm:
             raise forms.ValidationError("Las contraseñas no coinciden.")
         return cleaned_data
+
+    def save(self, commit=True):
+        """
+        Override save to centralize business logic for EXONERADO status.
+        Users >= 65 years old are automatically set to EXONERADO state.
+        """
+        usuario = super().save(commit=False)
+        
+        # Business rule: Users >= 65 years old are automatically EXONERADO
+        if usuario.fecha_nacimiento:
+            from datetime import date
+            today = date.today()
+            age = today.year - usuario.fecha_nacimiento.year - (
+                (today.month, today.day) < (usuario.fecha_nacimiento.month, usuario.fecha_nacimiento.day)
+            )
+            if age >= 65:
+                usuario.estado = Usuario.ESTADO_EXONERADO
+        
+        if commit:
+            usuario.save()
+        return usuario

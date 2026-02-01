@@ -1,0 +1,111 @@
+{% comment %}
+Template Example: Rendering Forms with django-widget-tweaks
+=============================================================
+
+This template demonstrates how to render Django forms with Tailwind CSS styling
+using django-widget-tweaks. This approach separates presentation (HTML/CSS) from
+logic (Python), making it easier for designers to modify styles.
+
+IMPORTANT: Load widget_tweaks at the top of your template!
+{% endcomment %}
+
+{% load widget_tweaks %}
+
+{# Standard CSS class constants (define once at top of template) #}
+{% comment %}
+Standard Input/Textarea Classes:
+- w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl
+- focus:bg-white focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500
+- outline-none transition-all font-bold text-slate-700
+
+Standard Select Classes (add 'select2-searchable' prefix):
+- select2-searchable w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl
+- focus:bg-white focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500
+- outline-none transition-all font-bold text-slate-700
+{% endcomment %}
+
+<form method="post" enctype="multipart/form-data" class="space-y-6">
+    {% csrf_token %}
+
+    {# Example 1: Select field (with Select2) #}
+    <div class="mb-6">
+        <label for="{{ form.evento.id_for_label }}"
+               class="block mb-2 text-sm font-bold text-slate-700">
+            {{ form.evento.label }}
+            {% if form.evento.field.required %}<span class="text-red-500">*</span>{% endif %}
+        </label>
+        {% render_field form.evento class="select2-searchable w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none transition-all font-bold text-slate-700" %}
+        {% if form.evento.errors %}<p class="mt-2 text-sm text-red-600">{{ form.evento.errors.0 }}</p>{% endif %}
+    </div>
+
+    {# Example 2: Textarea field #}
+    <div class="mb-6">
+        <label for="{{ form.motivo.id_for_label }}"
+               class="block mb-2 text-sm font-bold text-slate-700">
+            {{ form.motivo.label }}
+            {% if form.motivo.field.required %}<span class="text-red-500">*</span>{% endif %}
+        </label>
+        {% render_field form.motivo class="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none transition-all font-bold text-slate-700" %}
+        {% if form.motivo.errors %}<p class="mt-2 text-sm text-red-600">{{ form.motivo.errors.0 }}</p>{% endif %}
+    </div>
+
+    {# Example 3: File input field #}
+    <div class="mb-6">
+        <label for="{{ form.evidencia.id_for_label }}"
+               class="block mb-2 text-sm font-bold text-slate-700">
+            {{ form.evidencia.label }}
+            {% if form.evidencia.field.required %}<span class="text-red-500">*</span>{% endif %}
+        </label>
+        {% render_field form.evidencia class="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none transition-all font-bold text-slate-700" %}
+        {% if form.evidencia.errors %}<p class="mt-2 text-sm text-red-600">{{ form.evidencia.errors.0 }}</p>{% endif %}
+    </div>
+
+    {# Alternative: Using add_class filter (more concise but less flexible) #}
+    {% comment %}
+    <div class="mb-6">
+        <label for="{{ form.evento.id_for_label }}">{{ form.evento.label }}</label>
+        {{ form.evento|add_class:"select2-searchable w-full px-5 py-4 bg-slate-50..." }}
+    </div>
+    {% endcomment %}
+
+    {# Submit button #}
+    <div class="flex justify-end">
+        <button type="submit"
+                class="px-6 py-3 bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition-colors font-bold">
+            Enviar Justificación
+        </button>
+    </div>
+</form>
+
+{% comment %}
+=============================================================================
+ALTERNATIVE: Using Template Include for DRY
+=============================================================================
+
+Create: templates/asistencia/includes/form_field.html
+
+<div class="mb-6">
+    <label for="{{ field.id_for_label }}" class="block mb-2 text-sm font-bold text-slate-700">
+        {{ field.label }}
+        {% if field.field.required %}<span class="text-red-500">*</span>{% endif %}
+    </label>
+    
+    {% load widget_tweaks %}
+    {% if 'Select' in field.field.widget.__class__.__name__ %}
+        {% render_field field class="select2-searchable w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none transition-all font-bold text-slate-700" %}
+    {% else %}
+        {% render_field field class="w-full px-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none transition-all font-bold text-slate-700" %}
+    {% endif %}
+    
+    {% if field.errors %}
+        <p class="mt-2 text-sm text-red-600">{{ field.errors.0 }}</p>
+    {% endif %}
+</div>
+
+USAGE:
+{% include 'asistencia/includes/form_field.html' with field=form.evento %}
+{% include 'asistencia/includes/form_field.html' with field=form.motivo %}
+{% include 'asistencia/includes/form_field.html' with field=form.evidencia %}
+
+=============================================================================
+{% endcomment %}

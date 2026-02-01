@@ -30,14 +30,22 @@ class Evento(models.Model):
         # Si es un evento nuevo, registrar asistencias automáticas para usuarios EXONERADOS
         if is_new:
             usuarios_exonerados = Usuario.objects.filter(estado=Usuario.ESTADO_EXONERADO)
-            for usuario in usuarios_exonerados:
-                Asistencia.objects.create(
+            # Capturar la hora actual una sola vez para consistencia
+            hora_actual = datetime.now().time()
+            # Crear lista de instancias de Asistencia en memoria
+            asistencias = [
+                Asistencia(
                     usuario=usuario,
                     fecha=self.fecha,
                     evento=self,
-                    hora_ingreso=datetime.now().time(),
+                    hora_ingreso=hora_actual,
                     confirmada=True
                 )
+                for usuario in usuarios_exonerados
+            ]
+            # Insertar todas las asistencias en una sola consulta SQL
+            if asistencias:
+                Asistencia.objects.bulk_create(asistencias)
 
     def __str__(self):
         return f"{self.nombre} ({self.fecha})"

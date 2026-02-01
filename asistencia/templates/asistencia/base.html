@@ -10,9 +10,9 @@
         <script src="https://cdn.tailwindcss.com"></script>
         <script src="https://unpkg.com/htmx.org@1.9.10"></script>
         <script>
-        document.addEventListener('htmx:configRequest', (event) => {
-            event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
-        });
+            document.addEventListener('htmx:configRequest', (event) => {
+                event.detail.headers['X-CSRFToken'] = '{{ csrf_token }}';
+            });
         </script>
         <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
         <!-- Fonts & Icons -->
@@ -30,37 +30,37 @@
         <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
         {% block extra_css %}{% endblock %}
         <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        primary: {
-                            50: '#fefce8',
-                            100: '#fef9c3',
-                            200: '#fef08a',
-                            300: '#fde047',
-                            400: '#facc15',
-                            500: '#eab308', // Primary Yellow (Amber based for readability)
-                            600: '#ca8a04',
-                            700: '#a16207',
-                            800: '#854d0e',
-                            900: '#713f12',
+            tailwind.config = {
+                theme: {
+                    extend: {
+                        colors: {
+                            primary: {
+                                50: '#fefce8',
+                                100: '#fef9c3',
+                                200: '#fef08a',
+                                300: '#fde047',
+                                400: '#facc15',
+                                500: '#eab308', // Primary Yellow (Amber based for readability)
+                                600: '#ca8a04',
+                                700: '#a16207',
+                                800: '#854d0e',
+                                900: '#713f12',
+                            },
+                            slate: {
+                                850: '#1e293b',
+                                950: '#0f172a',
+                            }
                         },
-                        slate: {
-                            850: '#1e293b',
-                            950: '#0f172a',
+                        fontFamily: {
+                            sans: ['"Plus Jakarta Sans"', 'Inter', 'sans-serif'],
+                        },
+                        boxShadow: {
+                            'premium': '0 10px 40px -10px rgba(0, 0, 0, 0.05), 0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+                            'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.07)',
                         }
-                    },
-                    fontFamily: {
-                        sans: ['"Plus Jakarta Sans"', 'Inter', 'sans-serif'],
-                    },
-                    boxShadow: {
-                        'premium': '0 10px 40px -10px rgba(0, 0, 0, 0.05), 0 20px 25px -5px rgba(0, 0, 0, 0.1)',
-                        'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.07)',
                     }
                 }
             }
-        }
         </script>
         <style type="text/tailwindcss">
             @layer base {
@@ -231,23 +231,27 @@
                         <nav class="hidden lg:flex items-center gap-2">
                             {% if user.is_authenticated %}
                                 <a href="{% url 'dashboard' %}"
-                                   class="nav-item {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+                                   class="nav-item
+                                          {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
                                     <i class="bi bi-grid-1x2-fill mr-2"></i> Dashboard
                                 </a>
                                 {% if can_scan_qr %}
                                     <a href="{% url 'escanear_qr' %}"
-                                       class="nav-item group {% if request.resolver_match.url_name == 'escanear_qr' %}active{% endif %}">
+                                       class="nav-item group
+                                              {% if request.resolver_match.url_name == 'escanear_qr' %}active{% endif %}">
                                         <div class="px-3 py-1 bg-primary-600 text-white rounded-lg group-hover:bg-primary-700 transition-colors shadow-sm">
                                             <i class="bi bi-qr-code-scan mr-2"></i> Escanear
                                         </div>
                                     </a>
                                 {% endif %}
                                 <a href="{% url 'lista_usuarios' %}"
-                                   class="nav-item {% if request.resolver_match.url_name == 'lista_usuarios' %}active{% endif %}">
+                                   class="nav-item
+                                          {% if request.resolver_match.url_name == 'lista_usuarios' %}active{% endif %}">
                                     <i class="bi bi-people-fill mr-2"></i> Usuarios
                                 </a>
                                 <a href="{% url 'historial_asistencias' %}"
-                                   class="nav-item {% if request.resolver_match.url_name == 'historial_asistencias' %}active{% endif %}">
+                                   class="nav-item
+                                          {% if request.resolver_match.url_name == 'historial_asistencias' %}active{% endif %}">
                                     <i class="bi bi-calendar3-range mr-2"></i> Historial
                                 </a>
                                 <!-- User Actions -->
@@ -319,7 +323,12 @@
                      class="lg:hidden border-t border-slate-100 p-4 space-y-2 bg-white/90 backdrop-blur-md">
                     {% if user.is_authenticated %}
                         <a href="{% url 'dashboard' %}"
-                           class="flex items-center p-4 rounded-xl font-bold {% if request.resolver_match.url_name == 'dashboard' %}bg-primary-50 text-primary-600{% else %}text-slate-600 hover:bg-slate-50{% endif %}">
+                           class="flex items-center p-4 rounded-xl font-bold
+                                  {% if request.resolver_match.url_name == 'dashboard' %}
+                                      bg-primary-50 text-primary-600
+                                  {% else %}
+                                      text-slate-600 hover:bg-slate-50
+                                  {% endif %}">
                             <i class="bi bi-grid-1x2-fill mr-4"></i> Dashboard
                         </a>
                         {% if can_scan_qr %}
@@ -371,36 +380,39 @@
         </div>
         <!-- Scripts -->
         <script>
-        // Smooth scroll implementation for hash links if any
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function (e) {
-                e.preventDefault();
-                document.querySelector(this.getAttribute('href')).scrollIntoView({
-                    behavior: 'smooth'
+            // Smooth scroll implementation for hash links if any
+            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+                anchor.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    document.querySelector(this.getAttribute('href')).scrollIntoView({
+                        behavior: 'smooth'
+                    });
                 });
             });
-        });
 
-        // HTMX behavior adjustment
-        document.body.addEventListener('htmx:beforeRequest', function (evt) {
-            // Optional: Handle pre-request logic
-        });
+            // HTMX behavior adjustment
+            document.body.addEventListener('htmx:beforeRequest', function(evt) {
+                // Optional: Handle pre-request logic
+            });
 
-        document.body.addEventListener('htmx:afterSettle', function (evt) {
-            // Scroll to top only on full page (body) navigation
-            if (evt.detail.target === document.body) {
-                window.scrollTo({ top: 0, behavior: 'smooth' });
-            }
-        });
+            document.body.addEventListener('htmx:afterSettle', function(evt) {
+                // Scroll to top only on full page (body) navigation
+                if (evt.detail.target === document.body) {
+                    window.scrollTo({
+                        top: 0,
+                        behavior: 'smooth'
+                    });
+                }
+            });
 
-        // Ensure Alpine.js re-initializes content swapped by HTMX
-        document.body.addEventListener('htmx:afterSwap', function(evt) {
-            if (window.Alpine && evt.detail.target) {
-                Alpine.discoverUninitializedComponents((el) => {
-                    Alpine.initializeComponent(el);
-                });
-            }
-        });
+            // Ensure Alpine.js re-initializes content swapped by HTMX
+            document.body.addEventListener('htmx:afterSwap', function(evt) {
+                if (window.Alpine && evt.detail.target) {
+                    Alpine.discoverUninitializedComponents((el) => {
+                        Alpine.initializeComponent(el);
+                    });
+                }
+            });
         </script>
         {% block extra_js %}
         {% endblock %}

@@ -1,4 +1,5 @@
 {% extends "asistencia/base.html" %}
+
 {% block title %}
     Escanear - Quiulacocha
 {% endblock title %}
@@ -236,192 +237,198 @@
                preload="auto"></audio>
     </div>
     <script>
-    (function() {
-        function qrScannerComponent() {
-            return {
-                config: {
-                    evento_id: '{{ selected_evento_id|default:"" }}',
-                    tipo_escaneo: 'ingreso', // default
-                    ubicacion_id: ''
-                },
-                processing: false,
-                flash: false,
-                error: null,
-                showHelp: false,
-                lastScannedDni: null,
-                lastScannedName: '',
-                lastScanTime: 0,
-                debounceTime: 5000,
-                fps: 0,
-                frameCount: 0,
-                lastFpsUpdate: 0,
-                stream: null,
+        (function() {
+            function qrScannerComponent() {
+                return {
+                    config: {
+                        evento_id: '{{ selected_evento_id|default:"" }}',
+                        tipo_escaneo: 'ingreso', // default
+                        ubicacion_id: ''
+                    },
+                    processing: false,
+                    flash: false,
+                    error: null,
+                    showHelp: false,
+                    lastScannedDni: null,
+                    lastScannedName: '',
+                    lastScanTime: 0,
+                    debounceTime: 5000,
+                    fps: 0,
+                    frameCount: 0,
+                    lastFpsUpdate: 0,
+                    stream: null,
 
-                init() {
-                    // Esperar un tick para asegurar que los $refs están listos
-                    // y que el DOM se ha asentado tras el swap de HTMX
-                    setTimeout(() => {
-                        this.startCamera();
-                    }, 100);
-                },
+                    init() {
+                        // Esperar un tick para asegurar que los $refs están listos
+                        // y que el DOM se ha asentado tras el swap de HTMX
+                        setTimeout(() => {
+                            this.startCamera();
+                        }, 100);
+                    },
 
-                destroy() {
-                    this.stopCamera();
-                },
+                    destroy() {
+                        this.stopCamera();
+                    },
 
-                stopCamera() {
-                    if (this.stream) {
-                        this.stream.getTracks().forEach(track => track.stop());
-                        this.stream = null;
-                        if (this.$refs && this.$refs.video) {
-                            this.$refs.video.srcObject = null;
-                        }
-                    }
-                },
-
-                async startCamera() {
-                    if (!this.$refs || !this.$refs.video) {
-                        console.warn('Video ref not ready, retrying startCamera...');
-                        setTimeout(() => this.startCamera(), 200);
-                        return;
-                    }
-
-                    try {
-                        this.stream = await navigator.mediaDevices.getUserMedia({
-                            video: { 
-                                facingMode: 'environment', 
-                                width: { ideal: 1280 }, 
-                                height: { ideal: 1280 } 
-                            }
-                        });
-                        if (this.$refs.video) {
-                            this.$refs.video.srcObject = this.stream;
-                        }
-                        this.lastFpsUpdate = Date.now();
-                        this.tick();
-                    } catch (err) {
-                        this.error = "No se puede acceder a la cámara. Verifique los permisos.";
-                        console.error(err);
-                    }
-                },
-
-                tick() {
-                    const video = this.$refs.video;
-                    const canvas = this.$refs.canvas;
-                    
-                    if (!video) return; // Component might have been destroyed
-
-                    // Calculate FPS
-                    this.frameCount++;
-                    const now = Date.now();
-                    if (now - this.lastFpsUpdate > 1000) {
-                        this.fps = this.frameCount;
-                        this.frameCount = 0;
-                        this.lastFpsUpdate = now;
-                    }
-
-                    if (video.readyState === video.HAVE_ENOUGH_DATA && !this.processing && !this.error) {
-                        const ctx = canvas.getContext('2d', { alpha: false });
-                        canvas.height = video.videoHeight;
-                        canvas.width = video.videoWidth;
-                        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                        const code = jsQR(imageData.data, imageData.width, imageData.height, {
-                            inversionAttempts: "dontInvert",
-                        });
-
-                        if (code) {
-                            const currentTime = Date.now();
-                            if (code.data !== this.lastScannedDni || (currentTime - this.lastScanTime) > this.debounceTime) {
-                                // Feedback visual inmediato
-                                this.flash = true;
-                                setTimeout(() => this.flash = false, 150);
-                                
-                                this.registerAttendance(code.data);
-                                this.lastScannedDni = code.data;
-                                this.lastScanTime = currentTime;
+                    stopCamera() {
+                        if (this.stream) {
+                            this.stream.getTracks().forEach(track => track.stop());
+                            this.stream = null;
+                            if (this.$refs && this.$refs.video) {
+                                this.$refs.video.srcObject = null;
                             }
                         }
-                    }
-                    
-                    // Solo continuar si el stream está activo
-                    if (this.stream && this.stream.active) {
-                        requestAnimationFrame(() => this.tick());
-                    }
-                },
+                    },
 
-                async registerAttendance(dni) {
-                    if (!this.config.evento_id) {
-                        this.error = "Seleccione un evento antes de escanear.";
-                        setTimeout(() => this.error = null, 3000);
-                        return;
-                    }
+                    async startCamera() {
+                        if (!this.$refs || !this.$refs.video) {
+                            console.warn('Video ref not ready, retrying startCamera...');
+                            setTimeout(() => this.startCamera(), 200);
+                            return;
+                        }
 
-                    this.processing = true;
-                    this.error = null;
-
-                    try {
-                        const response = await fetch('/api/registrar-asistencia/', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                'X-CSRFToken': this.getCsrfToken(),
-                            },
-                            body: JSON.stringify({
-                                dni: dni,
-                                ...this.config
-                            }),
-                        });
-
-                        const data = await response.json();
-
-                        if (response.ok) {
-                            this.$refs.successSound.play();
-                            this.lastScannedName = data.message.split(' para ')[1] || data.message;
-
-                            Swal.fire({
-                                icon: 'success',
-                                title: 'ACCESO CONCEDIDO',
-                                text: data.message,
-                                timer: 2000,
-                                showConfirmButton: false,
-                                position: 'top',
-                                toast: true,
-                                background: '#0f172a',
-                                color: '#ffffff',
-                                customClass: {
-                                    popup: 'rounded-[1.5rem] border border-emerald-500/50 shadow-2xl shadow-emerald-500/20'
+                        try {
+                            this.stream = await navigator.mediaDevices.getUserMedia({
+                                video: {
+                                    facingMode: 'environment',
+                                    width: {
+                                        ideal: 1280
+                                    },
+                                    height: {
+                                        ideal: 1280
+                                    }
                                 }
                             });
-                        } else {
-                            this.error = data.error || "Error en el servidor";
-                            setTimeout(() => this.error = null, 5000);
+                            if (this.$refs.video) {
+                                this.$refs.video.srcObject = this.stream;
+                            }
+                            this.lastFpsUpdate = Date.now();
+                            this.tick();
+                        } catch (err) {
+                            this.error = "No se puede acceder a la cámara. Verifique los permisos.";
+                            console.error(err);
                         }
-                    } catch (err) {
-                        this.error = "Fallo en la comunicación con el servidor.";
-                        setTimeout(() => this.error = null, 5000);
-                    } finally {
-                        this.processing = false;
+                    },
+
+                    tick() {
+                        const video = this.$refs.video;
+                        const canvas = this.$refs.canvas;
+
+                        if (!video) return; // Component might have been destroyed
+
+                        // Calculate FPS
+                        this.frameCount++;
+                        const now = Date.now();
+                        if (now - this.lastFpsUpdate > 1000) {
+                            this.fps = this.frameCount;
+                            this.frameCount = 0;
+                            this.lastFpsUpdate = now;
+                        }
+
+                        if (video.readyState === video.HAVE_ENOUGH_DATA && !this.processing && !this.error) {
+                            const ctx = canvas.getContext('2d', {
+                                alpha: false
+                            });
+                            canvas.height = video.videoHeight;
+                            canvas.width = video.videoWidth;
+                            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                            const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                                inversionAttempts: "dontInvert",
+                            });
+
+                            if (code) {
+                                const currentTime = Date.now();
+                                if (code.data !== this.lastScannedDni || (currentTime - this.lastScanTime) > this.debounceTime) {
+                                    // Feedback visual inmediato
+                                    this.flash = true;
+                                    setTimeout(() => this.flash = false, 150);
+
+                                    this.registerAttendance(code.data);
+                                    this.lastScannedDni = code.data;
+                                    this.lastScanTime = currentTime;
+                                }
+                            }
+                        }
+
+                        // Solo continuar si el stream está activo
+                        if (this.stream && this.stream.active) {
+                            requestAnimationFrame(() => this.tick());
+                        }
+                    },
+
+                    async registerAttendance(dni) {
+                        if (!this.config.evento_id) {
+                            this.error = "Seleccione un evento antes de escanear.";
+                            setTimeout(() => this.error = null, 3000);
+                            return;
+                        }
+
+                        this.processing = true;
+                        this.error = null;
+
+                        try {
+                            const response = await fetch('/api/registrar-asistencia/', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRFToken': this.getCsrfToken(),
+                                },
+                                body: JSON.stringify({
+                                    dni: dni,
+                                    ...this.config
+                                }),
+                            });
+
+                            const data = await response.json();
+
+                            if (response.ok) {
+                                this.$refs.successSound.play();
+                                this.lastScannedName = data.message.split(' para ')[1] || data.message;
+
+                                Swal.fire({
+                                    icon: 'success',
+                                    title: 'ACCESO CONCEDIDO',
+                                    text: data.message,
+                                    timer: 2000,
+                                    showConfirmButton: false,
+                                    position: 'top',
+                                    toast: true,
+                                    background: '#0f172a',
+                                    color: '#ffffff',
+                                    customClass: {
+                                        popup: 'rounded-[1.5rem] border border-emerald-500/50 shadow-2xl shadow-emerald-500/20'
+                                    }
+                                });
+                            } else {
+                                this.error = data.error || "Error en el servidor";
+                                setTimeout(() => this.error = null, 5000);
+                            }
+                        } catch (err) {
+                            this.error = "Fallo en la comunicación con el servidor.";
+                            setTimeout(() => this.error = null, 5000);
+                        } finally {
+                            this.processing = false;
+                        }
+                    },
+
+                    getCsrfToken() {
+                        return document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
+                            document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
                     }
-                },
+                };
+            }
 
-                getCsrfToken() {
-                    return document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
-                        document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
-                }
-            };
-        }
-
-        // Register with Alpine
-        if (window.Alpine) {
-            Alpine.data('qrScanner', qrScannerComponent);
-        } else {
-            document.addEventListener('alpine:init', () => {
+            // Register with Alpine
+            if (window.Alpine) {
                 Alpine.data('qrScanner', qrScannerComponent);
-            });
-        }
-    })();
+            } else {
+                document.addEventListener('alpine:init', () => {
+                    Alpine.data('qrScanner', qrScannerComponent);
+                });
+            }
+        })();
     </script>
     <style>
         .scanning-grid {

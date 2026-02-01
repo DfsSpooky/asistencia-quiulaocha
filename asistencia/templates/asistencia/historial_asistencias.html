@@ -1,5 +1,7 @@
 {% extends "asistencia/base.html" %}
+
 {% load tz %}
+
 {% block title %}
     Centro de Reportes Históricos - Quiulacocha
 {% endblock title %}
@@ -275,9 +277,7 @@
                                 {% for val, label in form.evento.field.choices %}
                                     {% if val %}
                                         <option value="{{ val }}"
-                                                {% if form.evento.value|stringformat:"s" == val|stringformat:"s" %}selected{% endif %}>
-                                            {{ label }}
-                                        </option>
+                                                {% if form.evento.value|stringformat:"s" == val|stringformat:"s" %}selected{% endif %}>{{ label }}</option>
                                     {% endif %}
                                 {% endfor %}
                             </select>
@@ -293,9 +293,7 @@
                                 {% for val, label in form.ubicacion.field.choices %}
                                     {% if val %}
                                         <option value="{{ val }}"
-                                                {% if form.ubicacion.value|stringformat:"s" == val|stringformat:"s" %}selected{% endif %}>
-                                            {{ label }}
-                                        </option>
+                                                {% if form.ubicacion.value|stringformat:"s" == val|stringformat:"s" %}selected{% endif %}>{{ label }}</option>
                                     {% endif %}
                                 {% endfor %}
                             </select>
@@ -310,9 +308,7 @@
                                         class="select2-searchable px-4 py-2 bg-slate-100 rounded-xl text-xs font-black text-slate-600 border-none focus:ring-0 appearance-none cursor-pointer">
                                     {% for val, label in form.ordenar_por.field.choices %}
                                         <option value="{{ val }}"
-                                                {% if form.ordenar_por.value == val %}selected{% endif %}>
-                                            {{ label }}
-                                        </option>
+                                                {% if form.ordenar_por.value == val %}selected{% endif %}>{{ label }}</option>
                                     {% endfor %}
                                 </select>
                             </div>
@@ -437,8 +433,18 @@
                                                     Justificada
                                                 </span>
                                             {% else %}
-                                                <div class="inline-flex items-center gap-2 px-4 py-2 rounded-2xl text-[9px] font-black uppercase tracking-[0.1em] {% if asistencia.confirmada %}bg-emerald-50 text-emerald-700 border border-emerald-100{% else %}bg-amber-50 text-amber-700 border border-amber-100 animate-pulse{% endif %}">
-                                                    <span class="h-1.5 w-1.5 rounded-full {% if asistencia.confirmada %}bg-emerald-500{% else %}bg-amber-500{% endif %}"></span>
+                                                <div class="inline-flex items-center gap-2 px-4 py-2 rounded-2xl text-[9px] font-black uppercase tracking-[0.1em]
+                                                            {% if asistencia.confirmada %}
+                                                                bg-emerald-50 text-emerald-700 border border-emerald-100
+                                                            {% else %}
+                                                                bg-amber-50 text-amber-700 border border-amber-100 animate-pulse
+                                                            {% endif %}">
+                                                    <span class="h-1.5 w-1.5 rounded-full
+                                                                 {% if asistencia.confirmada %}
+                                                                     bg-emerald-500
+                                                                 {% else %}
+                                                                     bg-amber-500
+                                                                 {% endif %}"></span>
                                                     {% if asistencia.confirmada %}
                                                         Confirmado
                                                     {% else %}
@@ -516,76 +522,79 @@
         </div>
     </div>
     <script>
-    // Initialize Select2 with loop protection and correct positioning
-    let isInitializing = false;
-    function initSelect2() {
-        if (typeof $ !== 'undefined' && !isInitializing) {
-            isInitializing = true;
-            // Destroy existing select2 instances first to prevent duplicates
-            $('.select2-searchable.select2-hidden-accessible').each(function() {
-                $(this).select2('destroy');
-            });
-            
-            // Initialize select2 on all searchable selects
-            $('.select2-searchable').each(function() {
-                const $el = $(this);
-                $el.select2({
-                    placeholder: $el.find('option:first').text() || 'Selecciona una opción...',
-                    allowClear: true,
-                    width: '100%',
-                    dropdownParent: $('body'), // Fix positioning issue
-                    language: {
-                        noResults: function() { return "No se encontraron resultados"; }
-                    }
-                });
-                
-                // Trigger form submission when user makes a selection
-                $el.on('select2:select select2:unselect', function() {
-                    // Manually trigger HTMX request instead of change event
-                    const form = document.getElementById('attendance-filter-form');
-                    if (form) {
-                        htmx.trigger(form, 'submit');
-                    }
-                });
-            });
-            isInitializing = false;
-        }
-    }
+        // Initialize Select2 with loop protection and correct positioning
+        let isInitializing = false;
 
-    // Run on load
-    $(document).ready(function() {
-        initSelect2();
-    });
-    
-    // Reinitialize after HTMX swaps, but NOT for filter form to avoid loops
-    document.body.addEventListener('htmx:afterSwap', function(evt) {
-        // Only reinit select2 for content area, NOT for the filter form itself
-        if (evt.detail.target.id === 'attendance-content-area') {
+        function initSelect2() {
+            if (typeof $ !== 'undefined' && !isInitializing) {
+                isInitializing = true;
+                // Destroy existing select2 instances first to prevent duplicates
+                $('.select2-searchable.select2-hidden-accessible').each(function() {
+                    $(this).select2('destroy');
+                });
+
+                // Initialize select2 on all searchable selects
+                $('.select2-searchable').each(function() {
+                    const $el = $(this);
+                    $el.select2({
+                        placeholder: $el.find('option:first').text() || 'Selecciona una opción...',
+                        allowClear: true,
+                        width: '100%',
+                        dropdownParent: $('body'), // Fix positioning issue
+                        language: {
+                            noResults: function() {
+                                return "No se encontraron resultados";
+                            }
+                        }
+                    });
+
+                    // Trigger form submission when user makes a selection
+                    $el.on('select2:select select2:unselect', function() {
+                        // Manually trigger HTMX request instead of change event
+                        const form = document.getElementById('attendance-filter-form');
+                        if (form) {
+                            htmx.trigger(form, 'submit');
+                        }
+                    });
+                });
+                isInitializing = false;
+            }
+        }
+
+        // Run on load
+        $(document).ready(function() {
             initSelect2();
-        }
-    });
+        });
 
-    function downloadEventReport() {
-        const eventId = document.getElementById('event-report-selector').value;
-        if (eventId) {
-            window.open(`/descargar-reporte-evento/${eventId}/`, '_blank');
-        }
-    }
+        // Reinitialize after HTMX swaps, but NOT for filter form to avoid loops
+        document.body.addEventListener('htmx:afterSwap', function(evt) {
+            // Only reinit select2 for content area, NOT for the filter form itself
+            if (evt.detail.target.id === 'attendance-content-area') {
+                initSelect2();
+            }
+        });
 
-    function downloadUserReport() {
-        const dni = document.getElementById('user-report-search').value.trim();
-        if (dni) {
-            window.open(`/descargar-reporte-usuario/${dni}/`, '_blank');
-        } else {
-            alert('Por favor, ingresa un DNI válido.');
+        function downloadEventReport() {
+            const eventId = document.getElementById('event-report-selector').value;
+            if (eventId) {
+                window.open(`/descargar-reporte-evento/${eventId}/`, '_blank');
+            }
         }
-    }
 
-    document.body.addEventListener('htmx:afterOnLoad', function(evt) {
-        if (evt.detail.target.id === 'attendance-content-area') {
-            // Reinicializar componentes si fuera necesario
+        function downloadUserReport() {
+            const dni = document.getElementById('user-report-search').value.trim();
+            if (dni) {
+                window.open(`/descargar-reporte-usuario/${dni}/`, '_blank');
+            } else {
+                alert('Por favor, ingresa un DNI válido.');
+            }
         }
-    });
+
+        document.body.addEventListener('htmx:afterOnLoad', function(evt) {
+            if (evt.detail.target.id === 'attendance-content-area') {
+                // Reinicializar componentes si fuera necesario
+            }
+        });
     </script>
     <style>
         :root {

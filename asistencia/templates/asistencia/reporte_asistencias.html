@@ -1,4 +1,5 @@
 {% load tz %}
+
 <!DOCTYPE html>
 <html lang="es">
     <head>
@@ -299,9 +300,12 @@
                                                      color: #3730a3">JUSTIFICADA</span>
                                     {% endif %}
                                 {% else %}
-                                    <span class="status-badge {% if asistencia.confirmada %}status-yes{% else %}status-no{% endif %}">
-                                        {{ asistencia.confirmada|yesno:"SÍ,NO" }}
-                                    </span>
+                                    <span class="status-badge
+                                                 {% if asistencia.confirmada %}
+                                                     status-yes
+                                                 {% else %}
+                                                     status-no
+                                                 {% endif %}">{{ asistencia.confirmada|yesno:"SÍ,NO" }}</span>
                                 {% endif %}
                             </td>
                         </tr>
