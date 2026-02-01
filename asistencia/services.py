@@ -20,7 +20,7 @@ class AsistenciaService:
     """
     
     @staticmethod
-    def registrar_ingreso(usuario, evento, ubicacion, request_user=None):
+    def registrar_ingreso(usuario, evento, ubicacion, request_user=None, fecha_registro=None):
         """
         Registra el ingreso de un usuario a un evento.
         
@@ -29,6 +29,7 @@ class AsistenciaService:
             evento (Evento): El evento al que asiste
             ubicacion (Ubicacion): La ubicación donde se registra
             request_user (User, optional): Usuario que realiza el registro (para logs)
+            fecha_registro (datetime, optional): Timestamp original del escaneo (para sync offline)
         
         Returns:
             tuple: (asistencia, message, hora) - La asistencia creada/actualizada, mensaje y hora
@@ -40,8 +41,23 @@ class AsistenciaService:
         AsistenciaService._validar_usuario_activo(usuario)
         AsistenciaService._validar_evento_hoy(evento)
         
-        today = date.today()
-        current_time = datetime.now().time()
+        # Usar timestamp original si viene de sincronización offline
+        if fecha_registro:
+            # Timestamp viene del móvil (sincronización offline)
+            from django.utils import timezone
+            if timezone.is_aware(fecha_registro):
+                fecha_registro_local = timezone.localtime(fecha_registro)
+            else:
+                fecha_registro_local = timezone.make_aware(fecha_registro)
+            
+            today = fecha_registro_local.date()
+            current_time = fecha_registro_local.time()
+        else:
+            # Escaneo en tiempo real
+            from django.utils import timezone
+            now = timezone.now()
+            today = now.date()
+            current_time = now.time()
         
         # Buscar asistencia existente
         existing_asistencia = Asistencia.objects.filter(
@@ -78,7 +94,7 @@ class AsistenciaService:
         return asistencia, message, asistencia.hora_ingreso
     
     @staticmethod
-    def registrar_salida(usuario, evento, request_user=None):
+    def registrar_salida(usuario, evento, request_user=None, fecha_registro=None):
         """
         Registra la salida de un usuario de un evento.
         
@@ -86,6 +102,7 @@ class AsistenciaService:
             usuario (Usuario): El usuario que registra su salida
             evento (Evento): El evento del que sale
             request_user (User, optional): Usuario que realiza el registro (para logs)
+            fecha_registro (datetime, optional): Timestamp original del escaneo (para sync offline)
         
         Returns:
             tuple: (asistencia, message, hora) - La asistencia actualizada, mensaje y hora
@@ -97,8 +114,23 @@ class AsistenciaService:
         AsistenciaService._validar_usuario_activo(usuario)
         AsistenciaService._validar_evento_hoy(evento)
         
-        today = date.today()
-        current_time = datetime.now().time()
+        # Usar timestamp original si viene de sincronización offline
+        if fecha_registro:
+            # Timestamp viene del móvil (sincronización offline)
+            from django.utils import timezone
+            if timezone.is_aware(fecha_registro):
+                fecha_registro_local = timezone.localtime(fecha_registro)
+            else:
+                fecha_registro_local = timezone.make_aware(fecha_registro)
+            
+            today = fecha_registro_local.date()
+            current_time = fecha_registro_local.time()
+        else:
+            # Escaneo en tiempo real
+            from django.utils import timezone
+            now = timezone.now()
+            today = now.date()
+            current_time = now.time()
         
         # Buscar asistencia existente
         existing_asistencia = Asistencia.objects.filter(

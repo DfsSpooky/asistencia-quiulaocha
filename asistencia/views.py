@@ -228,6 +228,21 @@ class RegistrarAsistencia(APIView):
         evento_id = request.data.get('evento_id')
         tipo_escaneo = request.data.get('tipo_escaneo')
         
+        # Extraer timestamp opcional (para sincronización offline)
+        timestamp_str = request.data.get('timestamp')
+        fecha_registro = None
+        
+        if timestamp_str:
+            from django.utils.dateparse import parse_datetime
+            fecha_registro = parse_datetime(timestamp_str)
+            
+            # Validar que el timestamp sea válido
+            if not fecha_registro:
+                return Response(
+                    {'error': 'Formato de timestamp inválido. Use ISO 8601.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
         # Validar tipo de escaneo
         if tipo_escaneo not in ['ingreso', 'salida']:
             return Response(
@@ -258,13 +273,15 @@ class RegistrarAsistencia(APIView):
                     usuario=usuario,
                     evento=evento,
                     ubicacion=ubicacion,
-                    request_user=request.user
+                    request_user=request.user,
+                    fecha_registro=fecha_registro
                 )
             else:  # tipo_escaneo == 'salida'
                 asistencia, message, hora = AsistenciaService.registrar_salida(
                     usuario=usuario,
                     evento=evento,
-                    request_user=request.user
+                    request_user=request.user,
+                    fecha_registro=fecha_registro
                 )
             
             # Retornar respuesta exitosa
