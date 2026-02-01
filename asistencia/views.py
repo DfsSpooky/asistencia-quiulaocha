@@ -1,7 +1,7 @@
 from django.db import models
 from django.shortcuts import render, get_object_or_404, redirect
-from django.contrib.auth import logout as auth_logout
-from django.contrib.auth.models import User
+from django.contrib.auth import logout as auth_logout, authenticate, login as auth_login
+from django.contrib.auth.models import User, Group
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.views import LoginView, LogoutView
 from django.contrib import messages
@@ -12,13 +12,21 @@ from django.utils.decorators import method_decorator
 from django.core.paginator import Paginator
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.cache import cache_page
+from django.views import View
+from django.db.models import Q, Count
+from django.db import transaction
+import csv
+import openpyxl # Changed from `from openpyxl import Workbook` to `import openpyxl` for consistency with other imports
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+from io import BytesIO
 from .models import Usuario, Asistencia, Ubicacion, Evento, LogAccion, ConfiguracionSistema, Justificacion
 from .forms import FiltroAsistenciaForm, ImportarUsuariosForm, BuscarUsuarioForm, UsuarioRegistroForm, JustificacionForm, AdminJustificacionForm
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.decorators import permission_classes
+from rest_framework.decorators import permission_classes, api_view
 from datetime import date, datetime, timedelta
 import base64
 from .utils.reports import (
@@ -26,12 +34,18 @@ from .utils.reports import (
     generate_pdf_report, get_logo_base64, get_filtered_attendance_data
 )
 
-def index(request):
-    if not request.user.is_authenticated:
-        return redirect('login')
-    if request.user.is_staff:
-        return redirect('dashboard')
-    return redirect('perfil_usuario')
+def landing_page(request):
+    """
+    Landing page pública para el sistema de asistencia de Quiulacocha.
+    
+    Si el usuario está autenticado, muestra un botón para ir al dashboard.
+    Si no está autenticado, muestra la página de bienvenida con CTA para login.
+    """
+    config = ConfiguracionSistema.objects.first()
+    return render(request, 'asistencia/landing.html', {
+        'is_authenticated': request.user.is_authenticated,
+        'config': config,
+    })
 
 @login_required
 @permission_required('asistencia.can_manage_users', raise_exception=True)

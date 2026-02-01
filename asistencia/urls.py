@@ -1,6 +1,6 @@
 from django.urls import path
 from .views import (
-    index, dashboard, lista_usuarios, detalle_usuario, RegistrarAsistencia,
+    landing_page, dashboard, lista_usuarios, detalle_usuario, RegistrarAsistencia,
     escanear_qr, historial_asistencias, descargar_reporte_pdf,
     importar_usuarios, perfil_usuario, descargar_reporte_evento_pdf,
     registrar_usuario, confirmar_asistencia, exportar_asistencias_csv,
@@ -11,7 +11,7 @@ from .views import (
 from rest_framework.authtoken.views import obtain_auth_token
 
 urlpatterns = [
-    path('', index, name='index'),
+    path('', landing_page, name='landing_page'),
     path('dashboard/', dashboard, name='dashboard'),
     path('lista_usuarios/', lista_usuarios, name='lista_usuarios'),
     path('usuario/<str:dni>/', detalle_usuario, name='detalle_usuario'),
