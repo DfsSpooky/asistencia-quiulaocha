@@ -16,6 +16,8 @@ import mimetypes
 mimetypes.add_type("text/css", ".css", True)
 mimetypes.add_type("application/javascript", ".js", True)
 
+import os
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -23,17 +25,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-5o5$uta6kd!9qc22e=(wx$6^kn-f1yi(n=lothp#h=hxuv+g@g'
+SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-5o5$uta6kd!9qc22e=(wx$6^kn-f1yi(n=lothp#h=hxuv+g@g')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = [
-    'oversophisticated-dedra-overgross.ngrok-free.dev',
-    'localhost',
-    '127.0.0.1',
-    '.ngrok-free.dev'
-]
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'oversophisticated-dedra-overgross.ngrok-free.dev,localhost,127.0.0.1,.ngrok-free.dev').split(',')
 
 # CSRF Trusted Origins for Ngrok
 CSRF_TRUSTED_ORIGINS = [
@@ -95,6 +92,23 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
+POSTGRES_DB = os.environ.get('POSTGRES_DB')
+POSTGRES_USER = os.environ.get('POSTGRES_USER')
+POSTGRES_PASSWORD = os.environ.get('POSTGRES_PASSWORD')
+POSTGRES_HOST = os.environ.get('POSTGRES_HOST')
+POSTGRES_PORT = os.environ.get('POSTGRES_PORT')
+
+if all([POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST, POSTGRES_PORT]):
+    DATABASES['default'] = {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': POSTGRES_DB,
+        'USER': POSTGRES_USER,
+        'PASSWORD': POSTGRES_PASSWORD,
+        'HOST': POSTGRES_HOST,
+        'PORT': POSTGRES_PORT,
+    }
+
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
