@@ -58,6 +58,32 @@ Inicia el servidor local.
 python manage.py runserver
 ```
 
+### 7. Construcción de la App Móvil (Flutter)
+Si deseas generar la aplicación para instalarla en tu dispositivo.
+
+**Requisitos:**
+- Flutter SDK instalado y configurado.
+
+**Pasos:**
+1. Navega al directorio de la app móvil:
+   ```bash
+   cd asistencia_scanner_app
+   ```
+2. Instala las dependencias de Flutter:
+   ```bash
+   flutter pub get
+   ```
+3. Generar el APK (Android):
+   ```bash
+   flutter build apk --release
+   ```
+   *El archivo generado estará en: `build/app/outputs/flutter-apk/app-release.apk`*
+
+4. Generar para iOS (Requiere Xcode / Mac):
+   ```bash
+   flutter build ios --release
+   ```
+
 ## 🌐 Acceso a la Aplicación
 
 Una vez que el servidor esté corriendo, abre tu navegador y visita:
