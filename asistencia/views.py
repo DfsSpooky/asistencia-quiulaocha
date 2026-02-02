@@ -380,6 +380,18 @@ class ListDentroEvento(APIView):
         } for a in asistencias]
         return Response(data)
 
+from rest_framework.permissions import AllowAny
+
+class SystemConfigView(APIView):
+    permission_classes = [AllowAny]
+    def get(self, request):
+        config = ConfiguracionSistema.objects.first()
+        data = {
+            'nombre_institucion': config.nombre_institucion if config else 'QUIULACOCHA',
+            'logo_url': request.build_absolute_uri(config.logo.url) if config and config.logo else None
+        }
+        return Response(data)
+
 @login_required
 def historial_asistencias(request):
     form = FiltroAsistenciaForm(request.GET or None)

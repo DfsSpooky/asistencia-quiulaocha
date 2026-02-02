@@ -3,6 +3,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
 import 'home_screen.dart';
+import 'package:get_it/get_it.dart';
+import 'repositories/auth_repository.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,6 +17,8 @@ class _LoginScreenState extends State<LoginScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   String? _error;
+  String? _logoUrl;
+  String _institutionName = 'Panel del Personal';
 
   void _handleLogin() async {
     final authProvider = context.read<AuthProvider>();
@@ -35,6 +39,27 @@ class _LoginScreenState extends State<LoginScreen> {
         _error = 'Usuario o contraseña incorrectos';
       });
     }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadConfig();
+  }
+
+  Future<void> _loadConfig() async {
+    try {
+      final repo = GetIt.instance<AuthRepository>();
+      final config = await repo.getSystemConfig();
+      if (config != null && mounted) {
+        setState(() {
+          if (config['logo_url'] != null) _logoUrl = config['logo_url'];
+          if (config['nombre_institucion'] != null) {
+            _institutionName = config['nombre_institucion'];
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   @override
@@ -59,10 +84,19 @@ class _LoginScreenState extends State<LoginScreen> {
                     width: 2,
                   ),
                 ),
-                child: Image.asset(
-                  'assets/images/logo.png',
-                  fit: BoxFit.contain,
-                ),
+                child: _logoUrl != null
+                    ? Image.network(
+                        _logoUrl!,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => Image.asset(
+                          'assets/images/logo.png',
+                          fit: BoxFit.contain,
+                        ),
+                      )
+                    : Image.asset(
+                        'assets/images/logo.png',
+                        fit: BoxFit.contain,
+                      ),
               ),
               SizedBox(height: 32),
               Text(
@@ -75,7 +109,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               SizedBox(height: 8),
               Text(
-                'Panel del Personal',
+                _institutionName,
                 style: GoogleFonts.outfit(
                   fontSize: 16,
                   color: Colors.blueGrey[400],

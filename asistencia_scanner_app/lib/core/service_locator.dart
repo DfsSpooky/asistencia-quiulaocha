@@ -11,7 +11,7 @@ void setupServiceLocator() {
   getIt.registerLazySingleton<Dio>(
     () => Dio(
       BaseOptions(
-        baseUrl: 'https://oversophisticated-dedra-overgross.ngrok-free.dev',
+        baseUrl: 'https://quiulacocha.theworkpc.com',
         connectTimeout: const Duration(seconds: 10),
         receiveTimeout: const Duration(seconds: 10),
       ),
