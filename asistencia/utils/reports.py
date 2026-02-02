@@ -128,12 +128,15 @@ def get_filtered_attendance_data(filters):
         'usuarios_no_asistentes': usuarios_no_asistentes,
     }
 
-def generate_attendance_csv(asistencias, usuarios_no_asistentes=None):
+def generate_attendance_csv(unified_list):
+    """
+    Genera CSV desde la lista unificada de ReportItem.
+    Distingue entre asistencias y faltas usando is_absent.
+    """
     response = HttpResponse(content_type='text/csv')
-    response['Content-Disposition'] = 'attachment; filename="asistencias.csv"'
-    writer = csv.writer(response)
+    response['Content-Disposition'] = 'attachment; filename="reporte_asistencias.csv"'
     
-    writer.writerow([
+    writer = csv.writer(response)
     writer.writerow(['Socio', 'DNI', 'Fecha', 'Ingreso', 'Salida', 'Lugar', 'Evento', 'Estado', 'Confirmada'])
     
     for item in unified_list:
