@@ -6,13 +6,13 @@ class ApiService {
   // Update this with your server URL.
   // For Android Emulator, 10.0.2.2 usually points to localhost.
   // Using the ngrok URL from settings.py would be more reliable if available.
-  static const String baseUrl =
-      'https://oversophisticated-dedra-overgross.ngrok-free.dev';
+  static const String baseUrl = 'https://quiulacocha.theworkpc.com';
 
   Future<String?> login(String username, String password) async {
     final response = await http.post(
       Uri.parse('$baseUrl/api/login/'),
-      body: {'username': username, 'password': password},
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'username': username, 'password': password}),
     );
 
     if (response.statusCode == 200) {
