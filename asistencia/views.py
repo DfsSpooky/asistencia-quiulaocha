@@ -1,5 +1,5 @@
 from django.db import models
-from django.shortcuts import render, get_object_or_404, redirect
+from django.shortcuts import render, redirect, get_object_or_404, redirect
 from django.contrib.auth import logout as auth_logout, authenticate, login as auth_login
 from django.contrib.auth.models import User, Group
 from django.contrib.auth.decorators import login_required, permission_required
@@ -83,8 +83,7 @@ class CustomLoginView(LoginView):
 def custom_login(request):
     return CustomLoginView.as_view()(request)
 
-@require_POST
-@csrf_protect
+# @require_POST  <-- Comentado para compatibilidad con Jazzmin/Admin GET links
 def custom_logout(request):
     auth_logout(request)
     return redirect('login')
