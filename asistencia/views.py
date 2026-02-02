@@ -399,33 +399,33 @@ def historial_asistencias(request):
     if form.is_valid():
         filters = form.cleaned_data
     
-    # Usar el utility para obtener datos filtrados
+    # Usar el utility para obtener datos filtrados y unificados
     data = get_filtered_attendance_data(filters)
-    asistencias = data['asistencias']
-    usuarios_no_asistentes = data['usuarios_no_asistentes']
+    # Ahora usamos la lista unificada
+    unified_list = data.get('unified_report', [])
     
-    # --- Estadísticas para el Dashboard ---
-    # 1. Resumen de contadores
-    total_registros = asistencias.count()
-    confirmadas = asistencias.filter(confirmada=True).count()
-    pendientes = total_registros - confirmadas
-    total_inasistencias = usuarios_no_asistentes.count() if usuarios_no_asistentes else 0
+    # --- Estadísticas en memoria (ya que es lista, no queryset) ---
+    total_registros = len(unified_list)
     
-
-    paginator = Paginator(asistencias, 10)
+    # Contar confirmadas y faltas iterando (rápido para paginaciones típicas, ojo con performance masivo)
+    confirmadas = sum(1 for item in unified_list if getattr(item, 'confirmada', False))
+    inasistencias = sum(1 for item in unified_list if getattr(item, 'is_absent', False))
+    pendientes = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and not getattr(item, 'confirmada', False))
+    
+    paginator = Paginator(unified_list, 10)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
 
     context = {
-        'page_obj': page_obj,
+        'page_obj': page_obj, # Ahora contiene objetos ReportItem
         'form': form,
-        'usuarios_no_asistentes': usuarios_no_asistentes,
+        'usuarios_no_asistentes': [], # Ya integrado en page_obj
         'can_scan_qr': request.user.has_perm('asistencia.can_scan_qr'),
         'stats': {
             'total': total_registros,
             'confirmadas': confirmadas,
             'pendientes': pendientes,
-            'inasistencias': total_inasistencias,
+            'inasistencias': inasistencias,
         },
     }
     return render(request, 'asistencia/historial_asistencias.html', context)
