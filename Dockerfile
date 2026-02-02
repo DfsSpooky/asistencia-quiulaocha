@@ -4,12 +4,14 @@ FROM python:3.10-slim
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
+ENV TZ=America/Lima
 
 # Set work directory
 WORKDIR /app
 
 # Install system dependencies
 # AGREGAMOS: libpango, libharfbuzz, libopenjp2, libffi para WeasyPrint
+# tzdata para zona horaria
 RUN apt-get update && apt-get install -y \
     build-essential \
     libpq-dev \
@@ -23,6 +25,8 @@ RUN apt-get update && apt-get install -y \
     libopenjp2-7-dev \
     libffi-dev \
     python3-dev \
+    tzdata \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*
 
 # Install python dependencies
