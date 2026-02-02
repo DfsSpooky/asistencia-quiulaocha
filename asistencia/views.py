@@ -476,27 +476,33 @@ def descargar_reporte_pdf(request):
     filters = form.cleaned_data if form.is_valid() else {}
     data = get_filtered_attendance_data(filters)
     
-    asistencias = data['asistencias']
-    no_asistentes = data['usuarios_no_asistentes']
+    # Usar la lista unificada
+    unified_list = data.get('unified_report', [])
     
+    # Calcular estadísticas en memoria
     total_usuarios = Usuario.objects.count()
-    total_asistentes = asistencias.count()
+    total_asistentes = sum(1 for item in unified_list if not getattr(item, 'is_absent', False))
+    total_inasistentes = sum(1 for item in unified_list if getattr(item, 'is_absent', False))
+    
+    # Para el porcentaje, usamos el total de usuarios activos vs asistentes en el reporte
+    # OJO: Si hay filtros, el porcentaje es relativo al filtro? 
+    # Generalmente se desea Asistencia Global.
+    # Mantenemos lógica simple: Asistentes / Total Usuarios * 100
     porcentaje_asistencia = (total_asistentes / total_usuarios * 100) if total_usuarios > 0 else 0
 
     context = {
-        'asistencias': asistencias,
-        'no_asistentes': no_asistentes,
+        'unified_list': unified_list, # Nueva clave para el template
         'total_usuarios': total_usuarios,
         'total_asistentes': total_asistentes,
-        'total_inasistentes': no_asistentes.count() if no_asistentes else 0,
+        'total_inasistentes': total_inasistentes,
         'porcentaje_asistencia': porcentaje_asistencia,
         'logo_base64': get_logo_base64(),
         'current_date': datetime.now().strftime('%d/%m/%Y %H:%M'),
         'filtros': {
             'fecha_inicio': filters.get('fecha_inicio').strftime('%d/%m/%Y') if filters.get('fecha_inicio') else 'Inicio',
             'fecha_fin': filters.get('fecha_fin').strftime('%d/%m/%Y') if filters.get('fecha_fin') else 'Hoy',
-            'evento': filters.get('evento'),
-            'dni': filters.get('dni')
+            'evento': filters.get('evento').nombre if filters.get('evento') else 'Todos',
+            'dni': filters.get('dni') or 'Todos'
         }
     }
     

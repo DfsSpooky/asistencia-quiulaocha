@@ -319,13 +319,12 @@
                                     class="px-6 py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-xs hover:bg-slate-200 transition-all">
                                 Limpiar
                             </button>
-                            <a href="{% url 'descargar_reporte_pdf' %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}"
-                               target="_blank"
-                               rel="noopener"
-                               class="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-bold text-xs shadow-lg shadow-primary-600/30 transition-all">
+                            <button type="button"
+                                    onclick="downloadGlobalReport()"
+                                    class="inline-flex items-center gap-2 px-6 py-3 bg-primary-600 hover:bg-primary-700 text-white rounded-xl font-bold text-xs shadow-lg shadow-primary-600/30 transition-all">
                                 <i class="bi bi-file-earmark-pdf-fill"></i>
                                 Descargar Reporte
-                            </a>
+                            </button>
                         </div>
                     </div>
                 </form>
@@ -611,6 +610,15 @@
             } else {
                 alert('Por favor, ingresa un DNI válido.');
             }
+        }
+        
+        function downloadGlobalReport() {
+             const form = document.getElementById('attendance-filter-form');
+             if (form) {
+                 const formData = new FormData(form);
+                 const params = new URLSearchParams(formData);
+                 window.open(`{% url 'descargar_reporte_pdf' %}?${params.toString()}`, '_blank');
+             }
         }
 
         document.body.addEventListener('htmx:afterOnLoad', function(evt) {
