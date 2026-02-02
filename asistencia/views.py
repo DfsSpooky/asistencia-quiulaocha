@@ -436,7 +436,8 @@ def exportar_asistencias_csv(request):
     form = FiltroAsistenciaForm(request.GET or None)
     filters = form.cleaned_data if form.is_valid() else {}
     data = get_filtered_attendance_data(filters)
-    return generate_attendance_csv(data['asistencias'], data['usuarios_no_asistentes'])
+    unified_list = data.get('unified_report', [])
+    return generate_attendance_csv(unified_list)
 
 @login_required
 @permission_required('asistencia.can_manage_users', raise_exception=True)
@@ -444,13 +445,14 @@ def exportar_asistencias_excel(request):
     form = FiltroAsistenciaForm(request.GET or None)
     filters = form.cleaned_data if form.is_valid() else {}
     data = get_filtered_attendance_data(filters)
+    unified_list = data.get('unified_report', [])
     
     LogAccion.objects.create(
         usuario=request.user,
         accion="Exportar Excel",
         descripcion=f"{request.user.username} exportó las asistencias a Excel."
     )
-    return generate_attendance_excel(data['asistencias'], data['usuarios_no_asistentes'])
+    return generate_attendance_excel(unified_list)
 
 @login_required
 @permission_required('asistencia.can_manage_users', raise_exception=True)
@@ -543,28 +545,28 @@ def descargar_reporte_evento_pdf(request, evento_id):
     filters['evento'] = evento  # Forzar el evento
     
     data = get_filtered_attendance_data(filters)
-    asistencias = data['asistencias']
-    no_asistentes = data['usuarios_no_asistentes']
+    unified_list = data.get('unified_report', [])
     
+    # Calcular estadísticas desde la lista unificada
     total_usuarios = Usuario.objects.count()
-    total_asistentes = asistencias.count()
+    total_asistentes = sum(1 for item in unified_list if not getattr(item, 'is_absent', False))
+    total_inasistentes = sum(1 for item in unified_list if getattr(item, 'is_absent', False))
     porcentaje_asistencia = (total_asistentes / total_usuarios * 100) if total_usuarios > 0 else 0
-    total_inasistentes = no_asistentes.count() if no_asistentes else 0
     
     context = {
         'evento': evento,
-        'asistencias': asistencias,
-        'no_asistentes': no_asistentes,
+        'unified_list': unified_list,
         'total_usuarios': total_usuarios,
+        'total_asistentes': total_asistentes,
+        'total_inasistentes': total_inasistentes,
         'porcentaje_asistencia': porcentaje_asistencia,
         'current_date': datetime.now().strftime('%d/%m/%Y %H:%M'),
         'logo_base64': get_logo_base64(),
-        'total_asistentes': total_asistentes,
-        'total_inasistentes': total_inasistentes,
         'filtros': {
-            'dni': filters.get('dni'),
+            'dni': filters.get('dni') or 'Todos',
             'fecha_inicio': filters.get('fecha_inicio').strftime('%d/%m/%Y') if filters.get('fecha_inicio') else None,
             'fecha_fin': filters.get('fecha_fin').strftime('%d/%m/%Y') if filters.get('fecha_fin') else None,
+            'evento': evento.nombre
         }
     }
     
