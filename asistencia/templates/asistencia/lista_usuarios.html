@@ -312,7 +312,7 @@
                                 return "No se encontraron resultados";
                             }
                         }
-                    }).on('change', function() {
+                    }).on('select2:select select2:unselect', function() {
                         this.dispatchEvent(new Event('change', {
                             bubbles: true
                         }));
