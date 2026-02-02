@@ -9,10 +9,20 @@ ENV PYTHONUNBUFFERED 1
 WORKDIR /app
 
 # Install system dependencies
+# AGREGAMOS: libpango, libharfbuzz, libopenjp2, libffi para WeasyPrint
 RUN apt-get update && apt-get install -y \
     build-essential \
     libpq-dev \
     gcc \
+    libcairo2-dev \
+    pkg-config \
+    libpango-1.0-0 \
+    libpangoft2-1.0-0 \
+    libharfbuzz-subset0 \
+    libjpeg-dev \
+    libopenjp2-7-dev \
+    libffi-dev \
+    python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install python dependencies
@@ -22,9 +32,6 @@ RUN pip install -r requirements.txt
 
 # Copy project
 COPY . /app/
-
-# Collect static files
-# RUN python manage.py collectstatic --noinput
 
 # Expose port
 EXPOSE 8000
