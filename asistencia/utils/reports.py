@@ -50,29 +50,69 @@ def get_filtered_attendance_data(filters):
     usuarios_no_asistentes = None
     
     # Lógica de estado: asistieron vs faltaron
+    # Lógica de estado: asistieron vs faltaron
     if estado == 'faltaron':
         # Solo mostrar inasistentes, limpiar asistencias
         asistencias = asistencias.none()
-        # Si hay evento, calcular inasistentes de ese evento
+        
+        # Estrategia para calcular faltas:
+        # 1. Si hay Evento seleccionado -> Inasistentes a ESE evento.
+        # 2. Si no hay Evento, pero hay Fecha (Inicio == Fin) -> Inasistentes a CUALQUIER evento de ese día.
+        # 3. Si es un rango de fechas -> Es complejo (¿faltó a 1 o a todos?), por ahora pedimos Evento o Día único.
+        
+        target_events = None
         if evento:
-            # Usar subquery SQL en lugar de evaluar a lista de Python
-            asistentes_subquery = Asistencia.objects.filter(evento=evento).values('usuario__id')
-            usuarios_no_asistentes = Usuario.objects.filter(estado=Usuario.ESTADO_ACTIVO).exclude(id__in=asistentes_subquery)
+            target_events = [evento]
+        elif fecha_inicio and fecha_fin and fecha_inicio == fecha_fin:
+            # Buscar eventos en ese día específico
+            target_events = list(Evento.objects.filter(fecha=fecha_inicio))
+        
+        if target_events:
+            # Buscamos usuarios que NO tengan asistencia en ninguno de los eventos target
+            asistentes_ids = Asistencia.objects.filter(
+                evento__in=target_events
+            ).values_list('usuario_id', flat=True)
+            
+            # Excluimos a los que sí fueron
+            usuarios_no_asistentes = Usuario.objects.filter(
+                estado=Usuario.ESTADO_ACTIVO
+            ).exclude(id__in=asistentes_ids)
+            
             if dni:
                 usuarios_no_asistentes = usuarios_no_asistentes.filter(dni__icontains=dni)
-            usuarios_no_asistentes = usuarios_no_asistentes.order_by('apellido', 'nombre')
+            
+            usuarios_no_asistentes = usuarios_no_asistentes.distinct().order_by('apellido', 'nombre')
+        else:
+            # Si no hay evento ni día específico, devolver vacío para evitar reporte gigante "faltaron todos"
+            usuarios_no_asistentes = Usuario.objects.none()
+
     elif estado == 'asistieron':
-        # Solo mostrar asistentes, no calcular inasistentes
+        # Solo mostrar asistentes
         usuarios_no_asistentes = None
     else:
-        # Sin filtro de estado: mostrar ambos si hay evento
+        # "Todos" (Asistieron + Faltaron)
+        # Solo calculamos faltaron si hay un contexto claro (Evento o Día Único)
+        target_events = None
         if evento:
-            # Usar subquery SQL en lugar de evaluar a lista de Python
-            asistentes_subquery = Asistencia.objects.filter(evento=evento).values('usuario__id')
-            usuarios_no_asistentes = Usuario.objects.filter(estado=Usuario.ESTADO_ACTIVO).exclude(id__in=asistentes_subquery)
+            target_events = [evento]
+        elif fecha_inicio and fecha_fin and fecha_inicio == fecha_fin:
+            target_events = list(Evento.objects.filter(fecha=fecha_inicio))
+            
+        if target_events:
+            asistentes_ids = Asistencia.objects.filter(
+                evento__in=target_events
+            ).values_list('usuario_id', flat=True)
+            
+            usuarios_no_asistentes = Usuario.objects.filter(
+                estado=Usuario.ESTADO_ACTIVO
+            ).exclude(id__in=asistentes_ids)
+            
             if dni:
                 usuarios_no_asistentes = usuarios_no_asistentes.filter(dni__icontains=dni)
-            usuarios_no_asistentes = usuarios_no_asistentes.order_by('apellido', 'nombre')
+            
+            usuarios_no_asistentes = usuarios_no_asistentes.distinct().order_by('apellido', 'nombre')
+        else:
+            usuarios_no_asistentes = None
 
     # Adjuntar URLs de evidencia si es necesario
     event_ids = {a.evento_id for a in asistencias if a.evento_id}
