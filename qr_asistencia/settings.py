@@ -32,10 +32,11 @@ DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'oversophisticated-dedra-overgross.ngrok-free.dev,localhost,127.0.0.1,.ngrok-free.dev').split(',')
 
-# CSRF Trusted Origins for Ngrok
-CSRF_TRUSTED_ORIGINS = [
-    'https://oversophisticated-dedra-overgross.ngrok-free.dev'
-]
+# CSRF Trusted Origins
+CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', 'http://localhost,http://127.0.0.1').split(',')
+
+# Configuración para Proxy Inverso (Nginx/HestiaCP)
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # Application definition
 
