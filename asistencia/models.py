@@ -21,6 +21,7 @@ class Evento(models.Model):
     nombre = models.CharField(max_length=100)
     fecha = models.DateField()
     descripcion = models.TextField(blank=True)
+    hora_ingreso = models.TimeField(default='08:00', help_text="Hora de ingreso programada")
     activo = models.BooleanField(default=True)
 
     def save(self, *args, **kwargs):
@@ -220,6 +221,10 @@ class ConfiguracionSistema(models.Model):
         max_length=100,
         default='QUIULACOCHA',
         help_text="Nombre de la institución (se mostrará en toda la aplicación)"
+    )
+    tolerancia_minutos = models.PositiveIntegerField(
+        default=15,
+        help_text="Tiempo de tolerancia en minutos para el ingreso antes de considerarse tardanza (si aplica)"
     )
 
     def save(self, *args, **kwargs):

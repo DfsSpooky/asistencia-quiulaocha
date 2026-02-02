@@ -26,7 +26,7 @@ class UbicacionAdmin(admin.ModelAdmin):
 
 @admin.register(Evento)
 class EventoAdmin(admin.ModelAdmin):
-    list_display = ('nombre', 'fecha', 'activo')
+    list_display = ('nombre', 'fecha', 'hora_ingreso', 'activo')
     search_fields = ('nombre',)
     list_filter = ('activo', 'fecha')
     actions = ['finalizar_eventos']
@@ -45,8 +45,8 @@ class LogAccionAdmin(admin.ModelAdmin):
 
 @admin.register(ConfiguracionSistema)
 class ConfiguracionSistemaAdmin(admin.ModelAdmin):
-    list_display = ('id', 'nombre_institucion', 'logo')
-    fields = ('nombre_institucion', 'logo',)
+    list_display = ('id', 'nombre_institucion', 'tolerancia_minutos', 'logo')
+    fields = ('nombre_institucion', 'tolerancia_minutos', 'logo',)
 
     # Limitar a una sola instancia en la lista
     def has_add_permission(self, request):
