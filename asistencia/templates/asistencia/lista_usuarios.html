@@ -12,6 +12,11 @@
                 <p class="text-slate-500 font-medium italic">Base de datos central de la comunidad</p>
             </div>
             <div class="flex flex-wrap gap-3">
+                <button onclick="confirmarDescargaMasiva()"
+                        class="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold shadow-lg shadow-indigo-600/20 transition-all transform hover:-translate-y-1 active:scale-95">
+                    <i class="bi bi-person-badge-fill text-xl"></i>
+                    <span>Descargar Todos los Carnets</span>
+                </button>
                 <a href="{% url 'admin_solicitar_justificacion' %}"
                    class="inline-flex items-center gap-2 px-6 py-3 bg-primary-50 text-primary-700 rounded-2xl font-bold border border-primary-100 transition-all hover:bg-primary-100">
                     <i class="bi bi-patch-exclamation-fill text-xl"></i>
@@ -300,6 +305,30 @@
 {% endblock %}
 {% block extra_js %}
     <script>
+        function confirmarDescargaMasiva() {
+            Swal.fire({
+                title: '¿Generar todos los carnets?',
+                text: "Esta tarea es intensiva y puede consumir muchos recursos del servidor. Se recomienda realizarla cuando no se estén ejecutando otras tareas importantes.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#eab308', // primary-500 (Amber)
+                cancelButtonColor: '#64748b', // slate-500
+                confirmButtonText: 'Sí, generar PDF',
+                cancelButtonText: 'Cancelar',
+                reverseButtons: true,
+                background: '#ffffff',
+                customClass: {
+                    popup: 'rounded-[2rem]',
+                    confirmButton: 'rounded-xl font-bold uppercase text-xs tracking-widest px-6 py-3',
+                    cancelButton: 'rounded-xl font-bold uppercase text-xs tracking-widest px-6 py-3'
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    window.open("{% url 'descargar_todos_carnets_pdf' %}", '_blank');
+                }
+            });
+        }
+
         function initSelect2() {
             if (typeof $ !== 'undefined') {
                 $('.select2-searchable').each(function() {

@@ -1,5 +1,6 @@
 import csv
 import base64
+import os
 import functools
 from datetime import datetime
 import io
@@ -114,18 +115,37 @@ def get_filtered_attendance_data(filters):
         else:
             usuarios_no_asistentes = None
 
-    # Adjuntar URLs de evidencia si es necesario
-    event_ids = {a.evento_id for a in asistencias if a.evento_id}
-    if event_ids:
-        just_map = {(j.usuario_id, j.evento_id): j.evidencia.url if j.evidencia else None 
-                    for j in Justificacion.objects.filter(evento_id__in=event_ids, estado='APROBADO')}
-        for a in asistencias:
-            if a.es_justificada:
-                a.evidencia_url = just_map.get((a.usuario_id, a.evento_id))
+    # Unificar en una lista coherente para reportes
+    unified_report = []
+    
+    # Agregar asistentes
+    for a in asistencias:
+        a.is_absent = False
+        # Para asistentes, es_justificada suele significar "tarde pero justificado"
+        # pero para el reporte lo tratamos como ASISTIÓ.
+        unified_report.append(a)
+    
+    # Agregar inasistentes (si hay contexto de evento)
+    if usuarios_no_asistentes:
+        target_ev = evento
+        for u in usuarios_no_asistentes:
+            u.is_absent = True
+            # Buscar si tiene justificación aprobada para este evento
+            # (Solo si hay un evento específico seleccionado)
+            just = None
+            if target_ev:
+                just = Justificacion.objects.filter(usuario=u, evento=target_ev, estado='APROBADO').first()
+            
+            u.es_justificada = just is not None
+            u.justificacion_obs = just.motivo if just else ""
+            u.evento = target_ev
+            u.fecha = target_ev.fecha if target_ev else None
+            unified_report.append(u)
 
     return {
         'asistencias': asistencias,
         'usuarios_no_asistentes': usuarios_no_asistentes,
+        'unified_report': unified_report,
     }
 
 def generate_attendance_csv(unified_list):
@@ -141,16 +161,16 @@ def generate_attendance_csv(unified_list):
     
     for item in unified_list:
         if item.is_absent:
-            # Registro de falta
+            estado_texto = 'JUSTIFICADA' if item.es_justificada else 'FALTA'
             writer.writerow([
                 f"{item.usuario.nombre} {item.usuario.apellido}",
                 item.usuario.dni,
                 item.fecha.strftime('%d/%m/%Y') if item.fecha else '',
-                'AUSENTE',
-                'AUSENTE',
+                'JUSTIFICADO' if item.es_justificada else 'AUSENTE',
+                'JUSTIFICADO' if item.es_justificada else 'AUSENTE',
                 item.ubicacion.nombre if item.ubicacion else 'N/A',
                 item.evento.nombre if item.evento else 'Sin evento',
-                'FALTA',
+                estado_texto,
                 'N/A'
             ])
         else:
@@ -288,22 +308,30 @@ def generate_pdf_report(template_name, context, filename):
             
         return HttpResponse(f"Error al generar el reporte: {str(e)}", status=500)
 
-@functools.lru_cache(maxsize=1)
 def get_logo_base64():
     """
-    Obtiene el logo en formato base64 con caché en memoria.
-    El caché se invalida automáticamente al reiniciar el servidor.
+    Obtiene el logo en formato base64.
     """
     try:
         config = ConfiguracionSistema.objects.first()
         if config and config.logo:
-            try:
-                with open(config.logo.path, "rb") as image_file:
-                    return base64.b64encode(image_file.read()).decode('utf-8')
-            except (FileNotFoundError, IOError, OSError):
-                # Logo configurado pero archivo no existe
-                return None
+            return get_image_base64(config.logo)
     except Exception:
-        # ConfiguracionSistema no existe o error de base de datos
         return None
+    return None
+
+def get_image_base64(image_field):
+    """
+    Convierte un ImageField a base64 para embeber en PDF.
+    """
+    if not image_field:
+        return None
+    try:
+        # Intentar obtener la ruta absoluta
+        path = image_field.path
+        if os.path.exists(path):
+            with open(path, "rb") as image_file:
+                return base64.b64encode(image_file.read()).decode('utf-8')
+    except (FileNotFoundError, IOError, OSError, ValueError, AttributeError):
+        pass
     return None

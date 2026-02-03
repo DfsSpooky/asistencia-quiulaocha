@@ -292,7 +292,11 @@
                         <td>
                             <code style="background: #f1f5f9; padding: 2px 4px; border-radius: 3px;">{{ item.usuario.dni }}</code>
                         </td>
-                        {% if item.is_absent %}
+                        {% if item.es_justificada %}
+                            <td colspan="2" style="text-align: center;">
+                                <span style="color: #6366f1; font-weight: 800; font-size: 10px; padding: 4px 8px; background: #e0e7ff; border-radius: 4px;">JUSTIFICADA</span>
+                            </td>
+                        {% elif item.is_absent %}
                             <td colspan="2" style="text-align: center;">
                                 <span style="color: #dc2626; font-weight: 800; font-size: 10px; padding: 4px 8px; background: #fee2e2; border-radius: 4px;">AUSENTE</span>
                             </td>
@@ -301,10 +305,10 @@
                             <td style="color: #9a3412; font-weight: 600;">{{ item.hora_salida|date:"H:i"|default:"--" }}</td>
                         {% endif %}
                         <td>
-                            {% if item.is_absent %}
-                                <span class="badge badge-danger">FALTÓ</span>
-                            {% elif item.es_justificada %}
+                            {% if item.es_justificada %}
                                 <span class="badge badge-info">JUSTIFICADA</span>
+                            {% elif item.is_absent %}
+                                <span class="badge badge-danger">FALTÓ</span>
                             {% else %}
                                 <span class="badge badge-success">ASISTIÓ</span>
                             {% endif %}

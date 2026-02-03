@@ -6,20 +6,20 @@ class JustificacionForm(forms.ModelForm):
         model = Justificacion
         fields = ['evento', 'motivo', 'evidencia']
         widgets = {
-            'evento': forms.Select(),
+            'evento': forms.Select(attrs={'class': 'select2-searchable'}),
             'motivo': forms.Textarea(attrs={
                 'rows': 4,
-                'placeholder': 'Explica brevemente por qué no pudiste asistir...'
+                'placeholder': 'Explica brevemente por qué no pudiste asistir...',
+                'class': 'w-full px-5 py-4 bg-slate-50 border-2 border-slate-50 rounded-2xl focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold text-slate-700 text-sm'
             }),
-            'evidencia': forms.ClearableFileInput(),
+            'evidencia': forms.FileInput(attrs={'class': 'w-full px-5 py-3 bg-slate-50 border-2 border-slate-50 rounded-2xl font-bold text-slate-400 text-sm'}),
         }
 
 class AdminJustificacionForm(JustificacionForm):
     usuario = forms.ModelChoiceField(
-        # Optimize queryset: only load necessary fields to reduce memory usage
         queryset=Usuario.objects.only('id', 'nombre', 'apellido', 'dni').order_by('apellido', 'nombre'),
         label='Socio a Justificar',
-        widget=forms.Select()
+        widget=forms.Select(attrs={'class': 'select2-searchable'})
     )
 
     class Meta(JustificacionForm.Meta):

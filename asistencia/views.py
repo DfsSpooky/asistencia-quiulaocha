@@ -213,8 +213,16 @@ def admin_solicitar_justificacion(request):
     else:
         form = AdminJustificacionForm(initial=initial_data)
     
+    # Contexto para el Centro de Control
+    recent_justificaciones = Justificacion.objects.select_related('usuario', 'evento').order_by('-id')[:5]
+    total_justificaciones = Justificacion.objects.filter(estado='APROBADO').count()
+    
     return render(request, 'asistencia/admin_solicitar_justificacion.html', {
         'form': form,
+        'recent_justificaciones': recent_justificaciones,
+        'stats': {
+            'total': total_justificaciones,
+        },
         'can_scan_qr': request.user.has_perm('asistencia.can_scan_qr')
     })
 
@@ -394,20 +402,44 @@ class SystemConfigView(APIView):
 
 @login_required
 def historial_asistencias(request):
+    """
+    Vista remodelada para centrarse en Evento y Estados (Asistieron/Faltaron).
+    """
     form = FiltroAsistenciaForm(request.GET or None)
     filters = {}
     if form.is_valid():
         filters = form.cleaned_data
     
-    # Usar el utility para obtener datos filtrados y unificados
+    # Asegurar que siempre haya un orden por defecto coherente
+    if not filters.get('ordenar_por'):
+        filters['ordenar_por'] = '-fecha'
+        
     data = get_filtered_attendance_data(filters)
-    # Ahora usamos la lista unificada
-    unified_list = data.get('unified_report', [])
+    # Combinamos asistencias y no asistentes en una lista unificada para la tabla
+    asistencias = list(data.get('asistencias', []))
+    no_asistentes = data.get('usuarios_no_asistentes')
     
-    # --- Estadísticas en memoria (ya que es lista, no queryset) ---
+    if no_asistentes:
+        # Convertimos los usuarios no asistentes en objetos similares a Asistencia
+        # para que la tabla pueda iterar uniformemente
+        for u in no_asistentes:
+            u.is_absent = True
+            # Intentar buscar si tiene una justificación
+            u.es_justificada = Justificacion.objects.filter(
+                usuario=u, 
+                evento=filters.get('evento'),
+                estado='APROBADO'
+            ).exists()
+            asistencias.append(u)
+
+    # Si no hay ordenamiento específico de SQLAlchemy, ordenamos la lista resultante
+    # (Esto es necesario si mezclamos QuerySets de diferentes tipos)
+    unified_list = asistencias
+    
+    # Re-ordenar la lista unificada si es necesario (ya que mezclamos tipos de objetos)
+    # Por defecto, los asistentes van primero o según la lógica de reports.py
+    
     total_registros = len(unified_list)
-    
-    # Contar confirmadas y faltas iterando (rápido para paginaciones típicas, ojo con performance masivo)
     confirmadas = sum(1 for item in unified_list if getattr(item, 'confirmada', False))
     inasistencias = sum(1 for item in unified_list if getattr(item, 'is_absent', False))
     pendientes = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and not getattr(item, 'confirmada', False))
@@ -417,9 +449,8 @@ def historial_asistencias(request):
     page_obj = paginator.get_page(page_number)
 
     context = {
-        'page_obj': page_obj, # Ahora contiene objetos ReportItem
+        'page_obj': page_obj,
         'form': form,
-        'usuarios_no_asistentes': [], # Ya integrado en page_obj
         'can_scan_qr': request.user.has_perm('asistencia.can_scan_qr'),
         'stats': {
             'total': total_registros,
@@ -429,6 +460,82 @@ def historial_asistencias(request):
         },
     }
     return render(request, 'asistencia/historial_asistencias.html', context)
+
+@login_required
+def descargar_reporte_global_pdf(request):
+    """
+    Genera un PDF histórico de TODO el sistema, agrupado por eventos
+    en orden cronológico (Enero a Diciembre).
+    """
+    from .utils.reports import get_logo_base64
+    
+    # Obtener todos los eventos ordenados por fecha ascendente
+    eventos = Evento.objects.all().order_by('fecha')
+    
+    report_data = []
+    total_general_asistencias = 0
+    
+    for ev in eventos:
+        # Para cada evento, obtenemos sus datos usando la utilidad
+        data = get_filtered_attendance_data({'evento': ev})
+        asistencias = list(data.get('asistencias', []))
+        no_asistentes = data.get('usuarios_no_asistentes', [])
+        
+        # Procesar récords unificados para este evento
+        records = []
+        for a in asistencias:
+            records.append({
+                'usuario': a.usuario,
+                'hora_ingreso': a.hora_ingreso,
+                'hora_salida': a.hora_salida,
+                'is_absent': False,
+                'es_justificada': a.es_justificada,
+            })
+            if a.confirmada:
+                total_general_asistencias += 1
+                
+        for u in no_asistentes:
+            # Buscar justificación
+            just = Justificacion.objects.filter(usuario=u, evento=ev, estado='APROBADO').first()
+            records.append({
+                'usuario': u,
+                'is_absent': True,
+                'es_justificada': just is not None,
+                'justificacion_obs': just.motivo if just else ""
+            })
+            
+        # Estadísticas del evento
+        total_padrón = len(records)
+        presentes = sum(1 for r in records if not r['is_absent'] or r['es_justificada'])
+        faltas_reales = sum(1 for r in records if r['is_absent'] and not r['es_justificada'])
+        porcentaje = (presentes / total_padrón * 100) if total_padrón > 0 else 0
+        
+        report_data.append({
+            'evento': ev,
+            'records': records,
+            'stats': {
+                'confirmadas': presentes, # Incluye justificadas
+                'inasistencias': faltas_reales,
+                'porcentaje': porcentaje,
+                'total_usuarios': total_padrón
+            }
+        })
+        
+    context = {
+        'report_data': report_data,
+        'logo_base64': get_logo_base64(),
+        'current_date': datetime.now().strftime('%d/%m/%Y %H:%M'),
+        'sistema_config': ConfiguracionSistema.objects.first(),
+        'total_eventos': len(eventos),
+    }
+    
+    LogAccion.objects.create(
+        usuario=request.user,
+        accion="Descargar Reporte Global PDF",
+        descripcion=f"{request.user.username} generó el reporte anual consolidado de {len(eventos)} eventos."
+    )
+    
+    return generate_pdf_report('asistencia/reporte_global_anual.html', context, f"reporte_global_{datetime.now().year}.pdf")
 
 @login_required
 @permission_required('asistencia.can_manage_users', raise_exception=True)
@@ -547,18 +654,24 @@ def descargar_reporte_evento_pdf(request, evento_id):
     data = get_filtered_attendance_data(filters)
     unified_list = data.get('unified_report', [])
     
-    # Calcular estadísticas desde la lista unificada
-    total_usuarios = Usuario.objects.count()
-    total_asistentes = sum(1 for item in unified_list if not getattr(item, 'is_absent', False))
-    total_inasistentes = sum(1 for item in unified_list if getattr(item, 'is_absent', False))
-    porcentaje_asistencia = (total_asistentes / total_usuarios * 100) if total_usuarios > 0 else 0
+    # Calcular estadísticas: Consideramos Justificadas como "Asistencia Efectiva"
+    total_usuarios = Usuario.objects.filter(estado=Usuario.ESTADO_ACTIVO).count()
+    # Asistieron fìsicamente
+    asistencias_puras = sum(1 for item in unified_list if not getattr(item, 'is_absent', False))
+    # Justificaron (no fueron pero tienen permiso)
+    justificadas = sum(1 for item in unified_list if getattr(item, 'is_absent', False) and getattr(item, 'es_justificada', False))
+    
+    total_asistentes_efectivos = asistencias_puras + justificadas
+    total_inasistentes_reales = sum(1 for item in unified_list if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False))
+    
+    porcentaje_asistencia = (total_asistentes_efectivos / total_usuarios * 100) if total_usuarios > 0 else 0
     
     context = {
         'evento': evento,
         'unified_list': unified_list,
         'total_usuarios': total_usuarios,
-        'total_asistentes': total_asistentes,
-        'total_inasistentes': total_inasistentes,
+        'total_asistentes': total_asistentes_efectivos, # Incluye justificadas
+        'total_inasistentes': total_inasistentes_reales,
         'porcentaje_asistencia': porcentaje_asistencia,
         'current_date': datetime.now().strftime('%d/%m/%Y %H:%M'),
         'logo_base64': get_logo_base64(),
@@ -721,3 +834,41 @@ def perfil_usuario(request):
             'can_scan_qr': request.user.has_perm('asistencia.can_scan_qr')
         }
         return render(request, 'asistencia/perfil_usuario.html', context)
+
+@login_required
+@permission_required('asistencia.can_manage_users', raise_exception=True)
+def descargar_todos_carnets_pdf(request):
+    from .utils.reports import get_image_base64
+    
+    # Obtener todos los usuarios ordenados por apellidos y nombres
+    usuarios = Usuario.objects.all().order_by('apellido', 'nombre')
+    
+    # Pre-procesar usuarios con sus imágenes en base64 para el PDF
+    usuarios_data = []
+    for u in usuarios:
+        usuarios_data.append({
+            'nombre': u.nombre,
+            'apellido': u.apellido,
+            'dni': u.dni,
+            'estado': u.get_estado_display(),
+            'id': u.id,
+            'foto_base64': get_image_base64(u.foto_perfil),
+            'qr_base64': get_image_base64(u.qr_code)
+        })
+    
+    # Los pasamos en una lista plana, el template se encargará de los saltos de página
+    context = {
+        'usuarios': usuarios_data,
+        'logo_base64': get_logo_base64(),
+        'current_date': datetime.now().strftime('%d/%m/%Y %H:%M'),
+        'total_usuarios': len(usuarios_data),
+        'sistema_config': ConfiguracionSistema.objects.first()
+    }
+    
+    LogAccion.objects.create(
+        usuario=request.user,
+        accion="Descargar todos los carnets PDF",
+        descripcion=f"{request.user.username} descargó los carnets de todos los usuarios ({len(usuarios_data)}) en PDF."
+    )
+    
+    return generate_pdf_report('asistencia/reporte_todos_carnets.html', context, "todos_los_carnets.pdf")

@@ -6,7 +6,8 @@ from .views import (
     registrar_usuario, confirmar_asistencia, exportar_asistencias_csv,
     exportar_asistencias_excel, keep_alive, descargar_reporte_usuario_pdf, 
     solicitar_justificacion, admin_solicitar_justificacion,
-    ListEventosActivos, ListUbicaciones, ListDentroEvento, buscar_usuario_dni, SystemConfigView
+    ListEventosActivos, ListUbicaciones, ListDentroEvento, buscar_usuario_dni, SystemConfigView,
+    descargar_todos_carnets_pdf, descargar_reporte_global_pdf
 )
 from rest_framework.authtoken.views import obtain_auth_token
 
@@ -35,6 +36,8 @@ urlpatterns = [
     path('descargar-reporte-evento/<int:evento_id>/', descargar_reporte_evento_pdf, name='descargar_reporte_evento_pdf'),
     path('registrar-usuario/', registrar_usuario, name='registrar_usuario'),
     path('confirmar-asistencia/<int:asistencia_id>/', confirmar_asistencia, name='confirmar_asistencia'),
-    path('descargar-reporte-usuario/<str:dni>/', descargar_reporte_usuario_pdf, name='descargar_reporte_usuario_pdf'),  # Nueva ruta
+    path('descargar-reporte-usuario/<str:dni>/', descargar_reporte_usuario_pdf, name='descargar_reporte_usuario_pdf'),
+    path('descargar-todos-carnets/', descargar_todos_carnets_pdf, name='descargar_todos_carnets_pdf'),
+    path('descargar-reporte-global/', descargar_reporte_global_pdf, name='descargar_reporte_global_pdf'),
     path('api/buscar-usuario-dni/', buscar_usuario_dni, name='buscar_usuario_dni'),
 ]
