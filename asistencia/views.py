@@ -27,6 +27,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import permission_classes, api_view
+from django.utils import timezone
 from datetime import date, datetime, timedelta
 import base64
 from .utils.reports import (
@@ -148,15 +149,23 @@ def detalle_usuario(request, dni):
 @login_required
 @permission_required('asistencia.can_scan_qr', raise_exception=True)
 def escanear_qr(request, evento_id=None):
-    ubicaciones = Ubicacion.objects.all()
+    # Obtener eventos para el selector
     eventos = Evento.objects.filter(activo=True).order_by('-fecha')
-    context = {
-        'ubicaciones': ubicaciones,
+    
+    # Si hay un evento seleccionado o predeterminado, obtener sus stats vivos
+    stats = {'presentes': 0, 'total': Usuario.objects.filter(estado=Usuario.ESTADO_ACTIVO).count()}
+    target_event = None
+    if eventos.exists():
+        target_event = eventos.first()
+        stats['presentes'] = Asistencia.objects.filter(evento=target_event).count()
+
+    return render(request, 'asistencia/escanear.html', {
         'eventos': eventos,
-        'selected_evento_id': evento_id,
+        'ubicaciones': Ubicacion.objects.all(),
+        'stats': stats,
+        'selected_evento_id': target_event.id if target_event else None,
         'can_scan_qr': request.user.has_perm('asistencia.can_scan_qr')
-    }
-    return render(request, 'asistencia/escanear.html', context)
+    })
 
 @login_required
 @permission_required('asistencia.can_scan_qr', raise_exception=True)
@@ -305,11 +314,13 @@ class RegistrarAsistencia(APIView):
                     fecha_registro=fecha_registro
                 )
             
-            # Retornar respuesta exitosa
+            # Retornar respuesta exitosa con metadatos extendidos para el Centro de Control
             return Response({
                 'message': message,
                 'hora': hora.strftime('%H:%M:%S') if hora else 'No registrado',
                 'nombre': f"{usuario.nombre} {usuario.apellido}",
+                'dni': usuario.dni,
+                'estado': usuario.get_estado_display(),
                 'foto_perfil': request.build_absolute_uri(usuario.foto_perfil.url) if usuario.foto_perfil else None
             }, status=status.HTTP_201_CREATED)
             
@@ -447,7 +458,7 @@ def historial_asistencias(request):
     paginator = Paginator(unified_list, 10)
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
-
+    
     context = {
         'page_obj': page_obj,
         'form': form,
@@ -459,6 +470,11 @@ def historial_asistencias(request):
             'inasistencias': inasistencias,
         },
     }
+    
+    # Only return partial template for HTMX pagination/filter requests, not initial load
+    if request.headers.get('HX-Request') and ('page' in request.GET or any(request.GET.get(f) for f in ['dni', 'evento', 'estado', 'fecha_inicio'])):
+        return render(request, 'asistencia/historial_table.html', context)
+        
     return render(request, 'asistencia/historial_asistencias.html', context)
 
 @login_required
@@ -524,7 +540,7 @@ def descargar_reporte_global_pdf(request):
     context = {
         'report_data': report_data,
         'logo_base64': get_logo_base64(),
-        'current_date': datetime.now().strftime('%d/%m/%Y %H:%M'),
+        'current_date': timezone.localtime(timezone.now()).strftime('%d/%m/%Y %H:%M'),
         'sistema_config': ConfiguracionSistema.objects.first(),
         'total_eventos': len(eventos),
     }
@@ -623,15 +639,59 @@ def descargar_reporte_usuario_pdf(request, dni):
     usuario = get_object_or_404(Usuario, dni=dni)
     
     # Usar el utility pasando el filtro por usuario (vía DNI en este caso o ajustando el utility)
-    # El utility actual filtra por usuario__dni__icontains=dni si se pasa dni en el dict.
     data = get_filtered_attendance_data({'dni': dni})
-    asistencias = data['asistencias']
+    unified_list = data.get('unified_report', [])
+    
+    # Calcular métricas avanzadas
+    total_eventos = Evento.objects.count()
+    asistencias_efectivas = sum(1 for item in unified_list if not getattr(item, 'is_absent', False))
+    justificadas = sum(1 for item in unified_list if getattr(item, 'es_justificada', False))
+    faltas = sum(1 for item in unified_list if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False))
+    pendientes = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and not getattr(item, 'confirmada', False))
+    
+    # Score de asistencia (considerando justificadas como positivas)
+    total_participaciones = asistencias_efectivas + justificadas
+    score_asistencia = (total_participaciones / total_eventos * 100) if total_eventos > 0 else 0
+    
+    # Calcular racha de asistencias (eventos consecutivos asistidos)
+    racha_actual = 0
+    racha_maxima = 0
+    temp_racha = 0
+    
+    # Ordenar por fecha para calcular racha
+    sorted_list = sorted([item for item in unified_list if hasattr(item, 'fecha')], 
+                        key=lambda x: x.fecha if x.fecha else timezone.now().date(), 
+                        reverse=True)
+    
+    for item in sorted_list:
+        if not getattr(item, 'is_absent', False) or getattr(item, 'es_justificada', False):
+            temp_racha += 1
+            if temp_racha > racha_maxima:
+                racha_maxima = temp_racha
+        else:
+            temp_racha = 0
+    
+    racha_actual = temp_racha
+    
+    # Últimas 5 asistencias
+    ultimas_asistencias = sorted_list[:5] if len(sorted_list) >= 5 else sorted_list
     
     context = {
         'usuario': usuario,
-        'asistencias': asistencias,
-        'current_date': datetime.now().strftime('%d/%m/%Y %H:%M'),
-        'logo_base64': get_logo_base64()
+        'unified_list': unified_list,
+        'current_date': timezone.localtime(timezone.now()).strftime('%d/%m/%Y %H:%M'),
+        'logo_base64': get_logo_base64(),
+        'stats': {
+            'total_eventos': total_eventos,
+            'asistencias': asistencias_efectivas,
+            'justificadas': justificadas,
+            'faltas': faltas,
+            'pendientes': pendientes,
+            'score': round(score_asistencia, 1),
+            'racha_actual': racha_actual,
+            'racha_maxima': racha_maxima,
+        },
+        'ultimas_asistencias': ultimas_asistencias,
     }
     
     LogAccion.objects.create(
@@ -673,7 +733,7 @@ def descargar_reporte_evento_pdf(request, evento_id):
         'total_asistentes': total_asistentes_efectivos, # Incluye justificadas
         'total_inasistentes': total_inasistentes_reales,
         'porcentaje_asistencia': porcentaje_asistencia,
-        'current_date': datetime.now().strftime('%d/%m/%Y %H:%M'),
+        'current_date': timezone.localtime(timezone.now()).strftime('%d/%m/%Y %H:%M'),
         'logo_base64': get_logo_base64(),
         'filtros': {
             'dni': filters.get('dni') or 'Todos',
@@ -701,6 +761,50 @@ def buscar_usuario_dni(request):
         else:
             return HttpResponse('<div class="mt-2 text-[10px] font-black text-red-500 uppercase tracking-widest"><i class="bi bi-x-circle-fill"></i> Socio no encontrado</div>')
     return HttpResponse('')
+
+@login_required
+@permission_required('asistencia.can_manage_users', raise_exception=True)
+def descargar_reporte_filtrado_pdf(request):
+    """Genera un PDF con los filtros aplicados desde la página de historial"""
+    form = FiltroAsistenciaForm(request.GET or None)
+    
+    filters = form.cleaned_data if form.is_valid() else {}
+    data = get_filtered_attendance_data(filters)
+    unified_list = data.get('unified_report', [])
+    
+    # Calcular estadísticas
+    total_registros = len(unified_list)
+    confirmadas = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and getattr(item, 'confirmada', False))
+    pendientes = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and not getattr(item, 'confirmada', False))
+    inasistencias = sum(1 for item in unified_list if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False))
+    justificadas = sum(1 for item in unified_list if getattr(item, 'es_justificada', False))
+    
+    context = {
+        'unified_list': unified_list,
+        'total_registros': total_registros,
+        'confirmadas': confirmadas,
+        'pendientes': pendientes,
+        'inasistencias': inasistencias,
+        'justificadas': justificadas,
+        'current_date': timezone.localtime(timezone.now()).strftime('%d/%m/%Y %H:%M'),
+        'logo_base64': get_logo_base64(),
+        'filtros': {
+            'dni': filters.get('dni') or 'Todos',
+            'fecha_inicio': filters.get('fecha_inicio').strftime('%d/%m/%Y') if filters.get('fecha_inicio') else 'Sin filtro',
+            'fecha_fin': filters.get('fecha_fin').strftime('%d/%m/%Y') if filters.get('fecha_fin') else 'Sin filtro',
+            'evento': filters.get('evento').nombre if filters.get('evento') else 'Todos los eventos',
+            'ubicacion': filters.get('ubicacion').nombre if filters.get('ubicacion') else 'Todas',
+            'estado': dict(form.fields['estado'].choices).get(filters.get('estado', ''), 'Todos') if filters.get('estado') else 'Todos',
+        }
+    }
+    
+    LogAccion.objects.create(
+        usuario=request.user,
+        accion="Descargar reporte filtrado PDF",
+        descripcion=f"{request.user.username} descargó un reporte filtrado en PDF."
+    )
+    
+    return generate_pdf_report('asistencia/reporte_filtrado.html', context, "reporte_filtrado.pdf")
 
 @login_required
 @permission_required('asistencia.can_manage_users', raise_exception=True)

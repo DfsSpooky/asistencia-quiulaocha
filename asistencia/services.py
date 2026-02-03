@@ -55,7 +55,7 @@ class AsistenciaService:
         else:
             # Escaneo en tiempo real
             from django.utils import timezone
-            now = timezone.now()
+            now = timezone.localtime(timezone.now())
             today = now.date()
             current_time = now.time()
         
@@ -128,7 +128,7 @@ class AsistenciaService:
         else:
             # Escaneo en tiempo real
             from django.utils import timezone
-            now = timezone.now()
+            now = timezone.localtime(timezone.now())
             today = now.date()
             current_time = now.time()
         

@@ -191,7 +191,11 @@
                 <tr {% if item.is_absent and not item.es_justificada %}class="absent-row"{% endif %}>
                     <td>
                         <span {% if item.is_absent and not item.es_justificada %}class="absent-text"{% endif %}>
-                            {{ item.usuario.nombre }} {{ item.usuario.apellido }}
+                            {% if item.is_absent %}
+                                {{ item.nombre }} {{ item.apellido }}
+                            {% else %}
+                                {{ item.usuario.nombre }} {{ item.usuario.apellido }}
+                            {% endif %}
                         </span>
                         {% if item.es_justificada %}
                         <div style="font-size: 8px; color: #6366f1; font-weight: bold;">
@@ -199,7 +203,15 @@
                         </div>
                         {% endif %}
                     </td>
-                    <td><code>{{ item.usuario.dni }}</code></td>
+                    <td>
+                        <code>
+                            {% if item.is_absent %}
+                                {{ item.dni }}
+                            {% else %}
+                                {{ item.usuario.dni }}
+                            {% endif %}
+                        </code>
+                    </td>
                     <td>
                         {% if item.es_justificada %}
                             <span class="badge badge-info">JUSTIFICADA</span>

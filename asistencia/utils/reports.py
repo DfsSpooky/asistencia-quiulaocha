@@ -112,6 +112,11 @@ def get_filtered_attendance_data(filters):
                 usuarios_no_asistentes = usuarios_no_asistentes.filter(dni__icontains=dni)
             
             usuarios_no_asistentes = usuarios_no_asistentes.distinct().order_by('apellido', 'nombre')
+        elif dni:
+            # Caso especial: Si el usuario busca un DNI pero NO hay evento/fecha seleccionada,
+            # lo que probablemente quiere es ver todas las asistencias de ese socio.
+            # No calculamos "inasistencias" en este caso porque no hay contra qué comparar.
+            usuarios_no_asistentes = None
         else:
             usuarios_no_asistentes = None
 

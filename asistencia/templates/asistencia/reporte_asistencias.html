@@ -277,11 +277,21 @@
                         <tr {% if item.is_absent %}style="background-color: #fef2f2;"{% endif %}>
                             <td>
                                 <strong style="{% if item.is_absent %}color: #dc2626;{% endif %}">
-                                    {{ item.usuario.nombre }} {{ item.usuario.apellido }}
+                                    {% if item.is_absent %}
+                                        {{ item.nombre }} {{ item.apellido }}
+                                    {% else %}
+                                        {{ item.usuario.nombre }} {{ item.usuario.apellido }}
+                                    {% endif %}
                                 </strong>
                             </td>
                             <td>
-                                <code style="background: #f1f5f9; padding: 2px 4px; border-radius: 3px;">{{ item.usuario.dni }}</code>
+                                <code style="background: #f1f5f9; padding: 2px 4px; border-radius: 3px;">
+                                    {% if item.is_absent %}
+                                        {{ item.dni }}
+                                    {% else %}
+                                        {{ item.usuario.dni }}
+                                    {% endif %}
+                                </code>
                             </td>
                             <td>{{ item.fecha|date:"d/m/Y" }}</td>
                             
