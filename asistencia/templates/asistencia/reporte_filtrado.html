@@ -4,7 +4,7 @@
 <html lang="es">
     <head>
         <meta charset="UTF-8">
-        <title>Reporte de Evento - {{ evento.nombre }}</title>
+        <title>Reporte Filtrado de Asistencias</title>
         <style>
             @page {
                 size: A4;
@@ -53,83 +53,66 @@
                 margin-top: 4px;
             }
 
-            .event-banner {
+            .filter-banner {
                 background: #312e81;
                 color: white;
-                padding: 40px;
+                padding: 30px;
                 border-radius: 24px;
                 margin-bottom: 35px;
-                position: relative;
-                overflow: hidden;
                 box-shadow: 0 15px 30px -5px rgba(49, 46, 129, 0.2);
             }
 
-            .event-info {
-                width: 100%;
-                border-collapse: collapse;
-            }
-
-            .event-info td {
-                border: none;
-                padding: 0;
-            }
-
-            .no-attendance-title {
-                margin: 40px 0 20px 0;
-                font-size: 18px;
-                font-weight: 800;
-                color: #ef4444;
-                text-transform: uppercase;
-                border-left: 5px solid #ef4444;
-                padding-left: 15px;
-            }
-
-            .ev-label {
-                font-size: 10px;
-                font-weight: bold;
-                color: #c7d2fe;
-                text-transform: uppercase;
-                margin-bottom: 4px;
-            }
-
-            .ev-val {
-                font-size: 24px;
-                font-weight: 800;
-                color: #ffffff;
-                margin-bottom: 8px;
-                text-decoration: underline;
-            }
-
             .stats-grid {
-                float: right;
-                width: 250px;
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 15px;
+                margin-top: 20px;
             }
 
             .stats-card {
                 background: rgba(255, 255, 255, 0.1);
                 color: white;
-                padding: 10px;
+                padding: 15px;
                 text-align: center;
                 border: 1px solid rgba(255, 255, 255, 0.2);
-                margin-bottom: 8px;
                 border-radius: 12px;
-                width: 70px;
-                float: left;
-                margin-left: 8px;
             }
 
             .stats-num {
-                font-size: 18px;
+                font-size: 24px;
                 font-weight: 800;
                 color: #ffffff;
+                display: block;
+                margin-bottom: 5px;
             }
 
             .stats-label {
-                font-size: 8px;
+                font-size: 9px;
                 font-weight: 800;
                 color: #c7d2fe;
                 text-transform: uppercase;
-                margin-top: 2px;
+            }
+
+            .filter-info {
+                font-size: 11px;
+                color: #e2e8f0;
+                margin-top: 15px;
+                padding: 15px;
+                background: rgba(0, 0, 0, 0.2);
+                border-radius: 12px;
+                border-left: 4px solid #facc15;
+            }
+
+            .filter-item {
+                display: inline-block;
+                margin-right: 20px;
+                margin-bottom: 5px;
+            }
+
+            .filter-label {
+                color: #facc15;
+                font-weight: 800;
+                margin-right: 5px;
             }
 
             h2 {
@@ -196,6 +179,11 @@
                 color: #3730a3;
             }
 
+            .badge-warning {
+                background-color: #fef3c7;
+                color: #92400e;
+            }
+
             .footer {
                 position: fixed;
                 bottom: 0;
@@ -210,14 +198,6 @@
             .clear {
                 clear: both;
             }
-
-            .stat-value {
-                font-size: 28px;
-                font-weight: 800;
-                color: #facc15;
-                display: block;
-                margin-top: 5px;
-            }
         </style>
     </head>
     <body>
@@ -226,56 +206,78 @@
                 {% if logo_base64 %}<img src="data:image/png;base64,{{ logo_base64 }}" alt="Logo">{% endif %}
             </div>
             <h1 class="company-name">{{ sistema_config.nombre_institucion|default:"CONTROL DE ASISTENCIA" }}</h1>
-            <p class="report-subtitle">Reporte Ejecutivo por Evento</p>
+            <p class="report-subtitle">Reporte Personalizado con Filtros</p>
         </div>
-        <div class="event-banner">
+
+        <div class="filter-banner">
+            <div style="font-size: 14px; font-weight: 800; color: #c7d2fe; text-transform: uppercase; margin-bottom: 15px;">
+                📋 Reporte Generado
+            </div>
+            <div style="font-size: 20px; font-weight: 800; color: white; margin-bottom: 5px;">
+                Vista Personalizada de Asistencias
+            </div>
+            <div style="font-size: 11px; color: #c7d2fe;">
+                Reporte generado el {{ current_date }}
+            </div>
+
             <div class="stats-grid">
                 <div class="stats-card">
-                    <div class="stats-num">{{ total_asistentes }}</div>
-                    <div class="stats-label">Asistentes</div>
+                    <span class="stats-num">{{ total_registros }}</span>
+                    <span class="stats-label">Total</span>
                 </div>
                 <div class="stats-card">
-                    <div class="stats-num" style="color: #fca5a5">{{ total_inasistentes }}</div>
-                    <div class="stats-label">Faltaron</div>
+                    <span class="stats-num" style="color: #86efac">{{ confirmadas }}</span>
+                    <span class="stats-label">Confirmadas</span>
                 </div>
                 <div class="stats-card">
-                    <div class="stats-num">{{ porcentaje_asistencia|floatformat:1 }}%</div>
-                    <div class="stats-label">Participación</div>
+                    <span class="stats-num" style="color: #fca5a5">{{ inasistencias }}</span>
+                    <span class="stats-label">Faltaron</span>
+                </div>
+                <div class="stats-card">
+                    <span class="stats-num" style="color: #fcd34d">{{ pendientes }}</span>
+                    <span class="stats-label">Pendientes</span>
                 </div>
             </div>
-            <div class="ev-label">Reporte del Evento</div>
-            <div class="ev-val">{{ evento.nombre }}</div>
-            <div style="font-size: 13px; color: #e2e8f0; margin-top: 8px;">
-                <strong>Fecha Programada:</strong> <span style="color: white">{{ evento.fecha|date:"d M Y" }}</span>
-                <br>
-                <strong>Punto de Control:</strong> <span style="color: white">{{ evento.ubicacion.nombre|default:"General" }}</span>
-                <div class="meta-item"
-                     style="font-size: 10px;
-                            color: #c7d2fe;
-                            margin-top: 5px">Reporte generado el {{ current_date }}</div>
-                {% if filtros.dni or filtros.fecha_inicio or filtros.fecha_fin %}
-                    <div class="meta-item"
-                         style="color: #facc15;
-                                font-weight: 800;
-                                margin-top: 5px;
-                                font-size: 11px">
-                        <span class="meta-label">Filtros aplicados:</span>
-                        {% if filtros.dni %}DNI: {{ filtros.dni }}{% endif %}
-                        {% if filtros.fecha_inicio %}Desde: {{ filtros.fecha_inicio }}{% endif %}
-                        {% if filtros.fecha_fin %}Hasta: {{ filtros.fecha_fin }}{% endif %}
-                    </div>
-                {% endif %}
+
+            <div class="filter-info">
+                <div style="font-weight: 800; margin-bottom: 10px;">⚙️ FILTROS APLICADOS:</div>
+                <div class="filter-item">
+                    <span class="filter-label">Evento:</span>
+                    <span>{{ filtros.evento }}</span>
+                </div>
+                <div class="filter-item">
+                    <span class="filter-label">Estado:</span>
+                    <span>{{ filtros.estado }}</span>
+                </div>
+                <div class="filter-item">
+                    <span class="filter-label">DNI:</span>
+                    <span>{{ filtros.dni }}</span>
+                </div>
+                <div class="filter-item">
+                    <span class="filter-label">Ubicación:</span>
+                    <span>{{ filtros.ubicacion }}</span>
+                </div>
+                <div class="filter-item">
+                    <span class="filter-label">Desde:</span>
+                    <span>{{ filtros.fecha_inicio }}</span>
+                </div>
+                <div class="filter-item">
+                    <span class="filter-label">Hasta:</span>
+                    <span>{{ filtros.fecha_fin }}</span>
+                </div>
             </div>
-            <div class="clear"></div>
         </div>
+
         <h2>
-            <span style="color: #6366f1;">●</span> Registros de Actividad ({{ unified_list|length }})
+            <span style="color: #6366f1;">●</span> Registros ({{ unified_list|length }})
         </h2>
         <table>
             <thead>
                 <tr>
                     <th>Socio / Titular</th>
                     <th>DNI</th>
+                    <th>Fecha</th>
+                    <th>Evento</th>
                     <th>Ingreso</th>
                     <th>Salida</th>
                     <th>Estado</th>
@@ -302,6 +304,8 @@
                                 {% endif %}
                             </code>
                         </td>
+                        <td>{{ item.fecha|date:"d/m/Y" }}</td>
+                        <td style="font-size: 9px;">{{ item.evento.nombre|default:"General" }}</td>
                         {% if item.es_justificada %}
                             <td colspan="2" style="text-align: center;">
                                 <span style="color: #6366f1; font-weight: 800; font-size: 10px; padding: 4px 8px; background: #e0e7ff; border-radius: 4px;">JUSTIFICADA</span>
@@ -319,18 +323,20 @@
                                 <span class="badge badge-info">JUSTIFICADA</span>
                             {% elif item.is_absent %}
                                 <span class="badge badge-danger">FALTÓ</span>
-                            {% else %}
+                            {% elif item.confirmada %}
                                 <span class="badge badge-success">ASISTIÓ</span>
+                            {% else %}
+                                <span class="badge badge-warning">PENDIENTE</span>
                             {% endif %}
                         </td>
                     </tr>
                 {% empty %}
                     <tr>
-                        <td colspan="5"
+                        <td colspan="7"
                             style="text-align: center;
                                    padding: 40px;
                                    color: #94a3b8;
-                                   font-style: italic">No se registraron actividades para este evento.</td>
+                                   font-style: italic">No se encontraron registros con los filtros aplicados.</td>
                     </tr>
                 {% endfor %}
             </tbody>
