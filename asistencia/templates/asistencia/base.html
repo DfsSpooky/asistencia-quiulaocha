@@ -380,7 +380,10 @@
         </div>
         <!-- Scripts -->
         <script>
-            // Smooth scroll implementation for hash links if any
+            /* 
+             * Configuración HTMX
+             */
+            // Smooth scroll implementation for hash links
             document.querySelectorAll('a[href^="#"]').forEach(anchor => {
                 anchor.addEventListener('click', function(e) {
                     e.preventDefault();
@@ -390,11 +393,7 @@
                 });
             });
 
-            // HTMX behavior adjustment
-            document.body.addEventListener('htmx:beforeRequest', function(evt) {
-                // Optional: Handle pre-request logic
-            });
-
+            // Re-procesar contenido HTMX si es necesario (ej: iconos, select2)
             document.body.addEventListener('htmx:afterSettle', function(evt) {
                 // Scroll to top only on full page (body) navigation
                 if (evt.detail.target === document.body) {
@@ -405,12 +404,10 @@
                 }
             });
 
-            // Ensure Alpine.js re-initializes content swapped by HTMX
+            // Forzar inicialización de Alpine.js en contenido nuevo
             document.body.addEventListener('htmx:afterSwap', function(evt) {
-                if (window.Alpine && evt.detail.target) {
-                    Alpine.discoverUninitializedComponents((el) => {
-                        Alpine.initializeComponent(el);
-                    });
+                if (window.Alpine) {
+                    window.Alpine.initTree(evt.detail.target);
                 }
             });
         </script>

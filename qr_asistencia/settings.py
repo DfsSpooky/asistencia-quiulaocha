@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'widget_tweaks',
+    'axes',  # Protección contra fuerza bruta
 ]
 
 MIDDLEWARE = [
@@ -62,6 +63,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'axes.middleware.AxesMiddleware',  # Debe ir después de AuthenticationMiddleware
 ]
 
 ROOT_URLCONF = 'qr_asistencia.urls'
@@ -109,7 +111,6 @@ if all([POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST, POSTGRES_P
         'HOST': POSTGRES_HOST,
         'PORT': POSTGRES_PORT,
     }
-
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -177,6 +178,15 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_PERMISSION_CLASSES': [],
     'UNAUTHENTICATED_USER': None,
+    # Throttling (Rate Limiting)
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/hour',   # Usuarios anónimos: 100 requests por hora
+        'user': '1000/hour',  # Usuarios autenticados: 1000 requests por hora
+    },
 }
 
 LOGIN_URL = '/login/'
@@ -254,3 +264,23 @@ JAZZMIN_UI_TWEAKS = {
         "success": "btn-success"
     }
 }
+
+# ============================================
+# CONFIGURACIÓN DE DJANGO-AXES (Seguridad Login)
+# ============================================
+
+# Backend de autenticación (axes debe ir primero)
+AUTHENTICATION_BACKENDS = [
+    'axes.backends.AxesStandaloneBackend',  # Axes debe ir primero
+    'django.contrib.auth.backends.ModelBackend',
+]
+
+# Configuración de Axes
+AXES_FAILURE_LIMIT = 5  # Número de intentos fallidos antes de bloquear
+AXES_COOLOFF_TIME = 1  # Tiempo de bloqueo en horas (1 hora)
+AXES_LOCK_OUT_BY_COMBINATION_USER_AND_IP = True  # Bloquear por usuario + IP
+AXES_RESET_ON_SUCCESS = True  # Resetear contador al login exitoso
+AXES_LOCKOUT_TEMPLATE = None  # Usar mensaje de error por defecto
+AXES_VERBOSE = True  # Logs detallados
+AXES_ENABLE_ADMIN = True  # Habilitar en admin de Django
+

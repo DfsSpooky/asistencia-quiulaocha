@@ -1,23 +1,37 @@
 {% extends "asistencia/base.html" %}
 
-{% block title %}Escaneo de Socios - Quiulacocha{% endblock title %}
+{% block title %}
+    Escaneo de Socios - Quiulacocha
+{% endblock title %}
 
 {% block content %}
+    <div id="scanner-config"
+         data-selected-evento-id="{{ selected_evento_id|default:'' }}"
+         data-stats-presentes="{{ stats.presentes|default:0 }}"
+         data-stats-total="{{ stats.total|default:1 }}"
+         class="hidden"></div>
     <script>
         (function() {
             const register = () => {
                 if (window.Alpine && !Alpine.data('qrScanningCenter')) {
+                    const configEl = document.getElementById('scanner-config');
+
                     Alpine.data('qrScanningCenter', () => ({
                         config: {
-                            evento_id: '{{ selected_evento_id|default:"" }}',
+                            evento_id: configEl.dataset.selectedEventoId || '',
                             tipo_escaneo: 'ingreso',
                             ubicacion_id: ''
                         },
                         stats: {
-                            presentes: {{ stats.presentes|default:0 }},
-                            total: {{ stats.total|default:1 }}
+                            presentes: parseInt(configEl.dataset.statsPresentes) || 0,
+                            total: parseInt(configEl.dataset.statsTotal) || 1
                         },
-                        lastUser: { nombre: '', dni: '', foto: '', hora: '' },
+                        lastUser: {
+                            nombre: '',
+                            dni: '',
+                            foto: '',
+                            hora: ''
+                        },
                         activityFeed: [],
                         showSuccess: false,
                         flash: false,
@@ -34,7 +48,7 @@
                         init() {
                             this.updateTime();
                             setInterval(() => this.updateTime(), 1000);
-                            
+
                             // Start camera after DOM is ready
                             this.$nextTick(() => {
                                 setTimeout(() => {
@@ -51,19 +65,25 @@
                                 }
                             });
 
-                            // Cleanup when leaving the page
+                            // Cleanup when leaving the page (Hard Reload/Close)
                             window.addEventListener('beforeunload', () => {
                                 this.stopCamera();
                             });
 
-                            // Cleanup when navigating away (SPA-style navigation)
-                            window.addEventListener('pagehide', () => {
+                            // Cleanup when navigating away via HTMX
+                            document.body.addEventListener('htmx:beforeSwap', (e) => {
                                 this.stopCamera();
+                            }, {
+                                once: true
                             });
                         },
 
                         updateTime() {
-                            this.currentTime = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                            this.currentTime = new Date().toLocaleTimeString('es-ES', {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit'
+                            });
                         },
 
                         get participationRate() {
@@ -74,7 +94,15 @@
                             if (!this.$refs || !this.$refs.video) return;
                             try {
                                 this.stream = await navigator.mediaDevices.getUserMedia({
-                                    video: { facingMode: 'environment', width: { ideal: 1080 }, height: { ideal: 1080 } }
+                                    video: {
+                                        facingMode: 'environment',
+                                        width: {
+                                            ideal: 1080
+                                        },
+                                        height: {
+                                            ideal: 1080
+                                        }
+                                    }
                                 });
                                 this.$refs.video.srcObject = this.stream;
                                 this.lastFpsUpdate = Date.now();
@@ -85,14 +113,12 @@
                         },
 
                         stopCamera() {
-                            // Stop all video tracks to release the camera
                             if (this.stream) {
                                 this.stream.getTracks().forEach(track => {
                                     track.stop();
                                 });
                                 this.stream = null;
                             }
-                            // Clear video source
                             if (this.$refs && this.$refs.video) {
                                 this.$refs.video.srcObject = null;
                             }
@@ -103,7 +129,6 @@
                             const canvas = this.$refs.canvas;
                             if (!video) return;
 
-                            // FPS Counter
                             this.frameCount++;
                             const now = Date.now();
                             if (now - this.lastFpsUpdate > 1000) {
@@ -113,12 +138,16 @@
                             }
 
                             if (video.readyState === video.HAVE_ENOUGH_DATA && !this.showSuccess && !this.error) {
-                                const ctx = canvas.getContext('2d', { alpha: false });
+                                const ctx = canvas.getContext('2d', {
+                                    alpha: false
+                                });
                                 canvas.height = video.videoHeight;
                                 canvas.width = video.videoWidth;
                                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                                const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+                                const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                                    inversionAttempts: "dontInvert"
+                                });
 
                                 if (code) {
                                     if (code.data !== this.lastScannedDni || (now - this.lastScanTime) > this.debounceTime) {
@@ -146,8 +175,14 @@
                             try {
                                 const response = await fetch('/api/registrar-asistencia/', {
                                     method: 'POST',
-                                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': this.getCsrfToken() },
-                                    body: JSON.stringify({ dni: dni, ...this.config }),
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'X-CSRFToken': this.getCsrfToken()
+                                    },
+                                    body: JSON.stringify({
+                                        dni: dni,
+                                        ...this.config
+                                    }),
                                 });
 
                                 const data = await response.json();
@@ -160,12 +195,13 @@
                                         foto: data.foto_perfil,
                                         hora: data.hora
                                     };
-                                    
-                                    // Add to feed
-                                    this.activityFeed.unshift({ ...this.lastUser, tipo: this.config.tipo_escaneo });
+
+                                    this.activityFeed.unshift({
+                                        ...this.lastUser,
+                                        tipo: this.config.tipo_escaneo
+                                    });
                                     if (this.activityFeed.length > 5) this.activityFeed.pop();
-                                    
-                                    // Stats update
+
                                     if (this.config.tipo_escaneo === 'ingreso') this.stats.presentes++;
 
                                     this.showSuccess = true;
@@ -183,8 +219,8 @@
                         },
 
                         getCsrfToken() {
-                            return document.querySelector('[name=csrfmiddlewaretoken]')?.value || 
-                                   document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
+                            return document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
+                                document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
                         }
                     }));
                 }
@@ -196,8 +232,9 @@
             }
         })();
     </script>
-    <div class="max-w-6xl mx-auto space-y-8 animate-fade-in" x-data="qrScanningCenter()">
-        
+    <div class="max-w-6xl mx-auto space-y-8 animate-fade-in"
+         x-data="qrScanningCenter()">
+
         <!-- Header -->
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div>
@@ -207,37 +244,37 @@
             <div class="flex items-center gap-4">
                 <div class="px-6 py-3 bg-slate-900 text-white rounded-2xl flex items-center gap-3 shadow-lg">
                     <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                    <span class="text-xs font-black uppercase tracking-widest" x-text="currentTime"></span>
+                    <span class="text-xs font-black uppercase tracking-widest"
+                          x-text="currentTime"></span>
                 </div>
             </div>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            
-            <!-- Left: Configuration (The Didactic Part) -->
+
             <div class="lg:col-span-5 space-y-6">
                 <div class="bg-white rounded-[2.5rem] p-8 shadow-premium border border-slate-100 space-y-8">
-                    
-                    <!-- Event Selection -->
                     <div class="space-y-3">
                         <label class="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-2">
                             <i class="bi bi-calendar-event text-primary-500"></i>
                             Paso 1: Seleccionar Evento
                         </label>
-                        <select x-model="config.evento_id" class="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:bg-white focus:border-primary-500 outline-none transition-all font-bold text-slate-700 shadow-sm cursor-pointer">
+                        <select x-model="config.evento_id"
+                                class="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:bg-white focus:border-primary-500 outline-none transition-all font-bold text-slate-700 shadow-sm cursor-pointer">
                             <option value="">-- Elige un evento activo --</option>
-                            {% for evento in eventos %}<option value="{{ evento.id }}">{{ evento.nombre }} ({{ evento.fecha }})</option>{% endfor %}
+                            {% for evento in eventos %}
+                                <option value="{{ evento.id }}">{{ evento.nombre }} ({{ evento.fecha }})</option>
+                            {% endfor %}
                         </select>
                     </div>
 
-                    <!-- Scan Type (GIGANTIC BUTTONS) -->
                     <div class="space-y-3">
-                        <label class="text-[11px) font-black text-slate-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-2">
+                        <label class="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-2">
                             <i class="bi bi-box-arrow-in-right text-primary-500"></i>
                             Paso 2: Tipo de Registro
                         </label>
                         <div class="grid grid-cols-2 gap-4">
-                            <button @click="config.tipo_escaneo = 'ingreso'" 
+                            <button @click="config.tipo_escaneo = 'ingreso'"
                                     :class="config.tipo_escaneo === 'ingreso' ? 'bg-emerald-600 text-white shadow-xl shadow-emerald-200 border-emerald-600 ring-4 ring-emerald-50' : 'bg-slate-50 text-slate-400 border-slate-100 hover:bg-white hover:border-slate-200'"
                                     class="py-6 rounded-3xl font-black text-xs uppercase tracking-widest border-2 transition-all flex flex-col items-center gap-3">
                                 <i class="bi bi-person-check-fill text-3xl"></i>
@@ -252,44 +289,48 @@
                         </div>
                     </div>
 
-                    <!-- Location -->
                     <div class="space-y-3 pt-4 border-t border-slate-50">
                         <label class="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] ml-1 flex items-center gap-2">
                             <i class="bi bi-geo-alt-fill text-primary-500"></i>
                             Lugar de Control (Opcional)
                         </label>
-                        <select x-model="config.ubicacion_id" class="w-full px-5 py-3 bg-slate-50 border border-slate-100 rounded-xl font-bold text-slate-600 text-xs cursor-pointer">
+                        <select x-model="config.ubicacion_id"
+                                class="w-full px-5 py-3 bg-slate-50 border border-slate-100 rounded-xl font-bold text-slate-600 text-xs cursor-pointer">
                             <option value="">General / Local Comunal</option>
                             {% for ub in ubicaciones %}<option value="{{ ub.id }}">{{ ub.nombre }}</option>{% endfor %}
                         </select>
                     </div>
                 </div>
 
-                <!-- Live Summary Mini-Card -->
                 <div class="bg-gradient-to-br from-slate-900 to-slate-800 rounded-[2rem] p-6 text-white shadow-xl border border-white/5">
                     <div class="flex justify-between items-center">
                         <div>
                             <p class="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Estado de Asistencia</p>
-                            <p class="text-xl font-black" x-text="stats.presentes + ' de ' + stats.total"></p>
+                            <p class="text-xl font-black"
+                               x-text="stats.presentes + ' de ' + stats.total"></p>
                         </div>
                         <div class="text-right">
-                             <p class="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Participación</p>
-                             <p class="text-xl font-black text-primary-400" x-text="participationRate + '%'"></p>
+                            <p class="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Participación</p>
+                            <p class="text-xl font-black text-primary-400"
+                               x-text="participationRate + '%'"></p>
                         </div>
                     </div>
                     <div class="mt-4 h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
-                        <div class="h-full bg-primary-500 transition-all duration-1000" :style="'width: ' + participationRate + '%'"></div>
+                        <div class="h-full bg-primary-500 transition-all duration-1000"
+                             :style="'width: ' + participationRate + '%'"></div>
                     </div>
                 </div>
             </div>
 
-            <!-- Right: Scanner (The Operative Part) -->
             <div class="lg:col-span-7">
                 <div class="relative aspect-square bg-slate-950 rounded-[3.5rem] overflow-hidden shadow-2xl border-8 border-white group">
-                    <video x-ref="video" class="w-full h-full object-cover grayscale-[0.2] contrast-125" autoplay playsinline></video>
+                    <video x-ref="video"
+                           class="w-full h-full object-cover grayscale-[0.2] contrast-125"
+                           autoplay
+                           playsinline>
+                    </video>
                     <canvas x-ref="canvas" class="hidden"></canvas>
-                    
-                    <!-- HUD Overlay -->
+
                     <div class="absolute inset-0 pointer-events-none">
                         <div class="absolute inset-0 flex items-center justify-center">
                             <div class="w-64 h-64 md:w-80 md:h-80 relative">
@@ -307,12 +348,12 @@
                                 <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
                                 <span class="text-[10px] font-black text-white uppercase tracking-widest">Cámara Lista</span>
                             </div>
-                            <span class="text-[10px] font-mono font-bold text-slate-400" x-text="'FPS: ' + fps"></span>
+                            <span class="text-[10px] font-mono font-bold text-slate-400"
+                                  x-text="'FPS: ' + fps"></span>
                         </div>
                     </div>
 
-                    <!-- SUCCESS OVERLAY (Big Card) -->
-                    <div x-show="showSuccess" 
+                    <div x-show="showSuccess"
                          x-transition:enter="transition duration-300 ease-out"
                          x-transition:enter-start="opacity-0 scale-90"
                          x-transition:enter-end="opacity-100 scale-100"
@@ -320,10 +361,10 @@
                          x-transition:leave-start="opacity-100 scale-100"
                          x-transition:leave-end="opacity-0 scale-90"
                          class="absolute inset-0 z-40 bg-emerald-600/90 backdrop-blur-md flex flex-col items-center justify-center p-12 text-white">
-                        
+
                         <div class="mb-8 h-48 w-48 rounded-[3rem] border-8 border-white shadow-2xl overflow-hidden bg-white/10">
                             <template x-if="lastUser.foto">
-                                <img :src="lastUser.foto" class="w-full h-full object-cover">
+                                <img :src="lastUser.foto" alt="Foto del usuario escaneado" class="w-full h-full object-cover">
                             </template>
                             <template x-if="!lastUser.foto">
                                 <div class="w-full h-full flex items-center justify-center text-white/30">
@@ -331,33 +372,36 @@
                                 </div>
                             </template>
                         </div>
-                        <h4 class="text-3xl font-black text-center mb-2 leading-tight uppercase tracking-tight" x-text="lastUser.nombre"></h4>
-                        <p class="text-sm font-black text-white/70 uppercase tracking-[0.3em] mb-8" x-text="'DNI: ' + lastUser.dni"></p>
-                        
+                        <h4 class="text-3xl font-black text-center mb-2 leading-tight uppercase tracking-tight"
+                            x-text="lastUser.nombre"></h4>
+                        <p class="text-sm font-black text-white/70 uppercase tracking-[0.3em] mb-8"
+                           x-text="'DNI: ' + lastUser.dni"></p>
+
                         <div class="px-8 py-4 bg-white text-emerald-700 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl flex items-center gap-3">
                             <i class="bi bi-check-circle-fill text-xl"></i>
                             Registro Exitoso
                         </div>
                     </div>
 
-                    <!-- Error Overlay -->
                     <template x-if="error">
                         <div class="absolute inset-0 z-50 bg-red-600/90 backdrop-blur-md flex flex-col items-center justify-center p-12 text-white animate-fade-in text-center">
                             <i class="bi bi-x-circle-fill text-[6rem] mb-6 animate-bounce"></i>
                             <h5 class="text-2xl font-black mb-4 uppercase tracking-tight">¡Oops! Reintentar</h5>
                             <p class="text-sm font-bold max-w-xs mb-8" x-text="error"></p>
-                            <button @click="error = null" class="px-8 py-3 bg-white text-red-700 rounded-xl font-black text-xs uppercase tracking-widest shadow-xl">
+                            <button @click="error = null"
+                                    class="px-8 py-3 bg-white text-red-700 rounded-xl font-black text-xs uppercase tracking-widest shadow-xl">
                                 Volver a Intentar
                             </button>
                         </div>
                     </template>
-                    
-                    <div x-show="flash" class="absolute inset-0 bg-white z-50 pointer-events-none opacity-50 transition-opacity duration-150"></div>
+
+                    <div x-show="flash"
+                         class="absolute inset-0 bg-white z-50 pointer-events-none opacity-50 transition-opacity duration-150">
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- History & Activity Log (The Detailed Part) -->
         <div class="bg-white rounded-[3rem] p-10 shadow-premium border border-slate-100">
             <div class="flex items-center justify-between mb-8">
                 <div class="flex items-center gap-4">
@@ -369,7 +413,8 @@
                         <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Últimos socios registrados</p>
                     </div>
                 </div>
-                <a href="{% url 'historial_asistencias' %}" class="px-6 py-3 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors flex items-center gap-2 border border-slate-100 shadow-sm">
+                <a href="{% url 'historial_asistencias' %}"
+                   class="px-6 py-3 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors flex items-center gap-2 border border-slate-100 shadow-sm">
                     Ver Historial Completo
                     <i class="bi bi-arrow-right"></i>
                 </a>
@@ -380,7 +425,7 @@
                     <div class="p-5 bg-slate-50 rounded-3xl border border-slate-100 flex flex-col items-center text-center animate-slide-up hover:bg-white hover:shadow-xl transition-all cursor-default">
                         <div class="h-20 w-20 rounded-2xl overflow-hidden border-2 border-white shadow-md mb-4 shrink-0">
                             <template x-if="entry.foto">
-                                <img :src="entry.foto" class="w-full h-full object-cover">
+                                <img :src="entry.foto" alt="Foto de perfil del socio" class="w-full h-full object-cover">
                             </template>
                             <template x-if="!entry.foto">
                                 <div class="w-full h-full bg-slate-200 flex items-center justify-center text-slate-400">
@@ -388,7 +433,8 @@
                                 </div>
                             </template>
                         </div>
-                        <p class="text-xs font-black text-slate-900 line-clamp-1 mb-1" x-text="entry.nombre"></p>
+                        <p class="text-xs font-black text-slate-900 line-clamp-1 mb-1"
+                           x-text="entry.nombre"></p>
                         <div class="flex items-center gap-2 mt-1">
                             <span class="text-[9px] font-black text-slate-400" x-text="entry.hora"></span>
                             <span class="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest"
@@ -406,8 +452,12 @@
             </div>
         </div>
 
-        <audio x-ref="successSound" src="https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3" preload="auto"></audio>
-        <audio x-ref="errorSound" src="https://assets.mixkit.co/active_storage/sfx/2955/2955-preview.mp3" preload="auto"></audio>
+        <audio x-ref="successSound"
+               src="https://assets.mixkit.co/active_storage/sfx/2568/2568-preview.mp3"
+               preload="auto"></audio>
+        <audio x-ref="errorSound"
+               src="https://assets.mixkit.co/active_storage/sfx/2955/2955-preview.mp3"
+               preload="auto"></audio>
     </div>
     <style>
         .animate-scan-line {
@@ -415,13 +465,29 @@
         }
 
         @keyframes scanLine {
-            0%, 100% { transform: translateY(0); opacity: 0.3; }
-            50% { transform: translateY(320px); opacity: 1; }
+
+            0%,
+            100% {
+                transform: translateY(0);
+                opacity: 0.3;
+            }
+
+            50% {
+                transform: translateY(320px);
+                opacity: 1;
+            }
         }
 
         @keyframes slideUp {
-            from { transform: translateY(20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
+            from {
+                transform: translateY(20px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
         }
 
         .animate-slide-up {
@@ -430,9 +496,17 @@
 
         @media (max-width: 768px) {
             @keyframes scanLineMobile {
-                0%, 100% { transform: translateY(0); }
-                50% { transform: translateY(256px); }
+
+                0%,
+                100% {
+                    transform: translateY(0);
+                }
+
+                50% {
+                    transform: translateY(256px);
+                }
             }
+
             .animate-scan-line {
                 animation: scanLineMobile 3s infinite;
             }
