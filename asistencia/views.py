@@ -65,6 +65,7 @@ def dashboard(request):
 
 class CustomLoginView(LoginView):
     template_name = 'asistencia/login.html'
+    redirect_authenticated_user = True
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
