@@ -1,64 +1,42 @@
 
-# 🚀 Despliegue en Hestia CP - Instrucciones Rápidas
+# 🚀 Despliegue en Hestia CP - Guía Corregida
 
-Hemos actualizado el proceso para usar la carpeta `public_html` que ya existe.
+El problema de permisos ocurre porque estás logueado como un usuario (`debian`) pero los archivos pertenecen a otro (`quiulacocha` o `root`).
+Para arreglar esto definitivamente, **debes usar `sudo` o ser `root`** para ejecutar el script. El script se encargará automáticamente de corregir los permisos para el usuario `quiulacocha`.
 
 ## 1. Subir Archivos al Servidor
-Sube todo el contenido de tu proyecto **dentro de `public_html`**.
-
-**Ruta Final:**
+Sube todo el contenido de tu proyecto **dentro de `public_html`**:
 `/home/quiulacocha/web/quiulacocha.theworkpc.com/public_html`
 
-Asegúrate de subir:
-- `deploy_server.sh`
-- `docker-compose.yml`
-- `Dockerfile`
-- `requirements.txt`
-- Carpetas del código (`asistencia`, `qr_asistencia`, etc.)
-
-> **Nota:** Si ves archivos como `index.html` o `robots.txt` que ya estaban ahí, puedes borrarlos o dejar que se sobrescriban.
-
-## 2. Ejecutar el Script de Despliegue
-Conéctate por SSH al servidor y ejecuta:
+## 2. Ejecutar el Script como Root
+Conéctate por SSH y conviértete en superusuario (root) o usa sudo.
 
 ```bash
+# Opción A: Convertirse en root (Recomendado)
+sudo su -
+
 # Navegar a la carpeta
 cd /home/quiulacocha/web/quiulacocha.theworkpc.com/public_html
 
-# Dar permisos de ejecución
+# Dar permisos al script (ahora eres root, así que funcionará)
 chmod +x deploy_server.sh
 
 # Ejecutar el despliegue
 ./deploy_server.sh
 ```
 
-Este script:
-1. Creará el archivo `.env` si no existe.
-2. Construirá los contenedores Docker.
-3. Ejecutará las migraciones.
-4. Colectará los archivos estáticos.
-
-**IMPORTANTE:** Después de la primera ejecución, edita el archivo `.env` generado para poner tus contraseñas reales de base de datos y Secret Key.
-```bash
-nano .env
-```
-Y reinicia:
-```bash
-docker compose restart
-```
+El script actualizado ahora hace esto automáticamente:
+1.  Verifica que seas root (para poder usar Docker).
+2.  Ejecuta `git pull` como usuario `quiulacocha` (para no romper permisos de git).
+3.  Levanta los contenedores Docker.
+4.  **IMPORTANTE:** Al final, ejecuta `chown -R quiulacocha:quiulacocha .` para asegurar que Hestia pueda leer todos los archivos.
 
 ## 3. Configurar Nginx (Hestia CP)
-Para que la web cargue correctamente en el puerto 80/443:
+*(Igual que antes)*
 
-### Opción A: Usar Plantillas Personalizadas (Si tienes root)
-Si tienes acceso root, copia las plantillas actualizadas:
+Copia las plantillas como **root**:
 ```bash
 cp nginx_hestia_templates/django-8000.tpl /usr/local/hestia/data/templates/web/nginx/proxy/
 cp nginx_hestia_templates/django-8000.stpl /usr/local/hestia/data/templates/web/nginx/proxy/
 ```
-Luego en Hestia Panel -> Web -> Tu Dominio -> Proxy Template -> **django-8000**.
-
-### Opción B: Configuración Manual (Sin root)
-Si no eres root, Docker ya está escuchando en el puerto 8000.
-Solo asegúrate de que en Hestia, la plantilla proxy sea **default**.
-Puedes editar la configuración Nginx del dominio si sabes cómo, pero generalmente con **default** y Docker corriendo, podrías necesitar un pequeño ajuste en Hestia para que no sirva los archivos estáticos por defecto de Nginx si no los encuentra.
+En Hestia Panel -> Web -> quiulacocha.theworkpc.com -> Proxy Template -> Selecciona **django-8000**.

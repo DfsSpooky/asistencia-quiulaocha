@@ -30,7 +30,8 @@ SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-5o5$uta6kd!9qc22e=(wx
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'oversophisticated-dedra-overgross.ngrok-free.dev,localhost,127.0.0.1,.ngrok-free.dev').split(',')
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS.extend(['quiulacocha.theworkpc.com', 'www.quiulacocha.theworkpc.com', 'oversophisticated-dedra-overgross.ngrok-free.dev', '.ngrok-free.dev'])
 
 # CSRF Trusted Origins
 CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', 'http://localhost,http://127.0.0.1,https://quiulacocha.theworkpc.com').split(',')

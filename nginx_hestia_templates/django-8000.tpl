@@ -6,7 +6,7 @@
 #=========================================================================#
 
 server {
-	listen      %ip%:%web_port%;
+	listen      %ip%:%proxy_port%;
 	server_name %domain_idn% %alias_idn%;
 	root        %docroot%;
 	index       index.php index.html index.htm;
