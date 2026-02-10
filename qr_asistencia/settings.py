@@ -279,7 +279,8 @@ AUTHENTICATION_BACKENDS = [
 # Configuración de Axes
 AXES_FAILURE_LIMIT = 5  # Número de intentos fallidos antes de bloquear
 AXES_COOLOFF_TIME = 1  # Tiempo de bloqueo en horas (1 hora)
-AXES_LOCK_OUT_BY_COMBINATION_USER_AND_IP = True  # Bloquear por usuario + IP
+# AXES_LOCK_OUT_BY_COMBINATION_USER_AND_IP = True  # Deprecated
+AXES_LOCKOUT_PARAMETERS = ["username", "ip_address"]  # Bloquear por usuario + IP (Nueva configuración)
 AXES_RESET_ON_SUCCESS = True  # Resetear contador al login exitoso
 AXES_LOCKOUT_TEMPLATE = None  # Usar mensaje de error por defecto
 AXES_VERBOSE = True  # Logs detallados
