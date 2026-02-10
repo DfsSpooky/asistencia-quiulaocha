@@ -162,7 +162,7 @@ def get_filtered_attendance_data(filters):
             ).values_list('usuario_id', flat=True)
             
             usuarios_no_asistentes_base = Usuario.objects.filter(
-                estado=Usuario.ESTADO_ACTIVO
+                estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_EXONERADO]
             ).exclude(id__in=asistentes_ids)
             
             if dni:
@@ -454,13 +454,17 @@ def generate_global_attendance_excel(report_data, system_config):
 
     total_eventos = len(report_data)
     total_padrón_acumulado = sum(ev['stats']['total_usuarios'] for ev in report_data)
-    total_presentes_acumulado = sum(ev['stats']['confirmadas'] for ev in report_data)
+    total_asistencias_fisicas_acumulado = sum(ev['stats']['asistencias_fisicas'] for ev in report_data)
+    total_justificadas_acumulado = sum(ev['stats']['justificadas'] for ev in report_data)
+    total_presentes_acumulado = total_asistencias_fisicas_acumulado + total_justificadas_acumulado
     promedio_asistencia = (total_presentes_acumulado / total_padrón_acumulado * 100) if total_padrón_acumulado > 0 else 0
 
     metrics = [
         ("Total Eventos", total_eventos),
         ("Padrón Total (Acumulado)", total_padrón_acumulado),
-        ("Asistencias Totales", total_presentes_acumulado),
+        ("Asistencias Físicas", total_asistencias_fisicas_acumulado),
+        ("Justificadas Totales", total_justificadas_acumulado),
+        ("Presentes* (Físicas + Just.)", total_presentes_acumulado),
         ("Promedio de Asistencia", f"{promedio_asistencia:.1f}%")
     ]
 
@@ -470,34 +474,40 @@ def generate_global_attendance_excel(report_data, system_config):
         ws_summary.cell(row=i, column=3).alignment = Alignment(horizontal="center")
 
     # Tabla de Detalle por Evento en el Resumen
-    start_row_events = 12
+    start_row_events = 14
     ws_summary.cell(row=start_row_events, column=2, value="EVENTO").fill = indigo_fill
     ws_summary.cell(row=start_row_events, column=2).font = white_font
     ws_summary.cell(row=start_row_events, column=3, value="FECHA").fill = indigo_fill
     ws_summary.cell(row=start_row_events, column=3).font = white_font
     ws_summary.cell(row=start_row_events, column=4, value="PADRÓN").fill = indigo_fill
     ws_summary.cell(row=start_row_events, column=4).font = white_font
-    ws_summary.cell(row=start_row_events, column=5, value="ASISTIERON").fill = indigo_fill
+    ws_summary.cell(row=start_row_events, column=5, value="PRESENTES*").fill = indigo_fill
     ws_summary.cell(row=start_row_events, column=5).font = white_font
-    ws_summary.cell(row=start_row_events, column=6, value="% ASISTENCIA").fill = indigo_fill
+    ws_summary.cell(row=start_row_events, column=6, value="JUSTIFICADAS").fill = indigo_fill
     ws_summary.cell(row=start_row_events, column=6).font = white_font
+    ws_summary.cell(row=start_row_events, column=7, value="% ASISTENCIA").fill = indigo_fill
+    ws_summary.cell(row=start_row_events, column=7).font = white_font
 
     for i, ev_data in enumerate(report_data, 1):
         row = start_row_events + i
         ws_summary.cell(row=row, column=2, value=ev_data['evento'].nombre).border = border_thin
         ws_summary.cell(row=row, column=3, value=ev_data['evento'].fecha.strftime('%d/%m/%Y')).border = border_thin
         ws_summary.cell(row=row, column=4, value=ev_data['stats']['total_usuarios']).border = border_thin
-        ws_summary.cell(row=row, column=5, value=ev_data['stats']['confirmadas']).border = border_thin
-        ws_summary.cell(row=row, column=6, value=f"{ev_data['stats']['porcentaje']:.1f}%").border = border_thin
+        ws_summary.cell(row=row, column=5, value=ev_data['stats']['asistencias_fisicas']).border = border_thin
+        ws_summary.cell(row=row, column=6, value=ev_data['stats']['justificadas']).border = border_thin
+        ws_summary.cell(row=row, column=7, value=f"{ev_data['stats']['porcentaje']:.1f}%").border = border_thin
         
-        for col in range(3, 7):
+        for col in range(3, 8):
             ws_summary.cell(row=row, column=col).alignment = Alignment(horizontal="center")
 
     # Ajustar anchos
     ws_summary.column_dimensions['B'].width = 35
     ws_summary.column_dimensions['C'].width = 15
-    ws_summary.column_dimensions['D'].width = 15
+    ws_summary.column_dimensions['D'].width = 12
+    ws_summary.cell(row=start_row_events, column=4).alignment = Alignment(horizontal="center")
     ws_summary.column_dimensions['E'].width = 15
+    ws_summary.column_dimensions['F'].width = 15
+    ws_summary.column_dimensions['G'].width = 15
     ws_summary.column_dimensions['F'].width = 15
 
     # --- HOJA 2: DETALLE COMPLETO ---

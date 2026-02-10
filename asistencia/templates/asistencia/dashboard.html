@@ -16,7 +16,7 @@
         </div>
         <!-- KPI Grid -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <!-- Total Usuarios -->
+            <!-- Padrón Electoral -->
             <div class="group bg-white rounded-[2.5rem] p-8 shadow-premium border border-slate-100 hover:border-primary-200 transition-all duration-500 relative overflow-hidden">
                 <div class="absolute top-0 right-0 w-32 h-32 bg-primary-50 rounded-full -mr-16 -mt-16 group-hover:scale-110 transition-transform duration-700 opacity-50">
                 </div>
@@ -24,10 +24,11 @@
                     <div class="h-16 w-16 rounded-2xl bg-primary-100 text-primary-600 flex items-center justify-center mb-6 group-hover:rotate-6 transition-all duration-300">
                         <i class="bi bi-people-fill text-3xl"></i>
                     </div>
-                    <h3 class="text-5xl font-extrabold text-slate-900 mb-2 tracking-tighter">{{ total_usuarios }}</h3>
-                    <p class="text-slate-400 font-bold uppercase text-[10px] tracking-[0.2em]">Total Usuarios</p>
+                    <h3 class="text-5xl font-extrabold text-slate-900 mb-2 tracking-tighter">{{ padron_activo }}</h3>
+                    <p class="text-slate-400 font-bold uppercase text-[10px] tracking-[0.2em]">Padrón Electoral</p>
+                    <div class="mt-2 text-[10px] text-slate-400 font-medium">De un total de {{ total_comunidad }} en la comunidad</div>
                 </div>
-                <div class="mt-6 h-1 w-full bg-slate-50 rounded-full overflow-hidden">
+                <div class="mt-4 h-1 w-full bg-slate-50 rounded-full overflow-hidden">
                     <div class="h-full bg-primary-500 w-full opacity-60"></div>
                 </div>
             </div>

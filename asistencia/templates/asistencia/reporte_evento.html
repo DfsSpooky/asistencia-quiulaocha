@@ -232,11 +232,15 @@
             <div class="stats-grid">
                 <div class="stats-card">
                     <div class="stats-num">{{ total_asistentes }}</div>
-                    <div class="stats-label">Asistentes</div>
+                    <div class="stats-label">Presentes*</div>
+                </div>
+                <div class="stats-card">
+                    <div class="stats-num" style="color: #c7d2fe">{{ justificadas|default:"0" }}</div>
+                    <div class="stats-label">Justificadas</div>
                 </div>
                 <div class="stats-card">
                     <div class="stats-num" style="color: #fca5a5">{{ total_inasistentes }}</div>
-                    <div class="stats-label">Faltaron</div>
+                    <div class="stats-label">Faltas Reales</div>
                 </div>
                 <div class="stats-card">
                     <div class="stats-num">{{ porcentaje_asistencia|floatformat:1 }}%</div>
@@ -269,7 +273,7 @@
             <div class="clear"></div>
         </div>
         <h2>
-            <span style="color: #6366f1;">●</span> Registros de Actividad ({{ unified_list|length }})
+            <span style="color: #6366f1;">●</span> Padrón del Evento ({{ total_usuarios }})
         </h2>
         <table>
             <thead>

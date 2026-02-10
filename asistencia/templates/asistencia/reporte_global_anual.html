@@ -155,8 +155,12 @@
         <div class="event-header">
             <div style="float: right; margin-top: -5px;">
                 <div class="stat-card">
-                    <div class="stat-val">{{ data.stats.confirmadas }}</div>
-                    <div class="stat-lab">Presentes</div>
+                    <div class="stat-val">{{ data.stats.asistencias_fisicas }}</div>
+                    <div class="stat-lab">Presentes*</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-val" style="color: #6366f1">{{ data.stats.justificadas }}</div>
+                    <div class="stat-lab">Justificadas</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-val" style="color: #fca5a5">{{ data.stats.inasistencias }}</div>

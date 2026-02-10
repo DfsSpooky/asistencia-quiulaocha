@@ -51,12 +51,14 @@ def landing_page(request):
 @login_required
 @permission_required('asistencia.can_manage_users', raise_exception=True)
 def dashboard(request):
-    total_usuarios = Usuario.objects.count()
+    total_comunidad = Usuario.objects.count()
+    padron_activo = Usuario.objects.filter(estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_EXONERADO]).count()
     asistencias_hoy = Asistencia.objects.filter(fecha=date.today()).count()
     eventos_activos = Evento.objects.filter(activo=True).count()
     
     context = {
-        'total_usuarios': total_usuarios,
+        'total_comunidad': total_comunidad,
+        'padron_activo': padron_activo,
         'asistencias_hoy': asistencias_hoy,
         'eventos_activos': eventos_activos,
         'can_scan_qr': request.user.has_perm('asistencia.can_scan_qr')
@@ -526,15 +528,18 @@ def descargar_reporte_global_pdf(request):
             
         # Estadísticas del evento
         total_padrón = len(records)
-        presentes = sum(1 for r in records if not r['is_absent'] or r['es_justificada'])
-        faltas_reales = sum(1 for r in records if r['is_absent'] and not r['es_justificada'])
-        porcentaje = (presentes / total_padrón * 100) if total_padrón > 0 else 0
+        asistencias_fisicas = sum(1 for r in records if not r['is_absent'] and not r.get('es_justificada', False))
+        justificadas = sum(1 for r in records if r.get('es_justificada', False))
+        faltas_reales = sum(1 for r in records if r['is_absent'] and not r.get('es_justificada', False))
+        presentes_totales = asistencias_fisicas + justificadas
+        porcentaje = (presentes_totales / total_padrón * 100) if total_padrón > 0 else 0
         
         report_data.append({
             'evento': ev,
             'records': records,
             'stats': {
-                'confirmadas': presentes, # Incluye justificadas
+                'asistencias_fisicas': asistencias_fisicas,
+                'justificadas': justificadas,
                 'inasistencias': faltas_reales,
                 'porcentaje': porcentaje,
                 'total_usuarios': total_padrón
@@ -617,14 +622,19 @@ def exportar_reporte_global_excel(request):
             })
             
         total_padrón = len(records)
-        presentes = sum(1 for r in records if not r['is_absent'] or r['es_justificada'])
-        porcentaje = (presentes / total_padrón * 100) if total_padrón > 0 else 0
+        asistencias_fisicas = sum(1 for r in records if not r['is_absent'] and not r.get('es_justificada', False))
+        justificadas = sum(1 for r in records if r.get('es_justificada', False))
+        faltas_reales = sum(1 for r in records if r['is_absent'] and not r.get('es_justificada', False))
+        presentes_totales = asistencias_fisicas + justificadas
+        porcentaje = (presentes_totales / total_padrón * 100) if total_padrón > 0 else 0
         
         report_data.append({
             'evento': ev,
             'records': records,
             'stats': {
-                'confirmadas': presentes,
+                'asistencias_fisicas': asistencias_fisicas,
+                'justificadas': justificadas,
+                'inasistencias': faltas_reales,
                 'total_usuarios': total_padrón,
                 'porcentaje': porcentaje,
             }
@@ -707,13 +717,13 @@ def descargar_reporte_usuario_pdf(request, dni):
     
     # Calcular métricas avanzadas
     total_eventos = Evento.objects.count()
-    asistencias_efectivas = sum(1 for item in unified_list if not getattr(item, 'is_absent', False))
+    asistencias_confirmadas = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and getattr(item, 'confirmada', False))
     justificadas = sum(1 for item in unified_list if getattr(item, 'es_justificada', False))
     faltas = sum(1 for item in unified_list if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False))
     pendientes = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and not getattr(item, 'confirmada', False))
     
-    # Score de asistencia (considerando justificadas como positivas)
-    total_participaciones = asistencias_efectivas + justificadas
+    # Score de asistencia (considerando justificadas y físicas confirmadas como positivas)
+    total_participaciones = asistencias_confirmadas + justificadas
     score_asistencia = (total_participaciones / total_eventos * 100) if total_eventos > 0 else 0
     
     # Calcular racha de asistencias (eventos consecutivos asistidos)
@@ -746,7 +756,7 @@ def descargar_reporte_usuario_pdf(request, dni):
         'logo_base64': get_logo_base64(),
         'stats': {
             'total_eventos': total_eventos,
-            'asistencias': asistencias_efectivas,
+            'asistencias': asistencias_confirmadas,
             'justificadas': justificadas,
             'faltas': faltas,
             'pendientes': pendientes,
@@ -778,23 +788,28 @@ def descargar_reporte_evento_pdf(request, evento_id):
     unified_list = data.get('unified_report', [])
     
     # Calcular estadísticas: Consideramos Justificadas como "Asistencia Efectiva"
-    total_usuarios = Usuario.objects.filter(estado=Usuario.ESTADO_ACTIVO).count()
-    # Asistieron fìsicamente
-    asistencias_puras = sum(1 for item in unified_list if not getattr(item, 'is_absent', False))
-    # Justificaron (no fueron pero tienen permiso)
-    justificadas = sum(1 for item in unified_list if getattr(item, 'is_absent', False) and getattr(item, 'es_justificada', False))
+    total_padrón = Usuario.objects.filter(estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_EXONERADO]).count()
     
-    total_asistentes_efectivos = asistencias_puras + justificadas
-    total_inasistentes_reales = sum(1 for item in unified_list if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False))
+    # Asistieron físicamente y confirmados
+    asistencias_fisicas = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and getattr(item, 'confirmada', False))
+    # Justificaron (con permiso aprobado)
+    justificadas = sum(1 for item in unified_list if getattr(item, 'es_justificada', False))
+    # Inasistencias reales (ni fueron ni justificaron)
+    inasistencias_reales = sum(1 for item in unified_list if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False))
+    # Pendientes de confirmación física
+    pendientes = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and not getattr(item, 'confirmada', False))
     
-    porcentaje_asistencia = (total_asistentes_efectivos / total_usuarios * 100) if total_usuarios > 0 else 0
+    total_asistentes_efectivos = asistencias_fisicas + justificadas
+    porcentaje_asistencia = (total_asistentes_efectivos / total_padrón * 100) if total_padrón > 0 else 0
     
     context = {
         'evento': evento,
         'unified_list': unified_list,
-        'total_usuarios': total_usuarios,
-        'total_asistentes': total_asistentes_efectivos, # Incluye justificadas
-        'total_inasistentes': total_inasistentes_reales,
+        'total_usuarios': total_padrón,
+        'total_asistentes': asistencias_fisicas, # Solo fìsicos confirmados
+        'justificadas': justificadas,
+        'total_inasistentes': inasistencias_reales,
+        'pendientes': pendientes,
         'porcentaje_asistencia': porcentaje_asistencia,
         'current_date': timezone.localtime(timezone.now()).strftime('%d/%m/%Y %H:%M'),
         'logo_base64': get_logo_base64(),
