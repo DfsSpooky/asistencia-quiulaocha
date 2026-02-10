@@ -452,8 +452,10 @@ def historial_asistencias(request):
     # Por defecto, los asistentes van primero o según la lógica de reports.py
     
     total_registros = len(unified_list)
-    confirmadas = sum(1 for item in unified_list if getattr(item, 'confirmada', False))
-    inasistencias = sum(1 for item in unified_list if getattr(item, 'is_absent', False))
+    # Mutuamente excluyentes:
+    confirmadas = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and getattr(item, 'confirmada', False))
+    justificadas = sum(1 for item in unified_list if getattr(item, 'es_justificada', False))
+    inasistencias = sum(1 for item in unified_list if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False))
     pendientes = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and not getattr(item, 'confirmada', False))
     
     paginator = Paginator(unified_list, 10)
@@ -467,8 +469,9 @@ def historial_asistencias(request):
         'stats': {
             'total': total_registros,
             'confirmadas': confirmadas,
-            'pendientes': pendientes,
+            'justificadas': justificadas,
             'inasistencias': inasistencias,
+            'pendientes': pendientes,
         },
     }
     
@@ -580,6 +583,65 @@ def exportar_asistencias_excel(request):
 
 @login_required
 @permission_required('asistencia.can_manage_users', raise_exception=True)
+def exportar_reporte_global_excel(request):
+    """
+    Genera un Excel histórico de TODO el sistema, similar al reporte global PDF.
+    """
+    from .utils.reports import generate_global_attendance_excel, get_filtered_attendance_data
+    
+    eventos = Evento.objects.all().order_by('fecha')
+    report_data = []
+    
+    for ev in eventos:
+        data = get_filtered_attendance_data({'evento': ev})
+        asistencias = list(data.get('asistencias', []))
+        no_asistentes = data.get('usuarios_no_asistentes', [])
+        
+        records = []
+        for a in asistencias:
+            records.append({
+                'usuario': a.usuario,
+                'hora_ingreso': a.hora_ingreso,
+                'hora_salida': a.hora_salida,
+                'is_absent': False,
+                'es_justificada': a.es_justificada,
+            })
+                
+        for u in no_asistentes:
+            just = Justificacion.objects.filter(usuario=u, evento=ev, estado='APROBADO').first()
+            records.append({
+                'usuario': u,
+                'is_absent': True,
+                'es_justificada': just is not None,
+                'justificacion_obs': just.motivo if just else ""
+            })
+            
+        total_padrón = len(records)
+        presentes = sum(1 for r in records if not r['is_absent'] or r['es_justificada'])
+        porcentaje = (presentes / total_padrón * 100) if total_padrón > 0 else 0
+        
+        report_data.append({
+            'evento': ev,
+            'records': records,
+            'stats': {
+                'confirmadas': presentes,
+                'total_usuarios': total_padrón,
+                'porcentaje': porcentaje,
+            }
+        })
+        
+    system_config = ConfiguracionSistema.objects.first()
+    
+    LogAccion.objects.create(
+        usuario=request.user,
+        accion="Exportar Reporte Global Excel",
+        descripcion=f"{request.user.username} exportó el reporte anual consolidado a Excel ({len(eventos)} eventos)."
+    )
+    
+    return generate_global_attendance_excel(report_data, system_config)
+
+@login_required
+@permission_required('asistencia.can_manage_users', raise_exception=True)
 def confirmar_asistencia(request, asistencia_id):
     asistencia = get_object_or_404(Asistencia, id=asistencia_id)
     if not asistencia.confirmada:
@@ -605,22 +667,22 @@ def descargar_reporte_pdf(request):
     # Usar la lista unificada
     unified_list = data.get('unified_report', [])
     
-    # Calcular estadísticas en memoria
-    total_usuarios = Usuario.objects.count()
-    total_asistentes = sum(1 for item in unified_list if not getattr(item, 'is_absent', False))
-    total_inasistentes = sum(1 for item in unified_list if getattr(item, 'is_absent', False))
+    # Calcular estadísticas detalladas
+    total_padrón = len(unified_list) # Usar el padrón del reporte (Activos + Exon)
+    asistencias_puras = sum(1 for item in unified_list if not getattr(item, 'is_absent', False))
+    justificadas = sum(1 for item in unified_list if getattr(item, 'es_justificada', False))
+    total_asistentes_efectivos = asistencias_puras + justificadas
+    total_inasistentes_reales = sum(1 for item in unified_list if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False))
     
-    # Para el porcentaje, usamos el total de usuarios activos vs asistentes en el reporte
-    # OJO: Si hay filtros, el porcentaje es relativo al filtro? 
-    # Generalmente se desea Asistencia Global.
-    # Mantenemos lógica simple: Asistentes / Total Usuarios * 100
-    porcentaje_asistencia = (total_asistentes / total_usuarios * 100) if total_usuarios > 0 else 0
+    porcentaje_asistencia = (total_asistentes_efectivos / total_padrón * 100) if total_padrón > 0 else 0
 
     context = {
-        'unified_list': unified_list, # Nueva clave para el template
-        'total_usuarios': total_usuarios,
-        'total_asistentes': total_asistentes,
-        'total_inasistentes': total_inasistentes,
+        'unified_list': unified_list,
+        'total_usuarios': total_padrón,
+        'total_asistentes': total_asistentes_efectivos,
+        'asistencias_puras': asistencias_puras,
+        'justificadas': justificadas,
+        'total_inasistentes': total_inasistentes_reales,
         'porcentaje_asistencia': porcentaje_asistencia,
         'logo_base64': get_logo_base64(),
         'current_date': datetime.now().strftime('%d/%m/%Y %H:%M'),

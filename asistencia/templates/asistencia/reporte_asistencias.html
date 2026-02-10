@@ -228,11 +228,15 @@
             <div class="stats-grid">
                 <div class="stats-card">
                     <div class="stats-num">{{ total_asistentes }}</div>
-                    <div class="stats-label">Asistentes</div>
+                    <div class="stats-label">Presentes*</div>
+                </div>
+                <div class="stats-card">
+                    <div class="stats-num" style="color: #c7d2fe">{{ justificadas|default:"0" }}</div>
+                    <div class="stats-label">Justificadas</div>
                 </div>
                 <div class="stats-card">
                     <div class="stats-num" style="color: #fca5a5">{{ total_inasistentes }}</div>
-                    <div class="stats-label">Faltaron</div>
+                    <div class="stats-label">Faltas Reales</div>
                 </div>
                 <div class="stats-card">
                     <div class="stats-num">{{ porcentaje_asistencia|floatformat:1 }}%</div>
@@ -277,19 +281,19 @@
                         <tr {% if item.is_absent %}style="background-color: #fef2f2;"{% endif %}>
                             <td>
                                 <strong style="{% if item.is_absent %}color: #dc2626;{% endif %}">
-                                    {% if item.is_absent %}
-                                        {{ item.nombre }} {{ item.apellido }}
-                                    {% else %}
+                                    {% if item.usuario %}
                                         {{ item.usuario.nombre }} {{ item.usuario.apellido }}
+                                    {% else %}
+                                        {{ item.nombre }} {{ item.apellido }}
                                     {% endif %}
                                 </strong>
                             </td>
                             <td>
                                 <code style="background: #f1f5f9; padding: 2px 4px; border-radius: 3px;">
-                                    {% if item.is_absent %}
-                                        {{ item.dni }}
-                                    {% else %}
+                                    {% if item.usuario %}
                                         {{ item.usuario.dni }}
+                                    {% else %}
+                                        {{ item.dni }}
                                     {% endif %}
                                 </code>
                             </td>

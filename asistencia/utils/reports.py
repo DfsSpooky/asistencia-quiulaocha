@@ -12,6 +12,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from ..models import Usuario, Asistencia, ConfiguracionSistema, Justificacion
 
+from django.db.models import Q
+
 def get_filtered_attendance_data(filters):
     """
     Centraliza la lógica de filtrado de asistencias e inasistencias.
@@ -29,7 +31,13 @@ def get_filtered_attendance_data(filters):
 
     # Aplicar filtros base
     if dni:
-        asistencias = asistencias.filter(usuario__dni__icontains=dni)
+        # Búsqueda general: Nombre, Apellido o DNI
+        asistencias = asistencias.filter(
+            Q(usuario__dni__icontains=dni) |
+            Q(usuario__nombre__icontains=dni) |
+            Q(usuario__apellido__icontains=dni)
+        )
+
     if fecha_inicio:
         asistencias = asistencias.filter(fecha__gte=fecha_inicio)
     if fecha_fin:
@@ -51,12 +59,24 @@ def get_filtered_attendance_data(filters):
     usuarios_no_asistentes = None
     
     # Lógica de estado: asistieron vs faltaron
-    # Lógica de estado: asistieron vs faltaron
-    if estado == 'faltaron':
-        # Solo mostrar inasistentes, limpiar asistencias
-        asistencias = asistencias.none()
-        
-        # Estrategia para calcular faltas:
+    asistencias_justificadas = asistencias.filter(es_justificada=True)
+    asistencias_regulares = asistencias.filter(es_justificada=False)
+
+    if estado == 'asistieron':
+        asistencias = asistencias_regulares
+        usuarios_no_asistentes = None
+    elif estado in ['faltaron', 'faltas_justificadas', 'faltas_injustificadas']:
+        if estado == 'faltaron':
+            # Faltas = Faltas Justificadas (registros) + Faltas Totales (sin registro)
+            asistencias = asistencias_justificadas
+        elif estado == 'faltas_justificadas':
+            # Solo faltas justificadas
+            asistencias = asistencias_justificadas
+        elif estado == 'faltas_injustificadas':
+            # Faltas injustificadas = Sin registro y sin justificacion
+            asistencias = asistencias.none()
+
+        # Estrategia para calcular faltas (sin registro):
         # 1. Si hay Evento seleccionado -> Inasistentes a ESE evento.
         # 2. Si no hay Evento, pero hay Fecha (Inicio == Fin) -> Inasistentes a CUALQUIER evento de ese día.
         # 3. Si es un rango de fechas -> Es complejo (¿faltó a 1 o a todos?), por ahora pedimos Evento o Día único.
@@ -69,30 +89,67 @@ def get_filtered_attendance_data(filters):
             target_events = list(Evento.objects.filter(fecha=fecha_inicio))
         
         if target_events:
-            # Buscamos usuarios que NO tengan asistencia en ninguno de los eventos target
+            # Buscamos usuarios que SI tengan asistencia (cualquier tipo, para excluirlos de la lista "sin registro")
+            # OJO: Los que tienen asistencia justificada YA fueron incluidos arriba en 'asistencias', así que debemos excluirlos aquí
+            # para no duplicarlos.
             asistentes_ids = Asistencia.objects.filter(
                 evento__in=target_events
             ).values_list('usuario_id', flat=True)
             
-            # Excluimos a los que sí fueron
-            usuarios_no_asistentes = Usuario.objects.filter(
+            # Base de inasistentes (excluyendo a los que tienen CUALQUIER registro)
+            base_inasistentes = Usuario.objects.filter(
                 estado=Usuario.ESTADO_ACTIVO
             ).exclude(id__in=asistentes_ids)
             
             if dni:
-                usuarios_no_asistentes = usuarios_no_asistentes.filter(dni__icontains=dni)
-            
-            usuarios_no_asistentes = usuarios_no_asistentes.distinct().order_by('apellido', 'nombre')
-        else:
-            # Si no hay evento ni día específico, devolver vacío para evitar reporte gigante "faltaron todos"
-            usuarios_no_asistentes = Usuario.objects.none()
+                base_inasistentes = base_inasistentes.filter(
+                    Q(dni__icontains=dni) |
+                    Q(nombre__icontains=dni) |
+                    Q(apellido__icontains=dni)
+                )
 
-    elif estado == 'asistieron':
-        # Solo mostrar asistentes
-        usuarios_no_asistentes = None
+            # Ahora filtramos por justificación si es necesario (para los que NO tienen registro)
+            usuarios_finales = []
+            
+            target_ev = target_events[0] if len(target_events) == 1 else None 
+            
+            # Solo procesar "sin registro" si el estado lo permite
+            allows_justified_missing = estado in ['faltaron', 'faltas_justificadas']
+            allows_unjustified_missing = estado in ['faltaron', 'faltas_injustificadas']
+
+            for u in base_inasistentes:
+                is_justified = False
+                just_obs = ""
+                
+                if target_ev:
+                    just = Justificacion.objects.filter(usuario=u, evento=target_ev, estado='APROBADO').first()
+                    is_justified = just is not None
+                    just_obs = just.motivo if just else ""
+                
+                include_user = False
+                if is_justified and allows_justified_missing:
+                    include_user = True
+                elif not is_justified and allows_unjustified_missing:
+                    include_user = True
+                
+                if include_user:
+                    # Adjuntamos atributos temporales para el reporte
+                    u.is_absent = True
+                    u.es_justificada = is_justified
+                    u.justificacion_obs = just_obs
+                    u.evento = target_ev
+                    u.fecha = target_ev.fecha if target_ev else None
+                    usuarios_finales.append(u)
+            
+            usuarios_no_asistentes = usuarios_finales
+        else:
+            # Sin contexto suficiente para calcular faltas sin registro
+            usuarios_no_asistentes = []
+
     else:
-        # "Todos" (Asistieron + Faltaron)
-        # Solo calculamos faltaron si hay un contexto claro (Evento o Día Único)
+        # Estado "Todos" o vacío
+        pass # asistencias se mantiene completo (regulares + justificadas)
+        # Calcular faltantes sin registro (si hay contexto)
         target_events = None
         if evento:
             target_events = [evento]
@@ -104,18 +161,36 @@ def get_filtered_attendance_data(filters):
                 evento__in=target_events
             ).values_list('usuario_id', flat=True)
             
-            usuarios_no_asistentes = Usuario.objects.filter(
+            usuarios_no_asistentes_base = Usuario.objects.filter(
                 estado=Usuario.ESTADO_ACTIVO
             ).exclude(id__in=asistentes_ids)
             
             if dni:
-                usuarios_no_asistentes = usuarios_no_asistentes.filter(dni__icontains=dni)
+                usuarios_no_asistentes_base = usuarios_no_asistentes_base.filter(
+                    Q(dni__icontains=dni) |
+                    Q(nombre__icontains=dni) |
+                    Q(apellido__icontains=dni)
+                )
             
-            usuarios_no_asistentes = usuarios_no_asistentes.distinct().order_by('apellido', 'nombre')
+            # Convertir QuerySet a lista de objetos enriquecidos
+            lista_inasistentes = []
+            target_ev = target_events[0] if len(target_events) == 1 else None
+            
+            for u in usuarios_no_asistentes_base:
+                just = None
+                if target_ev:
+                    just = Justificacion.objects.filter(usuario=u, evento=target_ev, estado='APROBADO').first()
+                
+                u.is_absent = True
+                u.es_justificada = just is not None
+                u.justificacion_obs = just.motivo if just else ""
+                u.evento = target_ev
+                u.fecha = target_ev.fecha if target_ev else None
+                lista_inasistentes.append(u)
+            
+            usuarios_no_asistentes = lista_inasistentes
+
         elif dni:
-            # Caso especial: Si el usuario busca un DNI pero NO hay evento/fecha seleccionada,
-            # lo que probablemente quiere es ver todas las asistencias de ese socio.
-            # No calculamos "inasistencias" en este caso porque no hay contra qué comparar.
             usuarios_no_asistentes = None
         else:
             usuarios_no_asistentes = None
@@ -123,29 +198,16 @@ def get_filtered_attendance_data(filters):
     # Unificar en una lista coherente para reportes
     unified_report = []
     
-    # Agregar asistentes
+    # Agregar asistentes (y faltas justificadas con registro)
     for a in asistencias:
-        a.is_absent = False
-        # Para asistentes, es_justificada suele significar "tarde pero justificado"
-        # pero para el reporte lo tratamos como ASISTIÓ.
+        # Si es justificada, la tratamos como ausencia para efectos visuales (rojo/púrpura)
+        a.is_absent = a.es_justificada
         unified_report.append(a)
     
-    # Agregar inasistentes (si hay contexto de evento)
+    # Agregar inasistentes (sin registro)
     if usuarios_no_asistentes:
-        target_ev = evento
         for u in usuarios_no_asistentes:
-            u.is_absent = True
-            # Buscar si tiene justificación aprobada para este evento
-            # (Solo si hay un evento específico seleccionado)
-            just = None
-            if target_ev:
-                just = Justificacion.objects.filter(usuario=u, evento=target_ev, estado='APROBADO').first()
-            
-            u.es_justificada = just is not None
-            u.justificacion_obs = just.motivo if just else ""
-            u.evento = target_ev
-            u.fecha = target_ev.fecha if target_ev else None
-            unified_report.append(u)
+             unified_report.append(u)
 
     return {
         'asistencias': asistencias,
@@ -340,3 +402,162 @@ def get_image_base64(image_field):
     except (FileNotFoundError, IOError, OSError, ValueError, AttributeError):
         pass
     return None
+
+def generate_global_attendance_excel(report_data, system_config):
+    """
+    Genera un Excel Premium con múltiples hojas: Resumen y Detalle.
+    """
+    from io import BytesIO
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
+
+    wb = Workbook()
+    
+    # --- HOJA 1: RESUMEN EJECUTIVO ---
+    ws_summary = wb.active
+    ws_summary.title = "Resumen Ejecutivo"
+    
+    # Estilos Premium
+    indigo_fill = PatternFill(start_color="4F46E5", end_color="4F46E5", fill_type="solid")
+    slate_fill = PatternFill(start_color="0F172A", end_color="0F172A", fill_type="solid")
+    white_font = Font(bold=True, color="FFFFFF")
+    title_font = Font(bold=True, size=16, color="1E1B4B")
+    subtitle_font = Font(bold=True, size=12, color="4F46E5")
+    border_thin = Border(
+        left=Side(style='thin', color="E2E8F0"), 
+        right=Side(style='thin', color="E2E8F0"), 
+        top=Side(style='thin', color="E2E8F0"), 
+        bottom=Side(style='thin', color="E2E8F0")
+    )
+
+    # Título Principal
+    ws_summary.merge_cells('B2:F2')
+    cell_title = ws_summary['B2']
+    cell_title.value = (system_config.nombre_institucion if system_config else "SISTEMA DE ASISTENCIA").upper()
+    cell_title.font = title_font
+    cell_title.alignment = Alignment(horizontal="center")
+
+    ws_summary.merge_cells('B3:F3')
+    cell_subtitle = ws_summary['B3']
+    cell_subtitle.value = f"REPORTE GLOBAL CONSOLIDADO - {datetime.now().year}"
+    cell_subtitle.font = subtitle_font
+    cell_subtitle.alignment = Alignment(horizontal="center")
+
+    # Tabla de Totales Generales
+    ws_summary['B5'] = "MÉTRICA"
+    ws_summary['C5'] = "VALOR"
+    for cell in [ws_summary['B5'], ws_summary['C5']]:
+        cell.fill = slate_fill
+        cell.font = white_font
+        cell.alignment = Alignment(horizontal="center")
+        cell.border = border_thin
+
+    total_eventos = len(report_data)
+    total_padrón_acumulado = sum(ev['stats']['total_usuarios'] for ev in report_data)
+    total_presentes_acumulado = sum(ev['stats']['confirmadas'] for ev in report_data)
+    promedio_asistencia = (total_presentes_acumulado / total_padrón_acumulado * 100) if total_padrón_acumulado > 0 else 0
+
+    metrics = [
+        ("Total Eventos", total_eventos),
+        ("Padrón Total (Acumulado)", total_padrón_acumulado),
+        ("Asistencias Totales", total_presentes_acumulado),
+        ("Promedio de Asistencia", f"{promedio_asistencia:.1f}%")
+    ]
+
+    for i, (m, v) in enumerate(metrics, start=6):
+        ws_summary.cell(row=i, column=2, value=m).border = border_thin
+        ws_summary.cell(row=i, column=3, value=v).border = border_thin
+        ws_summary.cell(row=i, column=3).alignment = Alignment(horizontal="center")
+
+    # Tabla de Detalle por Evento en el Resumen
+    start_row_events = 12
+    ws_summary.cell(row=start_row_events, column=2, value="EVENTO").fill = indigo_fill
+    ws_summary.cell(row=start_row_events, column=2).font = white_font
+    ws_summary.cell(row=start_row_events, column=3, value="FECHA").fill = indigo_fill
+    ws_summary.cell(row=start_row_events, column=3).font = white_font
+    ws_summary.cell(row=start_row_events, column=4, value="PADRÓN").fill = indigo_fill
+    ws_summary.cell(row=start_row_events, column=4).font = white_font
+    ws_summary.cell(row=start_row_events, column=5, value="ASISTIERON").fill = indigo_fill
+    ws_summary.cell(row=start_row_events, column=5).font = white_font
+    ws_summary.cell(row=start_row_events, column=6, value="% ASISTENCIA").fill = indigo_fill
+    ws_summary.cell(row=start_row_events, column=6).font = white_font
+
+    for i, ev_data in enumerate(report_data, 1):
+        row = start_row_events + i
+        ws_summary.cell(row=row, column=2, value=ev_data['evento'].nombre).border = border_thin
+        ws_summary.cell(row=row, column=3, value=ev_data['evento'].fecha.strftime('%d/%m/%Y')).border = border_thin
+        ws_summary.cell(row=row, column=4, value=ev_data['stats']['total_usuarios']).border = border_thin
+        ws_summary.cell(row=row, column=5, value=ev_data['stats']['confirmadas']).border = border_thin
+        ws_summary.cell(row=row, column=6, value=f"{ev_data['stats']['porcentaje']:.1f}%").border = border_thin
+        
+        for col in range(3, 7):
+            ws_summary.cell(row=row, column=col).alignment = Alignment(horizontal="center")
+
+    # Ajustar anchos
+    ws_summary.column_dimensions['B'].width = 35
+    ws_summary.column_dimensions['C'].width = 15
+    ws_summary.column_dimensions['D'].width = 15
+    ws_summary.column_dimensions['E'].width = 15
+    ws_summary.column_dimensions['F'].width = 15
+
+    # --- HOJA 2: DETALLE COMPLETO ---
+    ws_detail = wb.create_sheet("Detalle de Asistencias")
+    
+    headers = ['EVENTO', 'SOCIO', 'DNI', 'ESTADO', 'INGRESO', 'SALIDA', 'OBSERVACIÓN']
+    for col, head in enumerate(headers, 1):
+        cell = ws_detail.cell(row=1, column=col, value=head)
+        cell.fill = slate_fill
+        cell.font = white_font
+        cell.alignment = Alignment(horizontal="center")
+    
+    curr_row = 2
+    for ev_data in report_data:
+        for rec in ev_data['records']:
+            ws_detail.cell(row=curr_row, column=1, value=ev_data['evento'].nombre)
+            ws_detail.cell(row=curr_row, column=2, value=f"{rec['usuario'].nombre} {rec['usuario'].apellido}")
+            ws_detail.cell(row=curr_row, column=3, value=rec['usuario'].dni)
+            
+            # Lógica de Estado
+            status_text = "ASISTIÓ"
+            if rec['is_absent']:
+                status_text = "JUSTIFICADA" if rec['es_justificada'] else "FALTA"
+            
+            cell_status = ws_detail.cell(row=curr_row, column=4, value=status_text)
+            if status_text == "FALTA":
+                cell_status.font = Font(color="DC2626", bold=True)
+            elif status_text == "JUSTIFICADA":
+                cell_status.font = Font(color="4F46E5", bold=True)
+            else:
+                cell_status.font = Font(color="059669", bold=True)
+                
+            ws_detail.cell(row=curr_row, column=5, value=rec.get('hora_ingreso').strftime('%H:%M:%S') if rec.get('hora_ingreso') else "--")
+            ws_detail.cell(row=curr_row, column=6, value=rec.get('hora_salida').strftime('%H:%M:%S') if rec.get('hora_salida') else "--")
+            ws_detail.cell(row=curr_row, column=7, value=rec.get('justificacion_obs', ""))
+            
+            # Formato
+            for c in range(1, 8):
+                ws_detail.cell(row=curr_row, column=c).border = border_thin
+            
+            curr_row += 1
+
+    # Ajustar anchos detalle
+    ws_detail.column_dimensions['A'].width = 25
+    ws_detail.column_dimensions['B'].width = 35
+    ws_detail.column_dimensions['C'].width = 12
+    ws_detail.column_dimensions['D'].width = 15
+    ws_detail.column_dimensions['E'].width = 12
+    ws_detail.column_dimensions['F'].width = 12
+    ws_detail.column_dimensions['G'].width = 30
+    
+    ws_detail.freeze_panes = "A2" # Inmovilizar cabecera
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    response = HttpResponse(
+        output.read(),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
+    response['Content-Disposition'] = f'attachment; filename="reporte_global_{datetime.now().year}.xlsx"'
+    return response

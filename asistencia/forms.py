@@ -37,7 +37,13 @@ class FiltroAsistenciaForm(forms.Form):
         label='Confirmada'
     )
     estado = forms.ChoiceField(
-        choices=[('', 'Todos'), ('asistieron', 'Asistieron'), ('faltaron', 'Faltaron')],
+        choices=[
+            ('', 'Todos'),
+            ('asistieron', 'Asistieron'),
+            ('faltaron', 'Faltaron (Todas)'),
+            ('faltas_justificadas', 'Faltas Justificadas'),
+            ('faltas_injustificadas', 'Faltas Injustificadas'),
+        ],
         required=False,
         label='Estado'
     )

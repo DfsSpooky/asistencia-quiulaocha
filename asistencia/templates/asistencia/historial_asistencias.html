@@ -73,17 +73,13 @@
                     <!-- Status Tabs (Attendees vs Absentees) -->
                     <div class="lg:col-span-4 space-y-3">
                         <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Estado de Asistencia</label>
-                        <div class="flex p-1 bg-slate-100 rounded-2xl">
-                            {% for val, label in form.estado.field.choices %}
-                                <label class="flex-1 cursor-pointer">
-                                    <input type="radio" name="estado" value="{{ val }}" class="hidden peer"
-                                           {% if form.estado.value == val or not form.estado.value and val == '' %}checked{% endif %}>
-                                    <div class="py-2.5 text-center text-xs font-black uppercase tracking-widest rounded-xl transition-all peer-checked:bg-white peer-checked:text-slate-900 peer-checked:shadow-sm text-slate-400 hover:text-slate-600">
-                                        {{ label|default:"Todos" }}
-                                    </div>
-                                </label>
-                            {% endfor %}
-                        </div>
+                        <select name="estado" class="select2-searchable">
+                            <option value="" {% if not form.estado.value %}selected{% endif %}>Todos (Asistencias + Faltas)</option>
+                            <option value="asistieron" {% if form.estado.value == 'asistieron' %}selected{% endif %}>✅ Solo Asistieron</option>
+                            <option value="faltaron" {% if form.estado.value == 'faltaron' %}selected{% endif %}>❌ Faltas (Todas)</option>
+                            <option value="faltas_justificadas" {% if form.estado.value == 'faltas_justificadas' %}selected{% endif %}>📄 Faltas Justificadas</option>
+                            <option value="faltas_injustificadas" {% if form.estado.value == 'faltas_injustificadas' %}selected{% endif %}>🚫 Faltas Injustificadas</option>
+                        </select>
                     </div>
 
                     <!-- Name/DNI Search -->
@@ -117,10 +113,28 @@
                     <button type="button" @click="expanded = !expanded" 
                             class="flex items-center gap-2 text-[10px] font-black text-primary-600 uppercase tracking-widest hover:text-primary-700 transition-colors">
                         <i class="bi" :class="expanded ? 'bi-dash-lg' : 'bi-plus-lg'"></i>
-                        Filtros Avanzados (Ubicación, Fecha, Orden)
+                        Filtros Avanzados (Fecha, Ubicación, Orden)
                     </button>
                     
-                    <div x-show="expanded" x-collapse x-cloak class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
+                    <div x-show="expanded" x-collapse x-cloak class="grid grid-cols-1 md:grid-cols-4 gap-6 mt-6">
+                        <!-- Date Range Filters with Presets -->
+                        <div class="md:col-span-2 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <label class="text-[10px] font-bold text-slate-400 uppercase">Rango de Fechas</label>
+                                <div class="flex gap-1">
+                                    <button type="button" onclick="setDateRange('today')" class="px-2 py-1 bg-slate-100/50 hover:bg-slate-100 text-slate-500 text-[10px] uppercase font-bold rounded-lg transition-colors">Hoy</button>
+                                    <button type="button" onclick="setDateRange('week')" class="px-2 py-1 bg-slate-100/50 hover:bg-slate-100 text-slate-500 text-[10px] uppercase font-bold rounded-lg transition-colors">Semana</button>
+                                    <button type="button" onclick="setDateRange('month')" class="px-2 py-1 bg-slate-100/50 hover:bg-slate-100 text-slate-500 text-[10px] uppercase font-bold rounded-lg transition-colors">Mes</button>
+                                </div>
+                            </div>
+                            <div class="flex gap-2">
+                                <input type="date" name="fecha_inicio" id="fecha_inicio" value="{{ form.fecha_inicio.value|date:'Y-m-d' }}"
+                                       class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-primary-500 outline-none">
+                                <input type="date" name="fecha_fin" id="fecha_fin" value="{{ form.fecha_fin.value|date:'Y-m-d' }}"
+                                       class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-primary-500 outline-none">
+                            </div>
+                        </div>
+
                         <div class="space-y-2">
                             <label class="text-[10px] font-bold text-slate-400 uppercase">Ubicación</label>
                             <select name="ubicacion" class="select2-searchable">
@@ -138,9 +152,9 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="flex items-end gap-3">
+                        <div class="flex items-end gap-3 md:col-span-4 justify-end">
                             <button type="button" onclick="window.location.href='{% url 'historial_asistencias' %}'"
-                                    class="w-full py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-xs hover:bg-slate-200 transition-all">
+                                    class="px-6 py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-xs hover:bg-slate-200 transition-all">
                                 Limpiar Filtros
                             </button>
                         </div>
@@ -150,36 +164,7 @@
         </div>
 
         <!-- Quick Stats Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div class="bg-white rounded-[2.5rem] p-8 shadow-premium border border-slate-100 relative overflow-hidden group">
-                <div class="h-12 w-12 bg-primary-50 text-primary-600 rounded-2xl flex items-center justify-center mb-6">
-                    <i class="bi bi-people-fill text-xl"></i>
-                </div>
-                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Registros</p>
-                <h3 class="text-4xl font-black text-slate-900 leading-none">{{ stats.total }}</h3>
-            </div>
-            <div class="bg-white rounded-[2.5rem] p-8 shadow-premium border border-slate-100 relative overflow-hidden group">
-                <div class="h-12 w-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mb-6">
-                    <i class="bi bi-check-circle-fill text-xl"></i>
-                </div>
-                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Presentes</p>
-                <h3 class="text-4xl font-black text-emerald-600 leading-none">{{ stats.confirmadas }}</h3>
-            </div>
-            <div class="bg-white rounded-[2.5rem] p-8 shadow-premium border border-slate-100 relative overflow-hidden group">
-                <div class="h-12 w-12 bg-red-50 text-red-600 rounded-2xl flex items-center justify-center mb-6">
-                    <i class="bi bi-x-circle-fill text-xl"></i>
-                </div>
-                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Faltantes</p>
-                <h3 class="text-4xl font-black text-red-600 leading-none">{{ stats.inasistencias }}</h3>
-            </div>
-            <div class="bg-white rounded-[2.5rem] p-8 shadow-premium border border-slate-100 relative overflow-hidden group">
-                <div class="h-12 w-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mb-6">
-                    <i class="bi bi-clock-fill text-xl"></i>
-                </div>
-                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Pendientes</p>
-                <h3 class="text-4xl font-black text-amber-600 leading-none">{{ stats.pendientes }}</h3>
-            </div>
-        </div>
+        {% include 'asistencia/partials/stats_metrics.html' %}
 
         <!-- RE-INTEGRATED Report Tools -->
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -198,14 +183,19 @@
                         <i class="bi bi-person-badge text-3xl text-primary-600 mb-4 block"></i>
                         <h5 class="font-black text-slate-900 mb-2">Reporte por Socio (DNI)</h5>
                         <p class="text-xs text-slate-500 mb-4">Descarga el historial completo de un socio ingresando su identificación.</p>
-                        <div class="flex gap-2">
-                             <input type="text" id="user-report-search" placeholder="DNI del socio..."
-                                   class="flex-1 px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-primary-500 outline-none">
-                            <button onclick="downloadUserReport()" class="px-6 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors">
-                                <i class="bi bi-download"></i>
-                            </button>
+                        <div class="flex flex-col gap-2 w-full">
+                             <input type="text" id="user-report-search" name="dni" placeholder="DNI del socio..."
+                                   hx-get="{% url 'buscar_usuario_dni' %}"
+                                   hx-trigger="keyup changed delay:500ms"
+                                   hx-target="#user-verification-result"
+                                   class="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-primary-500 outline-none">
+                            <div id="user-verification-result" class="min-h-[20px]"></div>
                         </div>
+                        <button onclick="downloadUserReport()" class="px-6 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors h-[46px]">
+                            <i class="bi bi-download"></i>
+                        </button>
                     </div>
+
                     <div class="group p-6 bg-slate-50 rounded-3xl border border-slate-100 hover:border-emerald-200 transition-all">
                         <i class="bi bi-calendar-event text-3xl text-emerald-600 mb-4 block"></i>
                         <h5 class="font-black text-slate-900 mb-2">Reporte por Evento Individual</h5>
@@ -290,6 +280,33 @@
                     window.open("{% url 'descargar_reporte_global_pdf' %}", '_blank');
                 }
             });
+        }
+        function setDateRange(range) {
+            const today = new Date();
+            let start = new Date();
+            let end = new Date();
+
+            if (range === 'today') {
+                // Start and End are today
+            } else if (range === 'week') {
+                // Monday of current week
+                const day = today.getDay();
+                const diff = today.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
+                start.setDate(diff);
+                // End is today (or end of week, let's use today for "this week so far")
+            } else if (range === 'month') {
+                // First day of current month
+                start = new Date(today.getFullYear(), today.getMonth(), 1);
+            }
+
+            // Format YYYY-MM-DD
+            const formatDate = (d) => d.toISOString().split('T')[0];
+
+            document.getElementById('fecha_inicio').value = formatDate(start);
+            document.getElementById('fecha_fin').value = formatDate(end);
+
+            // Trigger HTMX change
+            htmx.trigger('#attendance-filter-form', 'change');
         }
     </script>
 {% endblock content %}

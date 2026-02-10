@@ -23,25 +23,25 @@
                                 <div class="flex items-center gap-4">
                                     <div class="h-10 w-10 rounded-xl flex items-center justify-center font-bold
                                         {% if item.is_absent %}bg-red-100 text-red-600{% else %}bg-slate-100 text-slate-500{% endif %}">
-                                        {% if item.is_absent %}
-                                            {{ item.nombre|first|upper }}
-                                        {% else %}
+                                        {% if item.usuario %}
                                             {{ item.usuario.nombre|first|upper }}
+                                        {% else %}
+                                            {{ item.nombre|first|upper }}
                                         {% endif %}
                                     </div>
                                     <div>
                                         <p class="text-sm font-black text-slate-900">
-                                            {% if item.is_absent %}
-                                                {{ item.nombre }} {{ item.apellido }}
-                                            {% else %}
+                                            {% if item.usuario %}
                                                 {{ item.usuario.nombre }} {{ item.usuario.apellido }}
+                                            {% else %}
+                                                {{ item.nombre }} {{ item.apellido }}
                                             {% endif %}
                                         </p>
                                         <p class="text-[10px] font-mono text-slate-400">
-                                            {% if item.is_absent %}
-                                                {{ item.dni }}
-                                            {% else %}
+                                            {% if item.usuario %}
                                                 {{ item.usuario.dni }}
+                                            {% else %}
+                                                {{ item.dni }}
                                             {% endif %}
                                         </p>
                                     </div>
@@ -55,7 +55,11 @@
                             </td>
                             <td class="px-6 py-6 text-center">
                                 {% if item.is_absent %}
-                                    <span class="text-[10px] font-black text-red-400">SIN REGISTRO</span>
+                                    {% if item.es_justificada %}
+                                         <span class="text-[10px] font-black text-indigo-400">JUSTIFICADA</span>
+                                    {% else %}
+                                         <span class="text-[10px] font-black text-red-400">SIN REGISTRO</span>
+                                    {% endif %}
                                 {% else %}
                                     <p class="text-xs font-black text-slate-700">{{ item.hora_ingreso|date:"H:i"|default:"--" }}</p>
                                     <p class="text-[9px] font-bold text-slate-400">Salida: {{ item.hora_salida|date:"H:i"|default:"--" }}</p>
@@ -94,10 +98,17 @@
                                             VALIDAR
                                         </a>
                                     {% endif %}
-                                    <a href="{% url 'descargar_reporte_usuario_pdf' item.usuario.dni %}" target="_blank"
-                                       class="h-9 w-9 flex items-center justify-center bg-slate-100 text-slate-400 rounded-lg hover:bg-primary-600 hover:text-white transition-all">
-                                        <i class="bi bi-file-earmark-pdf"></i>
-                                    </a>
+                                    {% if item.usuario %}
+                                        <a href="{% url 'descargar_reporte_usuario_pdf' item.usuario.dni %}" target="_blank"
+                                           class="h-9 w-9 flex items-center justify-center bg-slate-100 text-slate-400 rounded-lg hover:bg-primary-600 hover:text-white transition-all">
+                                            <i class="bi bi-file-earmark-pdf"></i>
+                                        </a>
+                                    {% else %}
+                                        <a href="{% url 'descargar_reporte_usuario_pdf' item.dni %}" target="_blank"
+                                           class="h-9 w-9 flex items-center justify-center bg-slate-100 text-slate-400 rounded-lg hover:bg-primary-600 hover:text-white transition-all">
+                                            <i class="bi bi-file-earmark-pdf"></i>
+                                        </a>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>
@@ -136,3 +147,4 @@
         {% endif %}
     </div>
 </div>
+{% include 'asistencia/partials/stats_metrics.html' with hx_oob=True %}
