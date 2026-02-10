@@ -6,20 +6,20 @@ class JustificacionForm(forms.ModelForm):
         model = Justificacion
         fields = ['evento', 'motivo', 'evidencia']
         widgets = {
-            'evento': forms.Select(),
+            'evento': forms.Select(attrs={'class': 'select2-searchable'}),
             'motivo': forms.Textarea(attrs={
                 'rows': 4,
-                'placeholder': 'Explica brevemente por qué no pudiste asistir...'
+                'placeholder': 'Explica brevemente por qué no pudiste asistir...',
+                'class': 'w-full px-5 py-4 bg-slate-50 border-2 border-slate-50 rounded-2xl focus:bg-white focus:border-indigo-500 outline-none transition-all font-bold text-slate-700 text-sm'
             }),
-            'evidencia': forms.ClearableFileInput(),
+            'evidencia': forms.FileInput(attrs={'class': 'w-full px-5 py-3 bg-slate-50 border-2 border-slate-50 rounded-2xl font-bold text-slate-400 text-sm'}),
         }
 
 class AdminJustificacionForm(JustificacionForm):
     usuario = forms.ModelChoiceField(
-        # Optimize queryset: only load necessary fields to reduce memory usage
         queryset=Usuario.objects.only('id', 'nombre', 'apellido', 'dni').order_by('apellido', 'nombre'),
         label='Socio a Justificar',
-        widget=forms.Select()
+        widget=forms.Select(attrs={'class': 'select2-searchable'})
     )
 
     class Meta(JustificacionForm.Meta):
@@ -29,7 +29,7 @@ class FiltroAsistenciaForm(forms.Form):
     dni = forms.CharField(required=False, label='DNI')
     fecha_inicio = forms.DateField(required=False, label='Fecha Inicio', widget=forms.DateInput(attrs={'type': 'date'}))
     fecha_fin = forms.DateField(required=False, label='Fecha Fin', widget=forms.DateInput(attrs={'type': 'date'}))
-    evento = forms.ModelChoiceField(queryset=Evento.objects.all(), required=False, label='Evento')
+    evento = forms.ModelChoiceField(queryset=Evento.objects.all().order_by('-fecha'), required=False, label='Evento')
     ubicacion = forms.ModelChoiceField(queryset=Ubicacion.objects.all(), required=False, label='Ubicación')
     confirmada = forms.ChoiceField(
         choices=[('', 'Todos'), ('true', 'Confirmada'), ('false', 'No Confirmada')],
@@ -37,7 +37,13 @@ class FiltroAsistenciaForm(forms.Form):
         label='Confirmada'
     )
     estado = forms.ChoiceField(
-        choices=[('', 'Todos'), ('asistieron', 'Asistieron'), ('faltaron', 'Faltaron')],
+        choices=[
+            ('', 'Todos'),
+            ('asistieron', 'Asistieron'),
+            ('faltaron', 'Faltaron (Todas)'),
+            ('faltas_justificadas', 'Faltas Justificadas'),
+            ('faltas_injustificadas', 'Faltas Injustificadas'),
+        ],
         required=False,
         label='Estado'
     )

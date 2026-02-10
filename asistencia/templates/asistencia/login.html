@@ -10,9 +10,15 @@
                 <div class="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -mr-20 -mt-20"></div>
                 <div class="absolute bottom-0 left-0 w-64 h-64 bg-primary-400/20 rounded-full blur-3xl -ml-20 -mb-20"></div>
                 <div class="relative z-10">
-                    <div class="h-14 w-14 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mb-8 border border-white/30">
-                        <i class="bi bi-shield-lock-fill text-2xl"></i>
-                    </div>
+                    {% if sistema_config.logo %}
+                        <div class="h-20 w-20 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mb-8 border border-white/30 overflow-hidden shadow-lg">
+                            <img src="{{ sistema_config.logo.url }}" class="h-full w-full object-cover">
+                        </div>
+                    {% else %}
+                        <div class="h-14 w-14 bg-white/20 backdrop-blur-md rounded-2xl flex items-center justify-center mb-8 border border-white/30">
+                            <i class="bi bi-shield-lock-fill text-2xl"></i>
+                        </div>
+                    {% endif %}
                     <h1 class="text-4xl lg:text-5xl font-extrabold tracking-tight mb-6 leading-tight">
                         Acceso al
                         <br>
