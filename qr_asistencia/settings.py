@@ -25,7 +25,11 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-5o5$uta6kd!9qc22e=(wx$6^kn-f1yi(n=lothp#h=hxuv+g@g')
+SECRET_KEY = os.environ.get('SECRET_KEY')
+if not SECRET_KEY and not os.environ.get('DEBUG') == 'True':
+    raise Exception("SECRET_KEY must be set in production environment.")
+elif not SECRET_KEY:
+    SECRET_KEY = 'django-insecure-fallback-only-for-dev'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
@@ -159,10 +163,19 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Configuración de sesiones
 SESSION_COOKIE_AGE = 3600
-SESSION_COOKIE_SECURE = False  # Para desarrollo local (http://127.0.0.1)
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_SSL_REDIRECT = not DEBUG
 SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SAMESITE = 'Lax'  # Permitir solicitudes AJAX
+SESSION_COOKIE_SAMESITE = 'Lax'
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+
+# Seguridad adicional para producción
+if not DEBUG:
+    SECURE_HSTS_SECONDS = 31536000 # 1 año
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
 
 CACHES = {
     'default': {
@@ -175,7 +188,7 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication',
         'rest_framework.authentication.SessionAuthentication',
-        'rest_framework.authentication.BasicAuthentication',
+        # 'rest_framework.authentication.BasicAuthentication', # Eliminado por seguridad
     ],
     'DEFAULT_PERMISSION_CLASSES': [],
     'UNAUTHENTICATED_USER': None,

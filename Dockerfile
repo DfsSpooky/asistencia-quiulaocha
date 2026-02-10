@@ -26,6 +26,7 @@ RUN apt-get update && apt-get install -y \
     libffi-dev \
     python3-dev \
     tzdata \
+    postgresql-client \
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone \
     && rm -rf /var/lib/apt/lists/*
 

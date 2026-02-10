@@ -8,7 +8,7 @@ from .views import (
     solicitar_justificacion, admin_solicitar_justificacion,
     ListEventosActivos, ListUbicaciones, ListDentroEvento, buscar_usuario_dni, SystemConfigView,
     descargar_todos_carnets_pdf, descargar_reporte_global_pdf, descargar_reporte_filtrado_pdf,
-    exportar_reporte_global_excel
+    exportar_reporte_global_excel, descargar_backup, restaurar_backup
 )
 from rest_framework.authtoken.views import obtain_auth_token
 
@@ -42,5 +42,7 @@ urlpatterns = [
     path('descargar-reporte-global/', descargar_reporte_global_pdf, name='descargar_reporte_global_pdf'),
     path('exportar-reporte-global-excel/', exportar_reporte_global_excel, name='exportar_reporte_global_excel'),
     path('descargar-reporte-filtrado/', descargar_reporte_filtrado_pdf, name='descargar_reporte_filtrado_pdf'),
+    path('sistema/backup/descargar/', descargar_backup, name='descargar_backup'),
+    path('sistema/backup/restaurar/', restaurar_backup, name='restaurar_backup'),
     path('api/buscar-usuario-dni/', buscar_usuario_dni, name='buscar_usuario_dni'),
 ]

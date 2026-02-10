@@ -34,6 +34,11 @@ from .utils.reports import (
     generate_attendance_csv, generate_attendance_excel, 
     generate_pdf_report, get_logo_base64, get_filtered_attendance_data
 )
+from django.core.management import call_command
+import os
+import subprocess
+import shutil
+import tarfile
 
 def landing_page(request):
     """
@@ -415,6 +420,7 @@ class SystemConfigView(APIView):
         return Response(data)
 
 @login_required
+@permission_required('asistencia.can_manage_users', raise_exception=True)
 def historial_asistencias(request):
     """
     Vista remodelada para centrarse en Evento y Estados (Asistieron/Faltaron).
@@ -561,6 +567,141 @@ def descargar_reporte_global_pdf(request):
     )
     
     return generate_pdf_report('asistencia/reporte_global_anual.html', context, f"reporte_global_{datetime.now().year}.pdf")
+
+@login_required
+@permission_required('asistencia.can_manage_users', raise_exception=True)
+def descargar_backup(request):
+    """
+    Genera y descarga un backup completo (DB + Media).
+    Solo para superusuarios por seguridad.
+    """
+    if not request.user.is_superuser:
+        messages.error(request, "Solo los superusuarios pueden generar copias de seguridad.")
+        return redirect('dashboard')
+    
+    try:
+        # El comando 'backup_db' retorna la ruta absoluta del archivo generado
+        from django.core.management import call_command
+        from io import StringIO
+        out = StringIO()
+        # Capturamos el path del archivo desde el comando (modificado para retornar path)
+        # Nota: He modificado el comando en el paso anterior para que retorne el path.
+        from asistencia.management.commands.backup_db import Command as BackupCommand
+        cmd = BackupCommand()
+        file_path = cmd.handle()
+        
+        if file_path and os.path.exists(file_path):
+            with open(file_path, 'rb') as f:
+                response = HttpResponse(f.read(), content_type="application/x-gzip")
+                response['Content-Disposition'] = f'attachment; filename="{os.path.basename(file_path)}"'
+                
+                # Opcional: registrar acción
+                LogAccion.objects.create(
+                    usuario=request.user,
+                    accion="Generar Backup",
+                    descripcion=f"{request.user.username} generó y descargó una copia de seguridad."
+                )
+                return response
+        else:
+            messages.error(request, "Error al generar el archivo de backup.")
+            
+    except Exception as e:
+        messages.error(request, f"Error inesperado al generar backup: {str(e)}")
+        
+    return redirect('dashboard')
+
+@login_required
+@permission_required('asistencia.can_manage_users', raise_exception=True)
+def restaurar_backup(request):
+    """
+    Restaura el sistema (DB + Media) desde un archivo subido.
+    Solo superusuarios.
+    """
+    if not request.user.is_superuser:
+        messages.error(request, "Solo superusuarios pueden restaurar backups.")
+        return redirect('dashboard')
+
+    if request.method == 'POST' and request.FILES.get('backup_file'):
+        backup_file = request.FILES['backup_file']
+        
+        if not backup_file.name.endswith('.tar.gz'):
+            messages.error(request, "El archivo debe ser un .tar.gz válido.")
+            return redirect('dashboard')
+
+        # Directorio temporal para la restauración
+        temp_restore_root = os.path.join(settings.BASE_DIR, 'temp_restore_web')
+        if os.path.exists(temp_restore_root):
+            shutil.rmtree(temp_restore_root)
+        os.makedirs(temp_restore_root)
+
+        archive_path = os.path.join(temp_restore_root, 'uploaded_backup.tar.gz')
+        
+        # Guardar archivo subido
+        with open(archive_path, 'wb+') as f:
+            for chunk in backup_file.chunks():
+                f.write(chunk)
+
+        try:
+            # 1. Extraer el tar.gz principal
+            with tarfile.open(archive_path, "r:gz") as tar:
+                tar.extractall(path=temp_restore_root)
+            
+            # Buscar el directorio interno que contiene database.sql
+            # El tar.gz suele tener una estructura: backup_name/database.sql
+            internal_dirs = [d for d in os.listdir(temp_restore_root) if os.path.isdir(os.path.join(temp_restore_root, d))]
+            if not internal_dirs:
+                raise Exception("Estructura de backup inválida.")
+            
+            extract_path = os.path.join(temp_restore_root, internal_dirs[0])
+            sql_file = os.path.join(extract_path, 'database.sql')
+            media_tar = os.path.join(extract_path, 'media.tar.gz')
+
+            if not os.path.exists(sql_file):
+                raise Exception("No se encontró database.sql en el backup.")
+
+            # 2. Restaurar Base de Datos (usando psql directamente)
+            db_conf = settings.DATABASES['default']
+            env = os.environ.copy()
+            env['PGPASSWORD'] = db_conf['PASSWORD']
+            
+            # Nota: El psql restaurará sobre la DB actual.
+            # No podemos 'dropear' la DB mientras estamos conectados, pero podemos sobreescribir esquemas 
+            # o simplemente importar. El pg_dump del comando anterior no usa --clean, 
+            # así que lo mejor es importar.
+            
+            subprocess.run([
+                'psql',
+                '-h', db_conf['HOST'],
+                '-p', str(db_conf['PORT']),
+                '-U', db_conf['USER'],
+                '-d', db_conf['NAME'],
+                '-f', sql_file
+            ], env=env, check=True)
+
+            # 3. Restaurar Media
+            if os.path.exists(media_tar):
+                media_root = settings.MEDIA_ROOT
+                if os.path.exists(media_root):
+                    shutil.rmtree(media_root)
+                
+                with tarfile.open(media_tar, "r:gz") as mt:
+                    # El media_tar contiene 'media/' como top level
+                    mt.extractall(path=settings.BASE_DIR)
+
+            messages.success(request, "¡Sistema restaurado exitosamente!")
+            
+            LogAccion.objects.create(
+                usuario=request.user,
+                accion="Restaurar Backup",
+                descripcion=f"{request.user.username} restauró el sistema desde {backup_file.name}."
+            )
+
+        except Exception as e:
+            messages.error(request, f"Error en restauración: {str(e)}")
+        finally:
+            shutil.rmtree(temp_restore_root)
+
+    return redirect('dashboard')
 
 @login_required
 @permission_required('asistencia.can_manage_users', raise_exception=True)
