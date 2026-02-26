@@ -1,0 +1,352 @@
+{% load tz %}
+
+<!DOCTYPE html>
+<html lang="es">
+    <head>
+        <meta charset="UTF-8">
+        <title>Reporte Filtrado de Asistencias</title>
+        <style>
+            @page {
+                size: A4;
+                margin: 1.5cm;
+            }
+
+            body {
+                font-family: 'Inter', 'Helvetica', 'Arial', sans-serif;
+                color: #0f172a;
+                line-height: 1.4;
+                margin: 0;
+                padding: 0;
+            }
+
+            .header {
+                border-bottom: 3px solid #6366f1;
+                padding-bottom: 20px;
+                margin-bottom: 30px;
+                display: block;
+                width: 100%;
+            }
+
+            .logo-box {
+                float: right;
+                text-align: right;
+            }
+
+            .logo-box img {
+                max-height: 70px;
+            }
+
+            .company-name {
+                font-size: 26px;
+                font-weight: bold;
+                color: #1e1b4b;
+                margin: 0;
+                letter-spacing: -0.5px;
+            }
+
+            .report-subtitle {
+                font-size: 13px;
+                font-weight: bold;
+                color: #6366f1;
+                text-transform: uppercase;
+                letter-spacing: 1.5px;
+                margin-top: 4px;
+            }
+
+            .filter-banner {
+                background: #312e81;
+                color: white;
+                padding: 30px;
+                border-radius: 24px;
+                margin-bottom: 35px;
+                box-shadow: 0 15px 30px -5px rgba(49, 46, 129, 0.2);
+            }
+
+            .stats-grid {
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 15px;
+                margin-top: 20px;
+            }
+
+            .stats-card {
+                background: rgba(255, 255, 255, 0.1);
+                color: white;
+                padding: 15px;
+                text-align: center;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 12px;
+            }
+
+            .stats-num {
+                font-size: 24px;
+                font-weight: 800;
+                color: #ffffff;
+                display: block;
+                margin-bottom: 5px;
+            }
+
+            .stats-label {
+                font-size: 9px;
+                font-weight: 800;
+                color: #c7d2fe;
+                text-transform: uppercase;
+            }
+
+            .filter-info {
+                font-size: 11px;
+                color: #e2e8f0;
+                margin-top: 15px;
+                padding: 15px;
+                background: rgba(0, 0, 0, 0.2);
+                border-radius: 12px;
+                border-left: 4px solid #facc15;
+            }
+
+            .filter-item {
+                display: inline-block;
+                margin-right: 20px;
+                margin-bottom: 5px;
+            }
+
+            .filter-label {
+                color: #facc15;
+                font-weight: 800;
+                margin-right: 5px;
+            }
+
+            h2 {
+                font-size: 16px;
+                color: #334155;
+                border-bottom: 2px solid #e2e8f0;
+                padding-bottom: 8px;
+                margin-top: 40px;
+                margin-bottom: 15px;
+                font-weight: bold;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 20px;
+                border: 1px solid #e2e8f0;
+            }
+
+            th {
+                background-color: #4f46e5;
+                color: white;
+                font-size: 10px;
+                font-weight: 800;
+                text-align: left;
+                text-transform: uppercase;
+                letter-spacing: 0.05em;
+                padding: 15px 12px;
+                border-bottom: 2px solid #3730a3;
+            }
+
+            td {
+                padding: 12px;
+                font-size: 11px;
+                border-bottom: 1px solid #f1f5f9;
+                vertical-align: middle;
+            }
+
+            tr:nth-child(even) {
+                background-color: #f8fafc;
+            }
+
+            .badge {
+                font-size: 9px;
+                font-weight: bold;
+                padding: 2px 4px;
+                text-transform: uppercase;
+            }
+
+            .badge-success {
+                background-color: #dcfce7;
+                color: #166534;
+            }
+
+            .badge-danger {
+                background-color: #fee2e2;
+                color: #991b1b;
+            }
+
+            .badge-info {
+                background-color: #e0e7ff;
+                color: #3730a3;
+            }
+
+            .badge-warning {
+                background-color: #fef3c7;
+                color: #92400e;
+            }
+
+            .footer {
+                position: fixed;
+                bottom: 0;
+                width: 100%;
+                text-align: center;
+                font-size: 9px;
+                color: #94a3b8;
+                border-top: 1px solid #f1f5f9;
+                padding-top: 15px;
+            }
+
+            .clear {
+                clear: both;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <div class="logo-box">
+                {% if logo_base64 %}<img src="data:image/png;base64,{{ logo_base64 }}" alt="Logo">{% endif %}
+            </div>
+            <h1 class="company-name">{{ sistema_config.nombre_institucion|default:"CONTROL DE ASISTENCIA" }}</h1>
+            <p class="report-subtitle">Reporte Personalizado con Filtros</p>
+        </div>
+
+        <div class="filter-banner">
+            <div style="font-size: 14px; font-weight: 800; color: #c7d2fe; text-transform: uppercase; margin-bottom: 15px;">
+                📋 Reporte Generado
+            </div>
+            <div style="font-size: 20px; font-weight: 800; color: white; margin-bottom: 5px;">
+                Vista Personalizada de Asistencias
+            </div>
+            <div style="font-size: 11px; color: #c7d2fe;">
+                Reporte generado el {{ current_date }}
+            </div>
+
+            <div class="stats-grid" style="grid-template-columns: repeat(5, 1fr);">
+                <div class="stats-card">
+                    <span class="stats-num">{{ total_registros }}</span>
+                    <span class="stats-label">Padrón</span>
+                </div>
+                <div class="stats-card">
+                    <span class="stats-num" style="color: #86efac">{{ confirmadas }}</span>
+                    <span class="stats-label">Presentes</span>
+                </div>
+                <div class="stats-card">
+                    <span class="stats-num" style="color: #c7d2fe">{{ justificadas }}</span>
+                    <span class="stats-label">Justificadas</span>
+                </div>
+                <div class="stats-card">
+                    <span class="stats-num" style="color: #fca5a5">{{ inasistencias }}</span>
+                    <span class="stats-label">Faltas Reales</span>
+                </div>
+                <div class="stats-card">
+                    <span class="stats-num" style="color: #fde047">{{ pendientes }}</span>
+                    <span class="stats-label">Pendientes</span>
+                </div>
+            </div>
+
+            <div class="filter-info">
+                <div style="font-weight: 800; margin-bottom: 10px;">⚙️ FILTROS APLICADOS:</div>
+                <div class="filter-item">
+                    <span class="filter-label">Evento:</span>
+                    <span>{{ filtros.evento }}</span>
+                </div>
+                <div class="filter-item">
+                    <span class="filter-label">Estado:</span>
+                    <span>{{ filtros.estado }}</span>
+                </div>
+                <div class="filter-item">
+                    <span class="filter-label">DNI:</span>
+                    <span>{{ filtros.dni }}</span>
+                </div>
+                <div class="filter-item">
+                    <span class="filter-label">Ubicación:</span>
+                    <span>{{ filtros.ubicacion }}</span>
+                </div>
+                <div class="filter-item">
+                    <span class="filter-label">Desde:</span>
+                    <span>{{ filtros.fecha_inicio }}</span>
+                </div>
+                <div class="filter-item">
+                    <span class="filter-label">Hasta:</span>
+                    <span>{{ filtros.fecha_fin }}</span>
+                </div>
+            </div>
+        </div>
+
+        <h2>
+            <span style="color: #6366f1;">●</span> Registros ({{ unified_list|length }})
+        </h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Socio / Titular</th>
+                    <th>DNI</th>
+                    <th>Fecha</th>
+                    <th>Evento</th>
+                    <th>Ingreso</th>
+                    <th>Salida</th>
+                    <th>Estado</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in unified_list %}
+                    <tr {% if item.is_absent %}style="background-color: #fef2f2;"{% endif %}>
+                        <td>
+                            <strong {% if item.is_absent %}style="color: #dc2626;"{% endif %}>
+                                {% if item.usuario %}
+                                    {{ item.usuario.nombre }} {{ item.usuario.apellido }}
+                                {% else %}
+                                    {{ item.nombre }} {{ item.apellido }}
+                                {% endif %}
+                            </strong>
+                        </td>
+                        <td>
+                            <code style="background: #f1f5f9; padding: 2px 4px; border-radius: 3px;">
+                                {% if item.usuario %}
+                                    {{ item.usuario.dni }}
+                                {% else %}
+                                    {{ item.dni }}
+                                {% endif %}
+                            </code>
+                        </td>
+                        <td>{{ item.fecha|date:"d/m/Y" }}</td>
+                        <td style="font-size: 9px;">{{ item.evento.nombre|default:"General" }}</td>
+                        {% if item.es_justificada %}
+                            <td colspan="2" style="text-align: center;">
+                                <span style="color: #6366f1; font-weight: 800; font-size: 10px; padding: 4px 8px; background: #e0e7ff; border-radius: 4px;">JUSTIFICADA</span>
+                            </td>
+                        {% elif item.is_absent %}
+                            <td colspan="2" style="text-align: center;">
+                                <span style="color: #dc2626; font-weight: 800; font-size: 10px; padding: 4px 8px; background: #fee2e2; border-radius: 4px;">AUSENTE</span>
+                            </td>
+                        {% else %}
+                            <td style="color: #166534; font-weight: 600;">{{ item.hora_ingreso|date:"H:i"|default:"--" }}</td>
+                            <td style="color: #9a3412; font-weight: 600;">{{ item.hora_salida|date:"H:i"|default:"--" }}</td>
+                        {% endif %}
+                        <td>
+                            {% if item.es_justificada %}
+                                <span class="badge badge-info">JUSTIFICADA</span>
+                            {% elif item.is_absent %}
+                                <span class="badge badge-danger">FALTÓ</span>
+                            {% elif item.hora_salida or item.usuario.estado == 'EXONERADO' %}
+                                <span class="badge badge-success">ASISTIÓ</span>
+                            {% else %}
+                                <span class="badge badge-warning">PENDIENTE</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="7"
+                            style="text-align: center;
+                                   padding: 40px;
+                                   color: #94a3b8;
+                                   font-style: italic">No se encontraron registros con los filtros aplicados.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div class="footer">
+            Documento oficial generado por el Sistema de Padron Quiulacocha. Reservados todos los derechos.
+        </div>
+    </body>
+</html>

@@ -16,6 +16,8 @@ import mimetypes
 mimetypes.add_type("text/css", ".css", True)
 mimetypes.add_type("application/javascript", ".js", True)
 
+import os
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -23,22 +25,23 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-5o5$uta6kd!9qc22e=(wx$6^kn-f1yi(n=lothp#h=hxuv+g@g'
+SECRET_KEY = os.environ.get('SECRET_KEY')
+if not SECRET_KEY and not os.environ.get('DEBUG') == 'True':
+    raise Exception("SECRET_KEY must be set in production environment.")
+elif not SECRET_KEY:
+    SECRET_KEY = 'django-insecure-fallback-only-for-dev'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = [
-    'oversophisticated-dedra-overgross.ngrok-free.dev',
-    'localhost',
-    '127.0.0.1',
-    '.ngrok-free.dev'
-]
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS.extend(['quiulacocha.theworkpc.com', 'www.quiulacocha.theworkpc.com', 'oversophisticated-dedra-overgross.ngrok-free.dev', '.ngrok-free.dev'])
 
-# CSRF Trusted Origins for Ngrok
-CSRF_TRUSTED_ORIGINS = [
-    'https://oversophisticated-dedra-overgross.ngrok-free.dev'
-]
+# CSRF Trusted Origins
+CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', 'http://localhost,http://127.0.0.1,https://quiulacocha.theworkpc.com').split(',')
+
+# Configuración para Proxy Inverso (Nginx/HestiaCP)
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 # Application definition
 
@@ -54,6 +57,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'widget_tweaks',
+    'axes',  # Protección contra fuerza bruta
 ]
 
 MIDDLEWARE = [
@@ -64,6 +68,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'axes.middleware.AxesMiddleware',  # Debe ir después de AuthenticationMiddleware
 ]
 
 ROOT_URLCONF = 'qr_asistencia.urls'
@@ -95,6 +100,22 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
+POSTGRES_DB = os.environ.get('POSTGRES_DB')
+POSTGRES_USER = os.environ.get('POSTGRES_USER')
+POSTGRES_PASSWORD = os.environ.get('POSTGRES_PASSWORD')
+POSTGRES_HOST = os.environ.get('POSTGRES_HOST')
+POSTGRES_PORT = os.environ.get('POSTGRES_PORT')
+
+if all([POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST, POSTGRES_PORT]):
+    DATABASES['default'] = {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': POSTGRES_DB,
+        'USER': POSTGRES_USER,
+        'PASSWORD': POSTGRES_PASSWORD,
+        'HOST': POSTGRES_HOST,
+        'PORT': POSTGRES_PORT,
+    }
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -142,10 +163,19 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Configuración de sesiones
 SESSION_COOKIE_AGE = 3600
-SESSION_COOKIE_SECURE = False  # Para desarrollo local (http://127.0.0.1)
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_SSL_REDIRECT = not DEBUG
 SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SAMESITE = 'Lax'  # Permitir solicitudes AJAX
+SESSION_COOKIE_SAMESITE = 'Lax'
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+
+# Seguridad adicional para producción
+if not DEBUG:
+    SECURE_HSTS_SECONDS = 31536000 # 1 año
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
 
 CACHES = {
     'default': {
@@ -158,10 +188,19 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework.authentication.TokenAuthentication',
         'rest_framework.authentication.SessionAuthentication',
-        'rest_framework.authentication.BasicAuthentication',
+        # 'rest_framework.authentication.BasicAuthentication', # Eliminado por seguridad
     ],
     'DEFAULT_PERMISSION_CLASSES': [],
     'UNAUTHENTICATED_USER': None,
+    # Throttling (Rate Limiting)
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '100/hour',   # Usuarios anónimos: 100 requests por hora
+        'user': '1000/hour',  # Usuarios autenticados: 1000 requests por hora
+    },
 }
 
 LOGIN_URL = '/login/'
@@ -239,3 +278,24 @@ JAZZMIN_UI_TWEAKS = {
         "success": "btn-success"
     }
 }
+
+# ============================================
+# CONFIGURACIÓN DE DJANGO-AXES (Seguridad Login)
+# ============================================
+
+# Backend de autenticación (axes debe ir primero)
+AUTHENTICATION_BACKENDS = [
+    'axes.backends.AxesStandaloneBackend',  # Axes debe ir primero
+    'django.contrib.auth.backends.ModelBackend',
+]
+
+# Configuración de Axes
+AXES_FAILURE_LIMIT = 5  # Número de intentos fallidos antes de bloquear
+AXES_COOLOFF_TIME = 1  # Tiempo de bloqueo en horas (1 hora)
+# AXES_LOCK_OUT_BY_COMBINATION_USER_AND_IP = True  # Deprecated
+AXES_LOCKOUT_PARAMETERS = ["username", "ip_address"]  # Bloquear por usuario + IP (Nueva configuración)
+AXES_RESET_ON_SUCCESS = True  # Resetear contador al login exitoso
+AXES_LOCKOUT_TEMPLATE = None  # Usar mensaje de error por defecto
+AXES_VERBOSE = True  # Logs detallados
+AXES_ENABLE_ADMIN = True  # Habilitar en admin de Django
+

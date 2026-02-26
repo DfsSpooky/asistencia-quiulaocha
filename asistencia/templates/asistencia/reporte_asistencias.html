@@ -228,11 +228,15 @@
             <div class="stats-grid">
                 <div class="stats-card">
                     <div class="stats-num">{{ total_asistentes }}</div>
-                    <div class="stats-label">Asistentes</div>
+                    <div class="stats-label">Presentes*</div>
+                </div>
+                <div class="stats-card">
+                    <div class="stats-num" style="color: #c7d2fe">{{ justificadas|default:"0" }}</div>
+                    <div class="stats-label">Justificadas</div>
                 </div>
                 <div class="stats-card">
                     <div class="stats-num" style="color: #fca5a5">{{ total_inasistentes }}</div>
-                    <div class="stats-label">Faltaron</div>
+                    <div class="stats-label">Faltas Reales</div>
                 </div>
                 <div class="stats-card">
                     <div class="stats-num">{{ porcentaje_asistencia|floatformat:1 }}%</div>
@@ -258,8 +262,8 @@
             </div>
             <div class="clear"></div>
         </div>
-        {% if asistencias %}
-            <h2>Registros de Asistencia</h2>
+        {% if unified_list %}
+            <h2>Registros de Actividad</h2>
             <table>
                 <thead>
                     <tr>
@@ -268,81 +272,71 @@
                         <th>Fecha</th>
                         <th>Ingreso</th>
                         <th>Salida</th>
-                        <th>Lugar</th>
-                        <th>Conf.</th>
+                        <th>Evento / Lugar</th>
+                        <th>Estado</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for asistencia in asistencias %}
-                        <tr>
+                    {% for item in unified_list %}
+                        <tr {% if item.is_absent %}style="background-color: #fef2f2;"{% endif %}>
                             <td>
-                                <strong>{{ asistencia.usuario.nombre }} {{ asistencia.usuario.apellido }}</strong>
-                            </td>
-                            <td>
-                                <code style="background: #f1f5f9; padding: 2px 4px; border-radius: 3px;">{{ asistencia.usuario.dni }}</code>
-                            </td>
-                            <td>{{ asistencia.fecha|date:"d/m/Y" }}</td>
-                            <td style="color: #166534; font-weight: 700;">{{ asistencia.hora_ingreso|time:"H:i"|default:"--" }}</td>
-                            <td style="color: #9a3412; font-weight: 700;">{{ asistencia.hora_salida|time:"H:i"|default:"--" }}</td>
-                            <td>{{ asistencia.ubicacion.nombre|default:"General" }}</td>
-                            <td style="text-align: center;">
-                                {% if asistencia.es_justificada %}
-                                    {% if asistencia.evidencia_url %}
-                                        <a href="{{ request.scheme }}://{{ request.get_host }}{{ asistencia.evidencia_url }}"
-                                           target="_blank"
-                                           class="status-badge"
-                                           style="background-color: #e0e7ff;
-                                                  color: #3730a3;
-                                                  text-decoration: none">JUSTIFICADA</a>
+                                <strong style="{% if item.is_absent %}color: #dc2626;{% endif %}">
+                                    {% if item.usuario %}
+                                        {{ item.usuario.nombre }} {{ item.usuario.apellido }}
                                     {% else %}
-                                        <span class="status-badge"
-                                              style="background-color: #e0e7ff;
-                                                     color: #3730a3">JUSTIFICADA</span>
+                                        {{ item.nombre }} {{ item.apellido }}
                                     {% endif %}
+                                </strong>
+                            </td>
+                            <td>
+                                <code style="background: #f1f5f9; padding: 2px 4px; border-radius: 3px;">
+                                    {% if item.usuario %}
+                                        {{ item.usuario.dni }}
+                                    {% else %}
+                                        {{ item.dni }}
+                                    {% endif %}
+                                </code>
+                            </td>
+                            <td>{{ item.fecha|date:"d/m/Y" }}</td>
+                            
+                            {% if item.is_absent %}
+                                <td colspan="2" style="text-align: center;">
+                                    <span style="color: #dc2626; font-weight: 800; font-size: 10px; padding: 4px 8px; background: #fee2e2; border-radius: 4px;">AUSENTE</span>
+                                </td>
+                            {% else %}
+                                <td style="color: #166534; font-weight: 700;">{{ item.hora_ingreso|time:"H:i"|default:"--" }}</td>
+                                <td style="color: #9a3412; font-weight: 700;">{{ item.hora_salida|time:"H:i"|default:"--" }}</td>
+                            {% endif %}
+                            
+                            <td>
+                                {% if item.is_absent %}
+                                    <span style="font-size: 9px; color: #dc2626;">Faltó: {{ item.evento.nombre }}</span>
                                 {% else %}
-                                    <span class="status-badge
-                                                 {% if asistencia.confirmada %}
-                                                     status-yes
-                                                 {% else %}
-                                                     status-no
-                                                 {% endif %}">{{ asistencia.confirmada|yesno:"SÍ,NO" }}</span>
+                                    <div>{{ item.evento.nombre|default:"Operación" }}</div>
+                                    <div style="font-size: 8px; color: #64748b;">{{ item.ubicacion.nombre|default:"General" }}</div>
+                                {% endif %}
+                            </td>
+                            
+                            <td style="text-align: center;">
+                                {% if item.is_absent %}
+                                    <span style="font-size: 12px; color: #dc2626;">✕</span>
+                                {% elif item.es_justificada %}
+                                     <span class="status-badge" style="background-color: #e0e7ff; color: #3730a3">JUSTIF.</span>
+                                {% elif item.hora_salida or (item.usuario and item.usuario.estado == 'EXONERADO') %}
+                                    <span class="status-badge status-yes">
+                                        ASISTIÓ
+                                    </span>
+                                {% else %}
+                                    <span class="status-badge status-no" style="background-color: #fef3c7; color: #92400e;">
+                                        PENDIENTE
+                                    </span>
                                 {% endif %}
                             </td>
                         </tr>
                     {% endfor %}
                 </tbody>
             </table>
-        {% endif %}
-        {% if no_asistentes %}
-            <h2>Inasistencias Reportadas</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>Socio / Titular</th>
-                        <th>DNI</th>
-                        <th>Estado en Sistema</th>
-                        <th>Referencia</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for usuario in no_asistentes %}
-                        <tr>
-                            <td>
-                                <strong>{{ usuario.nombre }} {{ usuario.apellido }}</strong>
-                            </td>
-                            <td>
-                                <code style="background: #f1f5f9; padding: 2px 4px; border-radius: 3px;">{{ usuario.dni }}</code>
-                            </td>
-                            <td>{{ usuario.get_estado_display }}</td>
-                            <td>
-                                <span class="status-badge status-no">FALTÓ</span>
-                            </td>
-                        </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        {% endif %}
-        {% if not asistencias and not no_asistentes %}
+        {% else %}
             <div style="text-align: center;
                         padding: 100px;
                         color: #94a3b8;
