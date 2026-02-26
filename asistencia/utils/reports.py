@@ -65,6 +65,11 @@ def get_filtered_attendance_data(filters):
     if estado == 'asistieron':
         asistencias = asistencias_regulares
         usuarios_no_asistentes = None
+    elif estado == 'pendientes':
+        # Pendientes: Tienen ingreso pero NO tiene salida
+        # Pendientes: Tienen ingreso pero NO tiene salida (y NO son exonerados)
+        asistencias = asistencias.filter(hora_salida__isnull=True).exclude(usuario__estado='EXONERADO')
+        usuarios_no_asistentes = None
     elif estado in ['faltaron', 'faltas_justificadas', 'faltas_injustificadas']:
         if estado == 'faltaron':
             # Faltas = Faltas Justificadas (registros) + Faltas Totales (sin registro)
@@ -98,7 +103,7 @@ def get_filtered_attendance_data(filters):
             
             # Base de inasistentes (excluyendo a los que tienen CUALQUIER registro)
             base_inasistentes = Usuario.objects.filter(
-                estado=Usuario.ESTADO_ACTIVO
+                estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_EXONERADO, Usuario.ESTADO_PASIVO]
             ).exclude(id__in=asistentes_ids)
             
             if dni:
@@ -162,7 +167,7 @@ def get_filtered_attendance_data(filters):
             ).values_list('usuario_id', flat=True)
             
             usuarios_no_asistentes_base = Usuario.objects.filter(
-                estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_EXONERADO]
+                estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_EXONERADO, Usuario.ESTADO_PASIVO]
             ).exclude(id__in=asistentes_ids)
             
             if dni:
@@ -242,6 +247,12 @@ def generate_attendance_csv(unified_list):
             ])
         else:
             # Registro de asistencia
+            # Registro de asistencia
+            # Exonerados siempre ASISTIÓ si tienen registro, otros dependen de salida
+            if item.usuario.estado == 'EXONERADO':
+                estado = 'ASISTIÓ'
+            else:
+                estado = 'ASISTIÓ' if item.hora_salida else 'PENDIENTE'
             writer.writerow([
                 f"{item.usuario.nombre} {item.usuario.apellido}",
                 item.usuario.dni,
@@ -250,7 +261,7 @@ def generate_attendance_csv(unified_list):
                 item.hora_salida.strftime('%H:%M') if item.hora_salida else 'No registrado',
                 item.ubicacion.nombre if item.ubicacion else 'Sin ubicación',
                 item.evento.nombre if item.evento else 'Sin evento',
-                'ASISTIÓ',
+                estado,
                 'Sí' if item.confirmada else 'No'
             ])
     return response
@@ -310,6 +321,11 @@ def generate_attendance_excel(unified_list, filename="asistencias.xlsx"):
                     cell.font = Font(bold=True, color="DC2626")
         else:
             # Registro de asistencia
+            # Registro de asistencia
+            if item.usuario.estado == 'EXONERADO':
+                estado = 'ASISTIÓ'
+            else:
+                estado = 'ASISTIÓ' if item.hora_salida else 'PENDIENTE'
             data = [
                 f"{item.usuario.nombre} {item.usuario.apellido}",
                 item.usuario.dni,
@@ -318,7 +334,7 @@ def generate_attendance_excel(unified_list, filename="asistencias.xlsx"):
                 item.hora_salida.strftime('%H:%M') if item.hora_salida else '--',
                 item.ubicacion.nombre if item.ubicacion else 'General',
                 item.evento.nombre if item.evento else 'Sin evento',
-                'ASISTIÓ',
+                estado,
                 'SÍ' if item.confirmada else 'NO'
             ]
             for col, value in enumerate(data, 1):
@@ -531,12 +547,20 @@ def generate_global_attendance_excel(report_data, system_config):
             status_text = "ASISTIÓ"
             if rec['is_absent']:
                 status_text = "JUSTIFICADA" if rec['es_justificada'] else "FALTA"
+            elif not rec.get('hora_salida'):
+                # Si es exonerado, se considera asistencia completa
+                if rec['usuario'].estado == 'EXONERADO':
+                    status_text = "ASISTIÓ"
+                else:
+                    status_text = "PENDIENTE"
             
             cell_status = ws_detail.cell(row=curr_row, column=4, value=status_text)
             if status_text == "FALTA":
                 cell_status.font = Font(color="DC2626", bold=True)
             elif status_text == "JUSTIFICADA":
                 cell_status.font = Font(color="4F46E5", bold=True)
+            elif status_text == "PENDIENTE":
+                cell_status.font = Font(color="D97706", bold=True) # Amber/Orange for PENDING
             else:
                 cell_status.font = Font(color="059669", bold=True)
                 

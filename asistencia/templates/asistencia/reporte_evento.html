@@ -196,6 +196,11 @@
                 color: #3730a3;
             }
 
+            .badge-warning {
+                background-color: #fef3c7;
+                color: #92400e;
+            }
+
             .footer {
                 position: fixed;
                 bottom: 0;
@@ -233,6 +238,10 @@
                 <div class="stats-card">
                     <div class="stats-num">{{ total_asistentes }}</div>
                     <div class="stats-label">Presentes*</div>
+                </div>
+                <div class="stats-card">
+                    <div class="stats-num" style="color: #fcd34d">{{ pendientes|default:"0" }}</div>
+                    <div class="stats-label">Pendientes</div>
                 </div>
                 <div class="stats-card">
                     <div class="stats-num" style="color: #c7d2fe">{{ justificadas|default:"0" }}</div>
@@ -323,8 +332,10 @@
                                 <span class="badge badge-info">JUSTIFICADA</span>
                             {% elif item.is_absent %}
                                 <span class="badge badge-danger">FALTÓ</span>
-                            {% else %}
+                            {% elif item.hora_salida or item.usuario.estado == 'EXONERADO' %}
                                 <span class="badge badge-success">ASISTIÓ</span>
+                            {% else %}
+                                <span class="badge badge-warning">PENDIENTE</span>
                             {% endif %}
                         </td>
                     </tr>

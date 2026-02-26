@@ -6,4 +6,4 @@ services:
       - DEBUG=True
     # Mapeamos el puerto para verlo en http://localhost:8000
     ports:
-      - "8000:8000"
+      - "8001:8000"

@@ -477,7 +477,7 @@
                             {% else %}
                                 <span class="badge badge-danger">FALTÓ</span>
                             {% endif %}
-                        {% elif item.confirmada %}
+                        {% elif item.hora_salida or item.usuario.estado == 'EXONERADO' %}
                             <span class="badge badge-success">ASISTIÓ</span>
                         {% else %}
                             <span class="badge badge-warning">PENDIENTE</span>
@@ -524,7 +524,7 @@
                                 <span class="badge badge-info">JUSTIFICADA</span>
                             {% elif item.is_absent %}
                                 <span class="badge badge-danger">FALTÓ</span>
-                            {% elif item.confirmada %}
+                            {% elif item.hora_salida or item.usuario.estado == 'EXONERADO' %}
                                 <span class="badge badge-success">ASISTIÓ</span>
                             {% else %}
                                 <span class="badge badge-warning">PENDIENTE</span>

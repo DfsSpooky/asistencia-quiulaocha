@@ -231,6 +231,8 @@
                             <span class="badge badge-info">JUSTIFICADA</span>
                         {% elif item.is_absent %}
                             <span class="badge badge-danger">FALTÓ</span>
+                        {% elif not item.hora_salida and item.usuario.estado != 'EXONERADO' %}
+                            <span class="badge" style="background-color: #fef3c7; color: #92400e;">PENDIENTE</span>
                         {% else %}
                             <span class="badge badge-success">ASISTIÓ</span>
                         {% endif %}

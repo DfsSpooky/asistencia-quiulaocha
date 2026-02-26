@@ -40,6 +40,7 @@ class FiltroAsistenciaForm(forms.Form):
         choices=[
             ('', 'Todos'),
             ('asistieron', 'Asistieron'),
+            ('pendientes', 'Pendientes (Sin Salida)'),
             ('faltaron', 'Faltaron (Todas)'),
             ('faltas_justificadas', 'Faltas Justificadas'),
             ('faltas_injustificadas', 'Faltas Injustificadas'),

@@ -57,7 +57,7 @@ def landing_page(request):
 @permission_required('asistencia.can_manage_users', raise_exception=True)
 def dashboard(request):
     total_comunidad = Usuario.objects.count()
-    padron_activo = Usuario.objects.filter(estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_EXONERADO]).count()
+    padron_activo = Usuario.objects.filter(estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_EXONERADO, Usuario.ESTADO_PASIVO]).count()
     asistencias_hoy = Asistencia.objects.filter(fecha=date.today()).count()
     eventos_activos = Evento.objects.filter(activo=True).count()
     
@@ -461,10 +461,23 @@ def historial_asistencias(request):
     
     total_registros = len(unified_list)
     # Mutuamente excluyentes:
-    confirmadas = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and getattr(item, 'confirmada', False))
+    confirmadas = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and (getattr(item, 'hora_salida', None) or item.usuario.estado == 'EXONERADO'))
     justificadas = sum(1 for item in unified_list if getattr(item, 'es_justificada', False))
     inasistencias = sum(1 for item in unified_list if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False))
-    pendientes = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and not getattr(item, 'confirmada', False))
+    pendientes = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and not getattr(item, 'hora_salida', None) and item.usuario.estado != 'EXONERADO')
+    
+    # Lógica de Contadores según selección de evento
+    if not filters.get('evento'):
+        # Si no hay evento seleccionado, mostrar todo en CERO
+        total_registros = 0
+        confirmadas = 0
+        justificadas = 0
+        inasistencias = 0
+        pendientes = 0
+    else:
+        # Si hay evento, "Padrón Esperado" debe ser el total de usuarios empadronados (Activos + Pasivos + Exonerados)
+        # independientemente de cuántos registros traiga el filtrado (unified_list)
+        total_registros = Usuario.objects.filter(estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_EXONERADO, Usuario.ESTADO_PASIVO]).count()
     
     paginator = Paginator(unified_list, 10)
     page_number = request.GET.get('page')
@@ -852,43 +865,119 @@ def descargar_reporte_pdf(request):
 def descargar_reporte_usuario_pdf(request, dni):
     usuario = get_object_or_404(Usuario, dni=dni)
     
-    # Usar el utility pasando el filtro por usuario (vía DNI en este caso o ajustando el utility)
-    data = get_filtered_attendance_data({'dni': dni})
-    unified_list = data.get('unified_report', [])
+    # 1. Obtener TODOS los eventos históricos ordenados por fecha descendente
+    todos_eventos = Evento.objects.all().order_by('-fecha', '-hora_ingreso')
     
-    # Calcular métricas avanzadas
-    total_eventos = Evento.objects.count()
-    asistencias_confirmadas = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and getattr(item, 'confirmada', False))
+    # 2. Obtener asistencias del usuario mapeadas por ID de evento
+    asistencias = Asistencia.objects.filter(usuario=usuario).select_related('evento', 'ubicacion')
+    asistencia_map = {a.evento_id: a for a in asistencias}
+    
+    # 3. Obtener justificaciones APROBADAS mapeadas por ID de evento
+    justificaciones = Justificacion.objects.filter(usuario=usuario, estado='APROBADO')
+    justificacion_map = {j.evento_id: j for j in justificaciones}
+    
+    unified_list = []
+    
+    # 4. Construir la lista unificada recorriendo TODOS los eventos
+    for evento in todos_eventos:
+        if evento.id in asistencia_map:
+            # CASO 1: ASISTIÓ (O PENDIENTE)
+            # El usuario tiene un registro de asistencia
+            item = asistencia_map[evento.id]
+            # Aseguramos que los atributos helpers existan (aunque sea el objeto ORM)
+            item.is_absent = False
+            item.es_justificada = False
+            unified_list.append(item)
+            
+        elif evento.id in justificacion_map:
+            # CASO 2: FALTA JUSTIFICADA
+            # No tiene asistencia pero sí justificación aprobada
+            justificacion = justificacion_map[evento.id]
+            
+            # Crear objeto mock para el template
+            mock_item = type('MockAsistencia', (object,), {
+                'fecha': evento.fecha,
+                'hora_ingreso': None,
+                'hora_salida': None,
+                'evento': evento,
+                'ubicacion': None, # No hay ubicación registrada para la falta
+                'usuario': usuario,
+                'is_absent': True, # Es ausencia física
+                'es_justificada': True, # Pero justificada
+                'justificacion_obs': justificacion.motivo,
+                'estado_display': 'JUSTIFICADA'
+            })
+            unified_list.append(mock_item)
+            
+        else:
+            # CASO 3: FALTA INJUSTIFICADA
+            # No hay registro ni justificación
+            mock_item = type('MockAsistencia', (object,), {
+                'fecha': evento.fecha,
+                'hora_ingreso': None,
+                'hora_salida': None,
+                'evento': evento,
+                'ubicacion': None,
+                'usuario': usuario,
+                'is_absent': True,
+                'es_justificada': False,
+                'estado_display': 'FALTA'
+            })
+            unified_list.append(mock_item)
+
+    # Calcular métricas avanzadas sobre la lista completa
+    total_eventos = len(todos_eventos)
+    
+    # Confirmadas: Tiene salida O es exonerado (y no es mock de falta/justificada)
+    # Nota: Los mocks tienen is_absent=True. Los objetos reales Asistencia tienen is_absent=False (seteado arriba) o default False.
+    asistencias_confirmadas = sum(1 for item in unified_list 
+                                  if not getattr(item, 'is_absent', False) and 
+                                  (getattr(item, 'hora_salida', None) or item.usuario.estado == 'EXONERADO'))
+                                  
     justificadas = sum(1 for item in unified_list if getattr(item, 'es_justificada', False))
-    faltas = sum(1 for item in unified_list if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False))
-    pendientes = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and not getattr(item, 'confirmada', False))
     
-    # Score de asistencia (considerando justificadas y físicas confirmadas como positivas)
+    # Faltas reales: Absent=True y Justificada=False
+    faltas = sum(1 for item in unified_list if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False))
+    
+    # Pendientes: No es absent, no tiene salida, no es exonerado
+    pendientes = sum(1 for item in unified_list 
+                     if not getattr(item, 'is_absent', False) and 
+                     not getattr(item, 'hora_salida', None) and 
+                     item.usuario.estado != 'EXONERADO')
+    
+    # Score de asistencia
     total_participaciones = asistencias_confirmadas + justificadas
     score_asistencia = (total_participaciones / total_eventos * 100) if total_eventos > 0 else 0
     
-    # Calcular racha de asistencias (eventos consecutivos asistidos)
+    # Calcular racha de asistencias (eventos consecutivos asistidos/justificados)
+    # La lista ya está ordenada por fecha descendente (más reciente primero).
+    # Para racha actual, contamos desde el inicio hasta que se rompa.
     racha_actual = 0
+    for item in unified_list:
+        if not getattr(item, 'is_absent', False) or getattr(item, 'es_justificada', False):
+             # Consideramos asistencia o justificación como continuar la racha
+             racha_actual += 1
+        else:
+            if item.fecha < timezone.now().date(): # Si es falta pasada, rompe racha
+                break
+            # Si es evento futuro (improbable aqui si filtramos por fecha, pero por seguridad), ignorar? 
+            # Asumimos que todos_eventos son pasados o presentes.
+            break
+
+    # Racha máxima (requiere recorrer cronológicamente o iterar toda la lista)
     racha_maxima = 0
     temp_racha = 0
-    
-    # Ordenar por fecha para calcular racha
-    sorted_list = sorted([item for item in unified_list if hasattr(item, 'fecha')], 
-                        key=lambda x: x.fecha if x.fecha else timezone.now().date(), 
-                        reverse=True)
-    
-    for item in sorted_list:
+    # Recorremos en orden CRONOLÓGICO (invertido de unified_list)
+    for item in reversed(unified_list):
         if not getattr(item, 'is_absent', False) or getattr(item, 'es_justificada', False):
             temp_racha += 1
             if temp_racha > racha_maxima:
                 racha_maxima = temp_racha
         else:
             temp_racha = 0
-    
-    racha_actual = temp_racha
-    
-    # Últimas 5 asistencias
-    ultimas_asistencias = sorted_list[:5] if len(sorted_list) >= 5 else sorted_list
+
+    # Últimas 5 asistencias (para el resumen visual, tomamos las 5 primeras del unified que son las recientes)
+    ultimas_asistencias = unified_list[:5]
     
     context = {
         'usuario': usuario,
@@ -929,16 +1018,16 @@ def descargar_reporte_evento_pdf(request, evento_id):
     unified_list = data.get('unified_report', [])
     
     # Calcular estadísticas: Consideramos Justificadas como "Asistencia Efectiva"
-    total_padrón = Usuario.objects.filter(estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_EXONERADO]).count()
+    total_padrón = Usuario.objects.filter(estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_EXONERADO, Usuario.ESTADO_PASIVO]).count()
     
-    # Asistieron físicamente y confirmados
-    asistencias_fisicas = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and getattr(item, 'confirmada', False))
+    # Asistieron físicamente y confirmados (tienen salida O son exonerados)
+    asistencias_fisicas = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and (getattr(item, 'hora_salida', None) or item.usuario.estado == 'EXONERADO'))
     # Justificaron (con permiso aprobado)
     justificadas = sum(1 for item in unified_list if getattr(item, 'es_justificada', False))
     # Inasistencias reales (ni fueron ni justificaron)
     inasistencias_reales = sum(1 for item in unified_list if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False))
     # Pendientes de confirmación física
-    pendientes = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and not getattr(item, 'confirmada', False))
+    pendientes = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and not getattr(item, 'hora_salida', None) and item.usuario.estado != 'EXONERADO')
     
     total_asistentes_efectivos = asistencias_fisicas + justificadas
     porcentaje_asistencia = (total_asistentes_efectivos / total_padrón * 100) if total_padrón > 0 else 0
@@ -993,8 +1082,8 @@ def descargar_reporte_filtrado_pdf(request):
     
     # Calcular estadísticas
     total_registros = len(unified_list)
-    confirmadas = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and getattr(item, 'confirmada', False))
-    pendientes = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and not getattr(item, 'confirmada', False))
+    confirmadas = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and (getattr(item, 'hora_salida', None) or item.usuario.estado == 'EXONERADO'))
+    pendientes = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and not getattr(item, 'hora_salida', None) and item.usuario.estado != 'EXONERADO')
     inasistencias = sum(1 for item in unified_list if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False))
     justificadas = sum(1 for item in unified_list if getattr(item, 'es_justificada', False))
     
