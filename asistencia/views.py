@@ -28,6 +28,7 @@ from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import permission_classes, api_view
 from django.utils import timezone
+from django.utils.html import escape
 from datetime import date, datetime, timedelta
 import base64
 from .utils.reports import (
@@ -623,6 +624,13 @@ def descargar_backup(request):
         
     return redirect('dashboard')
 
+def safe_extract(tar, path=".", members=None, *, numeric_owner=False):
+    for member in tar.getmembers():
+        member_path = os.path.join(path, member.name)
+        if os.path.commonpath([os.path.abspath(member_path), os.path.abspath(path)]) != os.path.abspath(path):
+            raise Exception("Intento de Path Traversal detectado en el archivo de backup.")
+    tar.extractall(path, members, numeric_owner=numeric_owner)
+
 @login_required
 @permission_required('asistencia.can_manage_users', raise_exception=True)
 def restaurar_backup(request):
@@ -657,7 +665,7 @@ def restaurar_backup(request):
         try:
             # 1. Extraer el tar.gz principal
             with tarfile.open(archive_path, "r:gz") as tar:
-                tar.extractall(path=temp_restore_root)
+                safe_extract(tar, path=temp_restore_root)
             
             # Buscar el directorio interno que contiene database.sql
             # El tar.gz suele tener una estructura: backup_name/database.sql
@@ -699,7 +707,7 @@ def restaurar_backup(request):
                 
                 with tarfile.open(media_tar, "r:gz") as mt:
                     # El media_tar contiene 'media/' como top level
-                    mt.extractall(path=settings.BASE_DIR)
+                    safe_extract(mt, path=settings.BASE_DIR)
 
             messages.success(request, "¡Sistema restaurado exitosamente!")
             
@@ -1065,7 +1073,8 @@ def buscar_usuario_dni(request):
     if len(dni) >= 8:
         usuario = Usuario.objects.filter(dni=dni).first()
         if usuario:
-            return HttpResponse(f'<div class="mt-2 text-[10px] font-black text-emerald-600 animate-pulse uppercase tracking-widest"><i class="bi bi-check-circle-fill"></i> Socio: {usuario.nombre} {usuario.apellido}</div>')
+            safe_nombre = escape(f"{usuario.nombre} {usuario.apellido}")
+            return HttpResponse(f'<div class="mt-2 text-[10px] font-black text-emerald-600 animate-pulse uppercase tracking-widest"><i class="bi bi-check-circle-fill"></i> Socio: {safe_nombre}</div>')
         else:
             return HttpResponse('<div class="mt-2 text-[10px] font-black text-red-500 uppercase tracking-widest"><i class="bi bi-x-circle-fill"></i> Socio no encontrado</div>')
     return HttpResponse('')
