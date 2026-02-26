@@ -159,7 +159,7 @@ class Justificacion(models.Model):
     usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name='justificaciones')
     evento = models.ForeignKey(Evento, on_delete=models.CASCADE, related_name='justificaciones')
     motivo = models.TextField(verbose_name="Motivo de la inasistencia")
-    evidencia = models.ImageField(
+    evidencia = models.FileField(
         upload_to='justificaciones/', 
         blank=True, 
         null=True, 

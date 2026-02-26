@@ -5,8 +5,8 @@ from django.conf.urls.static import static
 from asistencia.views import custom_login, custom_logout
 
 urlpatterns = [
-    path('admin/logout/', custom_logout), # Override para permitir GET logout
-    path('admin/', admin.site.urls),
+    path('gestionsegura/logout/', custom_logout), # Override para permitir GET logout
+    path('gestionsegura/', admin.site.urls),
     path('', include('asistencia.urls')),
     path('login/', custom_login, name='login'),
     path('logout/', custom_logout, name='logout'),

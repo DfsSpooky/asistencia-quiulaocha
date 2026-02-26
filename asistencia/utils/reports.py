@@ -6,8 +6,16 @@ from datetime import datetime
 import io
 from django.http import HttpResponse, FileResponse
 from django.template.loader import render_to_string
-from weasyprint import HTML
-from xhtml2pdf import pisa
+try:
+    from weasyprint import HTML
+except ImportError:
+    HTML = None
+
+try:
+    from xhtml2pdf import pisa
+except ImportError:
+    pisa = None
+
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from ..models import Usuario, Asistencia, ConfiguracionSistema, Justificacion
