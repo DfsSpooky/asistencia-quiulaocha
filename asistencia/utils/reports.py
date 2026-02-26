@@ -18,7 +18,7 @@ except ImportError:
 
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-from ..models import Usuario, Asistencia, ConfiguracionSistema, Justificacion
+from ..models import Usuario, Asistencia, ConfiguracionSistema, Justificacion, Evento
 
 from django.db.models import Q
 
@@ -91,72 +91,73 @@ def get_filtered_attendance_data(filters):
 
         # Estrategia para calcular faltas (sin registro):
         # 1. Si hay Evento seleccionado -> Inasistentes a ESE evento.
-        # 2. Si no hay Evento, pero hay Fecha (Inicio == Fin) -> Inasistentes a CUALQUIER evento de ese día.
-        # 3. Si es un rango de fechas -> Es complejo (¿faltó a 1 o a todos?), por ahora pedimos Evento o Día único.
+        # 2. Si hay Rango de Fechas -> Inasistentes a CADA evento en ese rango (iterativo).
         
         target_events = None
         if evento:
             target_events = [evento]
-        elif fecha_inicio and fecha_fin and fecha_inicio == fecha_fin:
-            # Buscar eventos en ese día específico
-            target_events = list(Evento.objects.filter(fecha=fecha_inicio))
+        elif fecha_inicio and fecha_fin:
+            # Buscar eventos en el rango
+            target_events = list(Evento.objects.filter(fecha__range=[fecha_inicio, fecha_fin]).order_by('fecha'))
+
+        usuarios_finales = []
         
         if target_events:
-            # Buscamos usuarios que SI tengan asistencia (cualquier tipo, para excluirlos de la lista "sin registro")
-            # OJO: Los que tienen asistencia justificada YA fueron incluidos arriba en 'asistencias', así que debemos excluirlos aquí
-            # para no duplicarlos.
-            asistentes_ids = Asistencia.objects.filter(
-                evento__in=target_events
-            ).values_list('usuario_id', flat=True)
+            allows_justified_missing = estado in ['faltaron', 'faltas_justificadas']
+            allows_unjustified_missing = estado in ['faltaron', 'faltas_injustificadas']
             
-            # Base de inasistentes (excluyendo a los que tienen CUALQUIER registro)
-            base_inasistentes = Usuario.objects.filter(
+            # Optimizacion: Traer todas las asistencias y justificaciones en el rango de una vez
+            all_attendances = set(Asistencia.objects.filter(evento__in=target_events).values_list('usuario_id', 'evento_id'))
+            all_justifications = {}
+            just_qs = Justificacion.objects.filter(evento__in=target_events, estado='APROBADO').select_related('evento', 'usuario')
+            for j in just_qs:
+                all_justifications[(j.usuario_id, j.evento_id)] = j
+
+            # Base de usuarios activos
+            base_users_qs = Usuario.objects.filter(
                 estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_EXONERADO, Usuario.ESTADO_PASIVO]
-            ).exclude(id__in=asistentes_ids)
-            
+            )
             if dni:
-                base_inasistentes = base_inasistentes.filter(
+                base_users_qs = base_users_qs.filter(
                     Q(dni__icontains=dni) |
                     Q(nombre__icontains=dni) |
                     Q(apellido__icontains=dni)
                 )
+            base_users = list(base_users_qs)
 
-            # Ahora filtramos por justificación si es necesario (para los que NO tienen registro)
-            usuarios_finales = []
-            
-            target_ev = target_events[0] if len(target_events) == 1 else None 
-            
-            # Solo procesar "sin registro" si el estado lo permite
-            allows_justified_missing = estado in ['faltaron', 'faltas_justificadas']
-            allows_unjustified_missing = estado in ['faltaron', 'faltas_injustificadas']
+            # Iterar por cada evento para encontrar quién faltó a QUÉ evento
+            for ev in target_events:
+                for u in base_users:
+                    # Si tiene asistencia registrada para este evento, NO es falta (ya está en 'asistencias')
+                    # Nota: Las faltas justificadas que generaron registro en Asistencia (es_justificada=True)
+                    # ya están en la lista principal 'asistencias'. Aquí buscamos solo los SIN REGISTRO.
+                    if (u.id, ev.id) in all_attendances:
+                        continue
 
-            for u in base_inasistentes:
-                is_justified = False
-                just_obs = ""
-                
-                if target_ev:
-                    just = Justificacion.objects.filter(usuario=u, evento=target_ev, estado='APROBADO').first()
+                    # Verificar si tiene justificación (pero sin registro de asistencia, caso raro pero posible)
+                    just = all_justifications.get((u.id, ev.id))
                     is_justified = just is not None
-                    just_obs = just.motivo if just else ""
-                
-                include_user = False
-                if is_justified and allows_justified_missing:
-                    include_user = True
-                elif not is_justified and allows_unjustified_missing:
-                    include_user = True
-                
-                if include_user:
-                    # Adjuntamos atributos temporales para el reporte
-                    u.is_absent = True
-                    u.es_justificada = is_justified
-                    u.justificacion_obs = just_obs
-                    u.evento = target_ev
-                    u.fecha = target_ev.fecha if target_ev else None
-                    usuarios_finales.append(u)
+
+                    include_user = False
+                    if is_justified and allows_justified_missing:
+                        include_user = True
+                    elif not is_justified and allows_unjustified_missing:
+                        include_user = True
+
+                    if include_user:
+                        # Clonar usuario para no modificar la referencia compartida en el loop
+                        # o usar un objeto proxy simple
+                        import copy
+                        u_proxy = copy.copy(u) # Shallow copy es suficiente para adjuntar atributos
+                        u_proxy.is_absent = True
+                        u_proxy.es_justificada = is_justified
+                        u_proxy.justificacion_obs = just.motivo if just else ""
+                        u_proxy.evento = ev
+                        u_proxy.fecha = ev.fecha
+                        usuarios_finales.append(u_proxy)
             
             usuarios_no_asistentes = usuarios_finales
         else:
-            # Sin contexto suficiente para calcular faltas sin registro
             usuarios_no_asistentes = []
 
     else:
