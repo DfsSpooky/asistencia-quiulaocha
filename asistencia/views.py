@@ -143,6 +143,9 @@ def lista_usuarios(request):
         'usuarios_pasivos': usuarios_pasivos,
         'usuarios_exonerados': usuarios_exonerados,
     }
+    if request.headers.get('HX-Request') and ('page' in request.GET or request.GET.get('query') or request.GET.get('estado') or request.GET.get('ordenar_por')):
+        return render(request, 'asistencia/partials/user_list.html', context)
+
     return render(request, 'asistencia/lista_usuarios.html', context)
 
 @login_required
@@ -498,7 +501,11 @@ def historial_asistencias(request):
     }
     
     # Only return partial template for HTMX pagination/filter requests, not initial load
-    if request.headers.get('HX-Request') and ('page' in request.GET or any(request.GET.get(f) for f in ['dni', 'evento', 'estado', 'fecha_inicio'])):
+    # Check if ANY filter or pagination parameter is present, or if it's explicitly an HTMX request that expects the table
+    if request.headers.get('HX-Request') and (
+        'page' in request.GET or
+        any(request.GET.get(f) for f in ['dni', 'evento', 'estado', 'fecha_inicio', 'fecha_fin', 'ubicacion', 'ordenar_por', 'confirmada'])
+    ):
         return render(request, 'asistencia/historial_table.html', context)
         
     return render(request, 'asistencia/historial_asistencias.html', context)
