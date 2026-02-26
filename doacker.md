@@ -30,6 +30,12 @@ docker compose up -d --build
 docker compose exec web python manage.py migrate
 ```
 
+**5. Importar Padrón de Usuarios:**
+Asegúrate de que el archivo `Padron usuarios.csv` esté en la raíz del proyecto.
+```bash
+docker compose exec web python manage.py importar_padron
+```
+
 ---
 
 ### 💡 Tips Pro para Docker Desktop:
