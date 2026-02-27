@@ -165,7 +165,7 @@ def escanear_qr(request, evento_id=None):
     eventos = Evento.objects.filter(activo=True).order_by('-fecha')
     
     # Si hay un evento seleccionado o predeterminado, obtener sus stats vivos
-    stats = {'presentes': 0, 'total': Usuario.objects.filter(estado=Usuario.ESTADO_ACTIVO).count()}
+    stats = {'presentes': 0, 'total': Usuario.objects.filter(estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_PASIVO, Usuario.ESTADO_EXONERADO]).count()}
     target_event = None
     if eventos.exists():
         target_event = eventos.first()
