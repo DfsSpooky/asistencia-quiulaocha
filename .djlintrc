@@ -5,7 +5,7 @@
     "format_attribute_template_tags": true,
     "format_css": true,
     "format_js": true,
-    "ignore": "H006,H030,H031",
+    "ignore": "H006,H030,H031,H025",
     "include": "asistencia/templates",
     "use_gitignore": true,
     "preserve_blank_lines": true
