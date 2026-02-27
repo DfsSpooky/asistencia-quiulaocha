@@ -1266,37 +1266,98 @@ def perfil_usuario(request):
 @login_required
 @permission_required('asistencia.can_manage_users', raise_exception=True)
 def descargar_todos_carnets_pdf(request):
-    from .utils.reports import get_image_base64
-    
-    # Obtener todos los usuarios ordenados por apellidos y nombres
-    usuarios = Usuario.objects.all().order_by('apellido', 'nombre')
-    
-    # Pre-procesar usuarios con sus imágenes en base64 para el PDF
-    usuarios_data = []
-    for u in usuarios:
-        usuarios_data.append({
-            'nombre': u.nombre,
-            'apellido': u.apellido,
-            'dni': u.dni,
-            'estado': u.get_estado_display(),
-            'id': u.id,
-            'foto_base64': get_image_base64(u.foto_perfil),
-            'qr_base64': get_image_base64(u.qr_code)
-        })
-    
-    # Los pasamos en una lista plana, el template se encargará de los saltos de página
-    context = {
-        'usuarios': usuarios_data,
-        'logo_base64': get_logo_base64(),
-        'current_date': datetime.now().strftime('%d/%m/%Y %H:%M'),
-        'total_usuarios': len(usuarios_data),
-        'sistema_config': ConfiguracionSistema.objects.first()
-    }
-    
+    """
+    Genera un PDF con todos los carnets usando el template HTML original.
+    Para evitar Out Of Memory (OOM), procesa los usuarios en lotes pequeños
+    y combina los PDFs parciales con pypdf.
+    """
+    import io
+    import gc
+    from .utils.reports import get_image_base64, get_logo_base64
+    from django.template.loader import render_to_string
+    from django.http import HttpResponse
+
+    try:
+        from weasyprint import HTML
+    except ImportError:
+        return HttpResponse("WeasyPrint no está instalado.", status=500)
+
+    try:
+        from pypdf import PdfWriter, PdfReader
+    except ImportError:
+        return HttpResponse("pypdf no está instalado. Añade 'pypdf' a requirements.txt", status=500)
+
+    # Obtener todos los usuarios ordenados
+    usuarios = list(Usuario.objects.all().order_by('apellido', 'nombre'))
+
     LogAccion.objects.create(
         usuario=request.user,
         accion="Descargar todos los carnets PDF",
-        descripcion=f"{request.user.username} descargó los carnets de todos los usuarios ({len(usuarios_data)}) en PDF."
+        descripcion=f"{request.user.username} inició la descarga de {len(usuarios)} carnets en PDF."
     )
-    
-    return generate_pdf_report('asistencia/reporte_todos_carnets.html', context, "todos_los_carnets.pdf")
+
+    logo = get_logo_base64()
+    sys_config = ConfiguracionSistema.objects.first()
+
+    # Procesar en lotes pequeños para evitar OOM
+    # Cada lote se renderiza con WeasyPrint y se libera de memoria inmediatamente
+    CHUNK_SIZE = 10
+    writer = PdfWriter()
+
+    for i in range(0, len(usuarios), CHUNK_SIZE):
+        chunk_users = usuarios[i:i + CHUNK_SIZE]
+        usuarios_data = []
+        for u in chunk_users:
+            usuarios_data.append({
+                'nombre': u.nombre,
+                'apellido': u.apellido,
+                'dni': u.dni,
+                'estado': u.get_estado_display(),
+                'id': u.id,
+                'foto_base64': get_image_base64(u.foto_perfil),
+                'qr_base64': get_image_base64(u.qr_code)
+            })
+
+        context = {
+            'usuarios': usuarios_data,
+            'logo_base64': logo,
+            'current_date': datetime.now().strftime('%d/%m/%Y %H:%M'),
+            'total_usuarios': len(usuarios_data),
+            'sistema_config': sys_config
+        }
+
+        # Renderizar el HTML con el template original (diseño bonito)
+        html_string = render_to_string('asistencia/reporte_todos_carnets.html', context)
+
+        # Generar PDF del lote con WeasyPrint
+        pdf_bytes = HTML(string=html_string).write_pdf()
+
+        # Agregar páginas al escritor final usando pypdf
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+        for page in reader.pages:
+            writer.add_page(page)
+
+        # Liberar memoria inmediatamente
+        del pdf_bytes, reader, html_string, usuarios_data, context
+        gc.collect()
+
+        # Log de progreso
+        processed = min(i + CHUNK_SIZE, len(usuarios))
+        print(f"Carnets progreso: {processed}/{len(usuarios)} procesados...")
+
+    # Escribir el PDF final combinado
+    output_buffer = io.BytesIO()
+    writer.write(output_buffer)
+    final_pdf = output_buffer.getvalue()
+    output_buffer.close()
+
+    LogAccion.objects.create(
+        usuario=request.user,
+        accion="Descarga todos los carnets exitosa",
+        descripcion=f"{request.user.username} finalizó la descarga de {len(usuarios)} carnets en PDF."
+    )
+
+    response = HttpResponse(final_pdf, content_type='application/pdf')
+    response['Content-Disposition'] = 'inline; filename="todos_los_carnets.pdf"'
+    response['Content-Length'] = len(final_pdf)
+    return response
