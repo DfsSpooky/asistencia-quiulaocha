@@ -74,7 +74,7 @@
                   hx-get="{% url 'lista_usuarios' %}"
                   hx-trigger="input from:#id_query delay:200ms, change from:select"
                   hx-target="#user-list-container"
-                  hx-select="#user-list-container"
+                  hx-swap="outerHTML"
                   hx-push-url="true"
                   class="grid grid-cols-1 md:grid-cols-12 gap-6 items-end">
                 <div class="md:col-span-11 space-y-2">
@@ -132,142 +132,7 @@
             </form>
         </div>
         <!-- Dynamic Content Container -->
-        <div id="user-list-container" class="space-y-10">
-            <div id="user-table-container" class="relative">
-                <div class="htmx-indicator absolute inset-0 bg-white/60 backdrop-blur-[2px] z-20 flex items-center justify-center border border-slate-100 rounded-[2.5rem]">
-                    <div class="flex flex-col items-center gap-4">
-                        <div class="w-12 h-12 border-4 border-primary-100 border-t-primary-600 rounded-full animate-spin"></div>
-                        <span class="text-xs font-bold text-primary-900 tracking-widest uppercase">Actualizando
-                        Datos...</span>
-                    </div>
-                </div>
-                <div class="bg-white rounded-[2.5rem] shadow-premium overflow-hidden border border-slate-100">
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-left">
-                            <thead>
-                                <tr class="bg-slate-50 border-b border-slate-100">
-                                    <th class="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Socio / Persona</th>
-                                    <th class="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Identificación</th>
-                                    <th class="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-center">Estado Civil</th>
-                                    <th class="px-8 py-6 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] text-right">Gestión</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-slate-50">
-                                {% for usuario in page_obj %}
-                                    <tr class="group hover:bg-slate-50/50 transition-colors animate-fade-in animate-stagger"
-                                        style="--row-idx: {{ forloop.counter }}">
-                                        <td class="px-8 py-6">
-                                            <div class="flex items-center gap-4">
-                                                <div class="h-12 w-12 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 text-slate-500 flex items-center justify-center font-black text-sm border border-slate-200">
-                                                    {{ usuario.nombre|first }}{{ usuario.apellido|first }}
-                                                </div>
-                                                <div>
-                                                    <p class="text-base font-bold text-slate-900 leading-tight">{{ usuario.nombre }} {{ usuario.apellido }}</p>
-                                                    <p class="text-xs font-medium text-slate-400 mt-0.5 italic">
-                                                        Comunero
-                                                        registrado
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td class="px-8 py-6">
-                                            <div class="inline-flex items-center gap-2 px-3 py-1.5 bg-slate-100 rounded-lg border border-slate-200">
-                                                <i class="bi bi-card-text text-slate-400"></i>
-                                                <span class="font-mono text-sm font-bold text-slate-700 tracking-wider">{{ usuario.dni }}</span>
-                                            </div>
-                                        </td>
-                                        <td class="px-8 py-6 text-center">
-                                            <span class="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider
-                                                         {% if usuario.estado == 'ACTIVO' %}
-                                                             bg-emerald-50 text-emerald-700 border border-emerald-100
-                                                         {% elif usuario.estado == 'EXONERADO' %}
-                                                             bg-cyan-50 text-cyan-700 border border-cyan-100
-                                                         {% else %}
-                                                             bg-slate-100 text-slate-600 border border-slate-200
-                                                         {% endif %}">
-                                                <span class="w-1.5 h-1.5 rounded-full
-                                                             {% if usuario.estado == 'ACTIVO' %}
-                                                                 bg-emerald-500
-                                                             {% elif usuario.estado == 'EXONERADO' %}
-                                                                 bg-cyan-500
-                                                             {% else %}
-                                                                 bg-slate-500
-                                                             {% endif %}"></span>
-                                                {{ usuario.get_estado_display }}
-                                            </span>
-                                        </td>
-                                        <td class="px-8 py-6 text-right">
-                                            <div class="flex justify-end gap-2">
-                                                <a href="{% url 'detalle_usuario' usuario.dni %}"
-                                                   class="h-10 w-10 flex items-center justify-center bg-white border border-slate-100 rounded-xl text-slate-400 hover:text-primary-600 hover:border-primary-200 hover:shadow-lg transition-all"
-                                                   title="Ver Ficha">
-                                                    <i class="bi bi-eye-fill"></i>
-                                                </a>
-                                                <a href="{% url 'descargar_reporte_usuario_pdf' usuario.dni %}"
-                                                   hx-boost="false"
-                                                   class="h-10 w-10 flex items-center justify-center bg-white border border-slate-100 rounded-xl text-slate-400 hover:text-red-500 hover:border-red-200 hover:shadow-lg transition-all"
-                                                   title="Expediente PDF">
-                                                    <i class="bi bi-file-earmark-pdf-fill"></i>
-                                                </a>
-                                                <a href="{% url 'admin_solicitar_justificacion' %}?usuario_dni={{ usuario.dni }}"
-                                                   class="h-10 w-10 flex items-center justify-center bg-white border border-slate-100 rounded-xl text-slate-400 hover:text-primary-600 hover:border-primary-200 hover:shadow-lg transition-all"
-                                                   title="Justificar Falta">
-                                                    <i class="bi bi-patch-exclamation-fill"></i>
-                                                </a>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                {% empty %}
-                                    <tr>
-                                        <td colspan="4" class="px-8 py-20 text-center">
-                                            <div class="max-w-xs mx-auto">
-                                                <div class="h-20 w-20 bg-slate-50 text-slate-200 rounded-[2rem] flex items-center justify-center mx-auto mb-6">
-                                                    <i class="bi bi-search text-4xl"></i>
-                                                </div>
-                                                <p class="text-xl font-extrabold text-slate-900 mb-2">No hay resultados</p>
-                                                <p class="text-slate-500 text-sm italic font-medium">
-                                                    Prueba con otros criterios
-                                                    de búsqueda o verifica que el usuario esté registrado.
-                                                </p>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                    {% if page_obj.has_other_pages %}
-                        <div class="px-8 py-8 bg-slate-50/50 border-t border-slate-100 flex items-center justify-between">
-                            <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                                Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}
-                            </p>
-                            <nav class="flex items-center gap-2">
-                                {% if page_obj.has_previous %}
-                                    <a hx-get="?page={{ page_obj.previous_page_number }}&query={{ form.query.value|default:'' }}&estado={{ form.estado.value|default:'' }}&ordenar_por={{ form.ordenar_por.value|default:'' }}"
-                                       hx-target="#user-list-container"
-                                       hx-select="#user-list-container"
-                                       hx-push-url="true"
-                                       class="h-10 px-4 flex items-center gap-2 bg-white border border-slate-200 rounded-xl text-xs font-black text-slate-600 hover:bg-slate-50 transition-all cursor-pointer">
-                                        <i class="bi bi-arrow-left"></i>
-                                        <span>Anterior</span>
-                                    </a>
-                                {% endif %}
-                                {% if page_obj.has_next %}
-                                    <a hx-get="?page={{ page_obj.next_page_number }}&query={{ form.query.value|default:'' }}&estado={{ form.estado.value|default:'' }}&ordenar_por={{ form.ordenar_por.value|default:'' }}"
-                                       hx-target="#user-list-container"
-                                       hx-select="#user-list-container"
-                                       hx-push-url="true"
-                                       class="h-10 px-4 flex items-center gap-2 bg-primary-600 border border-primary-700 rounded-xl text-xs font-black text-white hover:bg-primary-700 transition-all cursor-pointer">
-                                        <span>Siguiente</span>
-                                        <i class="bi bi-arrow-right"></i>
-                                    </a>
-                                {% endif %}
-                            </nav>
-                        </div>
-                    {% endif %}
-                </div>
-            </div>
-        </div>
+        {% include 'asistencia/partials/user_list.html' %}
     </div>
     <style>
         @keyframes fade-in {
@@ -329,27 +194,6 @@
             });
         }
 
-        function initSelect2() {
-            if (typeof $ !== 'undefined') {
-                $('.select2-searchable').each(function() {
-                    $(this).select2({
-                        placeholder: $(this).find('option:first').text() || 'Seleccionar...',
-                        allowClear: true,
-                        width: '100%',
-                        language: {
-                            noResults: function() {
-                                return "No se encontraron resultados";
-                            }
-                        }
-                    }).on('select2:select select2:unselect', function() {
-                        this.dispatchEvent(new Event('change', {
-                            bubbles: true
-                        }));
-                    });
-                });
-            }
-        }
-        $(document).ready(initSelect2);
-        document.body.addEventListener('htmx:afterSettle', initSelect2);
+        // Select2 initialization handled globally in base.html
     </script>
 {% endblock %}

@@ -162,13 +162,14 @@ MEDIA_ROOT = BASE_DIR / 'media'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Configuración de sesiones
-SESSION_COOKIE_AGE = 3600
+SESSION_COOKIE_AGE = 43200  # 12 horas (en segundos) - suficiente para jornadas de escaneo largas
+SESSION_SAVE_EVERY_REQUEST = True  # Renueva el timer en CADA request, así solo expira tras 12h de INACTIVIDAD
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 SECURE_SSL_REDIRECT = not DEBUG
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Lax'
-SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False  # No cerrar sesión al cerrar el navegador
 
 # Seguridad adicional para producción
 if not DEBUG:

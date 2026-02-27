@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <title>Reporte de Carnets - Quiulacocha</title>
@@ -66,7 +67,8 @@
             right: 0;
             width: 256px;
             height: 256px;
-            background-color: rgba(245, 158, 11, 0.15); /* amber-500 con opacidad */
+            background-color: rgba(245, 158, 11, 0.15);
+            /* amber-500 con opacidad */
             border-radius: 50%;
             filter: blur(40px);
             margin-right: -80px;
@@ -80,7 +82,8 @@
             left: 0;
             width: 192px;
             height: 192px;
-            background-color: rgba(251, 191, 36, 0.15); /* amber-400 con opacidad */
+            background-color: rgba(251, 191, 36, 0.15);
+            /* amber-400 con opacidad */
             border-radius: 50%;
             filter: blur(40px);
             margin-left: -40px;
@@ -119,7 +122,8 @@
             font-size: 24px;
             font-weight: 900;
             text-transform: uppercase;
-            color: #d97706; /* amber-600 para mejor contraste en PDF */
+            color: #d97706;
+            /* amber-600 para mejor contraste en PDF */
             margin: 0;
             letter-spacing: -0.05em;
             line-height: 1;
@@ -137,7 +141,8 @@
         .logo-box {
             width: 56px;
             height: 56px;
-            background: #fffcf0; /* Fondo ligeramente ámbar */
+            background: #fffcf0;
+            /* Fondo ligeramente ámbar */
             border: 1px solid #fef3c7;
             border-radius: 12px;
             display: flex;
@@ -166,7 +171,8 @@
             padding: 6px;
             border-radius: 24px;
             background: white;
-            border: 2px solid #fbbf24; /* amber-400 */
+            border: 2px solid #fbbf24;
+            /* amber-400 */
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
         }
 
@@ -210,9 +216,12 @@
             font-weight: 900;
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            border: 1px solid #fde68a; /* amber-200 */
-            color: #92400e; /* amber-800 */
-            background-color: #fef3c7; /* amber-100 */
+            border: 1px solid #fde68a;
+            /* amber-200 */
+            color: #92400e;
+            /* amber-800 */
+            background-color: #fef3c7;
+            /* amber-100 */
         }
 
         /* Detalles Inferiores */
@@ -249,7 +258,8 @@
             font-size: 10px;
             font-weight: 900;
             text-transform: uppercase;
-            color: #059669; /* emerald-600 */
+            color: #059669;
+            /* emerald-600 */
         }
 
         /* QR MÁS GRANDE */
@@ -262,8 +272,10 @@
         }
 
         .qr-img {
-            width: 130px; /* Aumentado de 80px */
-            height: 130px; /* Aumentado de 80px */
+            width: 130px;
+            /* Aumentado de 80px */
+            height: 130px;
+            /* Aumentado de 80px */
         }
 
         /* Footer */
@@ -284,13 +296,24 @@
             margin: 0;
         }
 
-        .uid { font-family: monospace; }
+        .uid {
+            font-family: monospace;
+        }
 
-        .shield-placeholder { color: #fbbf24; font-size: 24px; }
-        .photo-placeholder { background: #fdf2f2; width: 100%; height: 100%; border-radius: 6px; }
+        .shield-placeholder {
+            color: #fbbf24;
+            font-size: 24px;
+        }
 
+        .photo-placeholder {
+            background: #fdf2f2;
+            width: 100%;
+            height: 100%;
+            border-radius: 6px;
+        }
     </style>
 </head>
+
 <body>
     {% for item in usuarios %}
     <div class="page-wrapper">
@@ -310,9 +333,9 @@
                         </div>
                         <div class="logo-box">
                             {% if logo_base64 %}
-                                <img src="data:image/jpeg;base64,{{ logo_base64 }}" alt="Logo Institución" class="logo-img">
+                            <img src="data:image/jpeg;base64,{{ logo_base64 }}" alt="Logo Institución" class="logo-img">
                             {% else %}
-                                <div class="shield-placeholder">🛡️</div>
+                            <div class="shield-placeholder">🛡️</div>
                             {% endif %}
                         </div>
                     </div>
@@ -321,17 +344,18 @@
                     <div class="body">
                         <div class="photo-box">
                             {% if item.foto_base64 %}
-                                <img src="data:image/jpeg;base64,{{ item.foto_base64 }}" alt="Foto del Socio" class="photo-img">
+                            <img src="data:image/jpeg;base64,{{ item.foto_base64 }}" alt="Foto del Socio"
+                                class="photo-img">
                             {% else %}
-                                <div class="photo-placeholder"></div>
+                            <div class="photo-placeholder"></div>
                             {% endif %}
                         </div>
-                        
+
                         <div class="user-info">
                             <h4 class="name-main">{{ item.nombre }}</h4>
                             <h4 class="name-sub">{{ item.apellido }}</h4>
                             <div class="role-badge">Socio Comunitario</div>
-                            
+
                             <div class="stats">
                                 <div class="stat-item">
                                     <span class="stat-label">DNI</span>
@@ -346,7 +370,8 @@
 
                         <div class="qr-box">
                             {% if item.qr_base64 %}
-                                <img src="data:image/png;base64,{{ item.qr_base64 }}" alt="Código QR de Identificación" class="qr-img">
+                            <img src="data:image/png;base64,{{ item.qr_base64 }}" alt="Código QR de Identificación"
+                                class="qr-img">
                             {% endif %}
                         </div>
                     </div>
@@ -362,4 +387,5 @@
     </div>
     {% endfor %}
 </body>
+
 </html>

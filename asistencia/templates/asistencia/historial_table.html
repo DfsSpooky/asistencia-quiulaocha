@@ -100,11 +100,13 @@
                                     {% endif %}
                                     {% if item.usuario %}
                                         <a href="{% url 'descargar_reporte_usuario_pdf' item.usuario.dni %}" target="_blank"
+                                           hx-disable
                                            class="h-9 w-9 flex items-center justify-center bg-slate-100 text-slate-400 rounded-lg hover:bg-primary-600 hover:text-white transition-all">
                                             <i class="bi bi-file-earmark-pdf"></i>
                                         </a>
                                     {% else %}
                                         <a href="{% url 'descargar_reporte_usuario_pdf' item.dni %}" target="_blank"
+                                           hx-disable
                                            class="h-9 w-9 flex items-center justify-center bg-slate-100 text-slate-400 rounded-lg hover:bg-primary-600 hover:text-white transition-all">
                                             <i class="bi bi-file-earmark-pdf"></i>
                                         </a>

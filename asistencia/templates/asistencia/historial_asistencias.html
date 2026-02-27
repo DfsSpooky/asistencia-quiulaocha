@@ -95,7 +95,6 @@
                   hx-get="{% url 'historial_asistencias' %}"
                   hx-trigger="change from:select, input from:#dni-input delay:500ms"
                   hx-target="#attendance-content-area"
-                  hx-select="#attendance-content-area"
                   hx-swap="innerHTML"
                   class="space-y-8">
                 
@@ -215,26 +214,12 @@
         {% include 'asistencia/historial_table.html' %}
 
     <script>
-        function initSelect2() {
-            $('.select2-searchable').select2({
-                width: '100%',
-                dropdownParent: $('body')
-            });
-            $('.select2-searchable').on('select2:select', function() {
-                htmx.trigger('#attendance-filter-form', 'change');
-            });
-        }
-
-        $(document).ready(initSelect2);
-        document.body.addEventListener('htmx:afterSwap', function(evt) {
-            if (evt.detail.target.id === 'attendance-content-area') {
-                initSelect2();
-            }
-        });
+        // Select2 initialization handled globally in base.html
 
         function downloadEventReport() {
             const eventId = document.getElementById('event-report-selector').value;
             if (eventId) {
+                // Using window.open prevents HTMX interference as it opens a new tab
                 window.open(`/descargar-reporte-evento/${eventId}/`, '_blank');
             }
         }

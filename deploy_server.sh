@@ -54,16 +54,19 @@ if [ ! -f ".env" ]; then
     grep -q "POSTGRES_USER" .env || echo "POSTGRES_USER=usuario_db" >> .env
     grep -q "POSTGRES_PASSWORD" .env || echo "POSTGRES_PASSWORD=change_me_please" >> .env
     grep -q "POSTGRES_HOST" .env || echo "POSTGRES_HOST=db" >> .env
+    grep -q "POSTGRES_PORT" .env || echo "POSTGRES_PORT=5432" >> .env
     grep -q "ALLOWED_HOSTS" .env || echo "ALLOWED_HOSTS=$DOMAIN,localhost,127.0.0.1" >> .env
     grep -q "CSRF_TRUSTED_ORIGINS" .env || echo "CSRF_TRUSTED_ORIGINS=https://$DOMAIN" >> .env
+    grep -q "DEBUG" .env || echo "DEBUG=False" >> .env
+    grep -q "SECRET_KEY" .env || echo "SECRET_KEY=change_me_super_secret_$(date +%s)" >> .env
 
     # Fix ownership of generated .env
     chown $USER_HESTIA:$USER_HESTIA .env
 fi
 
 # 4. Build and Run Docker (Docker runs as root usually)
-echo "Building and starting containers..."
-docker compose up -d --build
+echo "Building and starting containers for production..."
+docker compose -f docker-compose.yml up -d --build
 
 # 5. Run Migrations & Collect Static
 echo "Running migrations..."
