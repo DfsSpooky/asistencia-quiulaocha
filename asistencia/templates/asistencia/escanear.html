@@ -5,10 +5,17 @@
 {% endblock title %}
 
 {% block content %}
+    <style>
+        [x-cloak] {
+            display: none !important;
+        }
+    </style>
     <div id="scanner-config"
          data-selected-evento-id="{{ selected_evento_id|default:'' }}"
          data-stats-presentes="{{ stats.presentes|default:0 }}"
          data-stats-total="{{ stats.total|default:1 }}"
+         data-register-url="{% url 'registrar_asistencia' %}"
+         data-close-event-url-template="{% url 'cerrar_evento' 0 %}"
          class="hidden"></div>
     <script>
         (function() {
@@ -18,6 +25,11 @@
 
                     Alpine.data('qrScanningCenter', () => ({
                         config: {
+                            evento_id: configEl.dataset.selectedEventoId || '',
+                            tipo_escaneo: 'ingreso',
+                            ubicacion_id: ''
+                        },
+                        modalConfig: {
                             evento_id: configEl.dataset.selectedEventoId || '',
                             tipo_escaneo: 'ingreso',
                             ubicacion_id: ''
@@ -36,6 +48,8 @@
                         showSuccess: false,
                         flash: false,
                         error: null,
+                        modalOpen: true,
+                        cameraStarted: false,
                         fps: 0,
                         frameCount: 0,
                         lastFpsUpdate: 0,
@@ -44,17 +58,22 @@
                         lastScanTime: 0,
                         debounceTime: 4000,
                         lastScannedDni: null,
+                        closingEvent: false,
+                        closeModalOpen: false,
+                        closeConfirmText: '',
+                        closeAcknowledged: false,
+                        clockInterval: null,
+                        lifecycleController: null,
 
                         init() {
                             this.updateTime();
-                            setInterval(() => this.updateTime(), 1000);
+                            this.clockInterval = setInterval(() => this.updateTime(), 1000);
 
-                            // Start camera after DOM is ready
-                            this.$nextTick(() => {
-                                setTimeout(() => {
-                                    this.startCamera();
-                                }, 100);
-                            });
+                            if (this.lifecycleController) {
+                                this.lifecycleController.abort();
+                            }
+                            this.lifecycleController = new AbortController();
+                            const signal = this.lifecycleController.signal;
 
                             // Handle page visibility changes (switching tabs, minimizing)
                             document.addEventListener('visibilitychange', () => {
@@ -63,19 +82,29 @@
                                 } else {
                                     this.startCamera();
                                 }
-                            });
+                            }, { signal });
 
                             // Cleanup when leaving the page (Hard Reload/Close)
                             window.addEventListener('beforeunload', () => {
-                                this.stopCamera();
-                            });
+                                this.teardown();
+                            }, { signal });
 
                             // Cleanup when navigating away via HTMX
-                            document.body.addEventListener('htmx:beforeSwap', (e) => {
-                                this.stopCamera();
-                            }, {
-                                once: true
-                            });
+                            document.body.addEventListener('htmx:beforeSwap', () => {
+                                this.teardown();
+                            }, { once: true, signal });
+                        },
+
+                        teardown() {
+                            this.stopCamera();
+                            if (this.clockInterval) {
+                                clearInterval(this.clockInterval);
+                                this.clockInterval = null;
+                            }
+                            if (this.lifecycleController) {
+                                this.lifecycleController.abort();
+                                this.lifecycleController = null;
+                            }
                         },
 
                         updateTime() {
@@ -91,6 +120,8 @@
                         },
 
                         async startCamera() {
+                            if (this.cameraStarted) return;
+                            if (!this.config.evento_id) return;
                             if (!this.$refs || !this.$refs.video) return;
                             try {
                                 this.stream = await navigator.mediaDevices.getUserMedia({
@@ -107,6 +138,7 @@
                                 this.$refs.video.srcObject = this.stream;
                                 this.lastFpsUpdate = Date.now();
                                 this.tick();
+                                this.cameraStarted = true;
                             } catch (err) {
                                 this.error = "No se pudo acceder a la cámara. Revisa los permisos.";
                             }
@@ -122,6 +154,7 @@
                             if (this.$refs && this.$refs.video) {
                                 this.$refs.video.srcObject = null;
                             }
+                            this.cameraStarted = false;
                         },
 
                         tick() {
@@ -173,7 +206,7 @@
                             }
 
                             try {
-                                const response = await fetch('/api/registrar-asistencia/', {
+                                const response = await fetch(configEl.dataset.registerUrl, {
                                     method: 'POST',
                                     headers: {
                                         'Content-Type': 'application/json',
@@ -221,6 +254,76 @@
                         getCsrfToken() {
                             return document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
                                 document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
+                        },
+
+                        confirmSetup() {
+                            this.config = { ...this.config, ...this.modalConfig };
+                            this.modalOpen = false;
+                            this.error = null;
+                            this.startCamera();
+                        },
+
+                        reopenSetup() {
+                            this.stopCamera();
+                            this.modalConfig = { ...this.config };
+                            this.modalOpen = true;
+                        },
+
+                        get selectedEventLabel() {
+                            const selects = this.$el?.querySelectorAll('select') || [];
+                            for (const select of selects) {
+                                const option = Array.from(select.options || []).find(opt => opt.value === this.config.evento_id);
+                                if (option) return option.textContent.trim();
+                            }
+                            return 'Evento seleccionado';
+                        },
+
+                        openCloseEventModal() {
+                            if (!this.config.evento_id || this.closingEvent) return;
+                            this.closeConfirmText = '';
+                            this.closeAcknowledged = false;
+                            this.closeModalOpen = true;
+                        },
+
+                        async closeCurrentEvent() {
+                            if (!this.config.evento_id || this.closingEvent) return;
+                            if (this.closeConfirmText.toUpperCase() !== 'CERRAR' || !this.closeAcknowledged) return;
+
+                            const closeUrl = configEl.dataset.closeEventUrlTemplate.replace('/0/', `/${this.config.evento_id}/`);
+                            this.closingEvent = true;
+                            try {
+                                const response = await fetch(closeUrl, {
+                                    method: 'POST',
+                                    headers: {
+                                        'X-CSRFToken': this.getCsrfToken()
+                                    }
+                                });
+                                const data = await response.json();
+                                if (!response.ok) {
+                                    this.error = data.error || 'No se pudo cerrar el evento.';
+                                    return;
+                                }
+
+                                this.stopCamera();
+                                this.config.evento_id = '';
+                                this.modalConfig.evento_id = '';
+                                this.modalOpen = true;
+                                this.closeModalOpen = false;
+                                this.error = null;
+
+                                if (window.Swal) {
+                                    Swal.fire({
+                                        title: 'Evento cerrado',
+                                        text: data.message,
+                                        icon: 'success',
+                                        confirmButtonColor: '#ca8a04'
+                                    });
+                                }
+                            } catch (err) {
+                                this.error = 'Error al cerrar el evento.';
+                            } finally {
+                                this.closingEvent = false;
+                            }
                         }
                     }));
                 }
@@ -235,6 +338,154 @@
     <div class="max-w-6xl mx-auto space-y-8 animate-fade-in"
          x-data="qrScanningCenter()">
 
+        <!-- Setup Modal -->
+        <div x-cloak
+             x-show="modalOpen"
+             class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-md px-4"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0">
+            <div class="w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-100 p-8 space-y-6"
+                 x-transition:enter="transition ease-out duration-300"
+                 x-transition:enter-start="opacity-0 scale-95 translate-y-4"
+                 x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+                 x-transition:leave="transition ease-in duration-200"
+                 x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+                 x-transition:leave-end="opacity-0 scale-95 translate-y-4">
+                <div class="flex items-center gap-3">
+                    <div class="h-12 w-12 bg-primary-100 text-primary-600 rounded-2xl flex items-center justify-center">
+                        <i class="bi bi-qr-code-scan text-2xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-black text-slate-900">Configurar escaneo</h3>
+                        <p class="text-sm text-slate-500">Selecciona evento, tipo de registro y lugar antes de activar la cámara.</p>
+                    </div>
+                </div>
+                <div class="space-y-4">
+                    <div class="space-y-2">
+                        <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Evento</label>
+                        <select x-model="modalConfig.evento_id"
+                                class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-primary-500 outline-none font-bold text-slate-700">
+                            <option value="">-- Elige un evento activo --</option>
+                            {% for evento in eventos %}
+                                <option value="{{ evento.id }}">{{ evento.nombre }} ({{ evento.fecha }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-2">
+                            <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Tipo de registro</label>
+                            <div class="grid grid-cols-2 gap-2">
+                                <button type="button"
+                                        @click="modalConfig.tipo_escaneo = 'ingreso'"
+                                        :class="modalConfig.tipo_escaneo === 'ingreso' ? 'bg-emerald-600 text-white border-emerald-600 ring-4 ring-emerald-50 shadow-lg shadow-emerald-100' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-white hover:border-slate-300'"
+                                        class="px-3 py-3 rounded-xl border-2 font-black text-[11px] uppercase tracking-wider transition-all flex items-center justify-center gap-2">
+                                    <i class="bi bi-box-arrow-in-right text-base"></i>
+                                    <span>Ingreso</span>
+                                </button>
+                                <button type="button"
+                                        @click="modalConfig.tipo_escaneo = 'salida'"
+                                        :class="modalConfig.tipo_escaneo === 'salida' ? 'bg-amber-600 text-white border-amber-600 ring-4 ring-amber-50 shadow-lg shadow-amber-100' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-white hover:border-slate-300'"
+                                        class="px-3 py-3 rounded-xl border-2 font-black text-[11px] uppercase tracking-wider transition-all flex items-center justify-center gap-2">
+                                    <i class="bi bi-box-arrow-right text-base"></i>
+                                    <span>Salida</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="space-y-2">
+                            <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Ubicación</label>
+                            <select x-model="modalConfig.ubicacion_id"
+                                    class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-primary-500 outline-none font-bold text-slate-700">
+                                <option value="">General / Local Comunal</option>
+                                {% for ub in ubicaciones %}
+                                    <option value="{{ ub.id }}">{{ ub.nombre }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex gap-3">
+                    <button @click="modalOpen = false"
+                            class="px-5 py-3 bg-slate-100 text-slate-500 rounded-xl font-bold uppercase text-xs tracking-widest hover:bg-slate-200 transition-all flex-1">
+                        Cancelar
+                    </button>
+                    <button @click="confirmSetup()"
+                            :disabled="!modalConfig.evento_id"
+                            class="px-5 py-3 bg-primary-600 text-white rounded-xl font-black uppercase text-xs tracking-widest hover:bg-primary-700 transition-all flex-1 disabled:opacity-50 disabled:cursor-not-allowed">
+                        Activar cámara
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Close Event Modal -->
+        <div x-cloak
+             x-show="closeModalOpen"
+             class="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/75 backdrop-blur-md px-4"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0">
+            <div class="w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-100 p-8 space-y-6"
+                 x-transition:enter="transition ease-out duration-300"
+                 x-transition:enter-start="opacity-0 scale-95 translate-y-4"
+                 x-transition:enter-end="opacity-100 scale-100 translate-y-0"
+                 x-transition:leave="transition ease-in duration-200"
+                 x-transition:leave-start="opacity-100 scale-100 translate-y-0"
+                 x-transition:leave-end="opacity-0 scale-95 translate-y-4">
+                <div class="flex items-start gap-4">
+                    <div class="h-12 w-12 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center shrink-0">
+                        <i class="bi bi-exclamation-triangle-fill text-2xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-black text-slate-900">Confirmar cierre de evento</h3>
+                        <p class="text-sm text-slate-500 mt-1">
+                            Esta acción bloqueará nuevos escaneos para este evento y generará reportes finales automáticos.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="rounded-2xl border border-red-200 bg-red-50 p-4 space-y-2">
+                    <p class="text-[10px] font-black text-red-500 uppercase tracking-widest">Evento a cerrar</p>
+                    <p class="text-sm font-black text-red-700" x-text="selectedEventLabel"></p>
+                    <p class="text-xs text-red-600 font-bold">Recomendación: verifica que ya no haya personas por registrar.</p>
+                </div>
+
+                <div class="space-y-3">
+                    <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">Escribe CERRAR para confirmar</label>
+                    <input x-model="closeConfirmText"
+                           type="text"
+                           placeholder="CERRAR"
+                           class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-red-500 outline-none font-black text-slate-700 uppercase tracking-wider">
+
+                    <label class="flex items-center gap-2 text-xs font-bold text-slate-600">
+                        <input x-model="closeAcknowledged"
+                               type="checkbox"
+                               class="h-4 w-4 rounded border-slate-300 text-red-600 focus:ring-red-500">
+                        Confirmo que deseo cerrar este evento y generar su resumen final.
+                    </label>
+                </div>
+
+                <div class="flex gap-3">
+                    <button @click="closeModalOpen = false"
+                            class="px-5 py-3 bg-slate-100 text-slate-500 rounded-xl font-bold uppercase text-xs tracking-widest hover:bg-slate-200 transition-all flex-1">
+                        Cancelar
+                    </button>
+                    <button @click="closeCurrentEvent()"
+                            :disabled="closingEvent || closeConfirmText.toUpperCase() !== 'CERRAR' || !closeAcknowledged"
+                            class="px-5 py-3 bg-red-600 text-white rounded-xl font-black uppercase text-xs tracking-widest hover:bg-red-700 transition-all flex-1 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <span x-show="!closingEvent">Cerrar evento</span>
+                        <span x-show="closingEvent">Cerrando...</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <!-- Header -->
         <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div>
@@ -247,6 +498,17 @@
                     <span class="text-xs font-black uppercase tracking-widest"
                           x-text="currentTime"></span>
                 </div>
+                <button @click="reopenSetup()"
+                        class="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-slate-200 transition">
+                    Cambiar evento
+                </button>
+                {% if can_manage_users %}
+                    <button @click="openCloseEventModal()"
+                            :disabled="!config.evento_id || closingEvent"
+                            class="px-4 py-2 bg-red-600 text-white rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-red-700 transition disabled:opacity-60 disabled:cursor-not-allowed">
+                        Cerrar evento
+                    </button>
+                {% endif %}
             </div>
         </div>
 
@@ -513,3 +775,5 @@
         }
     </style>
 {% endblock content %}
+
+

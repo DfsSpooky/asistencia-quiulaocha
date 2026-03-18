@@ -102,6 +102,14 @@
         }
 
         @media print {
+            html,
+            body {
+                width: 100%;
+                height: 100%;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+
             body * {
                 visibility: hidden;
             }
@@ -112,23 +120,31 @@
             }
 
             #carnet-container {
-                position: absolute;
-                left: 50%;
-                top: 50%;
-                transform: translate(-50%, -50%);
-                width: 600px;
-                height: 378px;
+                position: fixed;
+                inset: 0;
+                width: 297mm;
+                height: 210mm;
+                margin: 0;
+                padding: 0;
+                overflow: hidden;
             }
 
             #carnet {
-                border: none !important;
+                position: absolute;
+                left: 50%;
+                top: 50%;
+                width: 600px !important;
+                height: 378px !important;
+                transform: translate(-50%, -50%) scale(1.87);
+                transform-origin: center center;
+                border: 1px solid #e2e8f0 !important;
                 box-shadow: none !important;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
             }
 
             @page {
-                size: landscape;
+                size: A4 landscape;
                 margin: 0;
             }
         }

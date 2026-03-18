@@ -31,18 +31,20 @@ class Command(BaseCommand):
 
         # Encontrar la fila de cabecera (en este CSV está en la primera fila, index 0 / header=0)
         # Probaremos buscarla por si acaso, si no, asumimos 0
-        header_idx = None
+        header_idx: int = 0
+        header_found_in_data = False
         for i, row in df.iterrows():
             if row.astype(str).str.contains('DNI', case=False).any():
-                header_idx = i
+                header_idx = int(i)
+                header_found_in_data = True
                 break
-        
+
         # En el padron nuevo las columnas estan directamente en el Df original que carga pandas
         # así que comprobemos si están en las columnas mismas
         if any('DNI' in str(c).upper() for c in df.columns):
             self.stdout.write("Fila de cabecera encontrada en la primera fila (header).")
             # Ya está cargado bien
-        elif header_idx is not None:
+        elif header_found_in_data:
             self.stdout.write(f"Fila de cabecera encontrada en el índice {header_idx + 1}.")
             try:
                 df = pd.read_csv(file_path, sep=';', header=header_idx + 1, encoding='utf-8')
@@ -68,16 +70,16 @@ class Command(BaseCommand):
         self.stdout.write(f"Columna DNI identificada como: '{dni_col}'")
         self.stdout.write(f"Columna Nombres identificada como: '{nombres_col}'")
 
-        count_activos = 0
-        count_exonerados = 0
-        count_pasivos = 0
-        count_errores = 0
+        count_activos: int = 0
+        count_exonerados: int = 0
+        count_pasivos: int = 0
+        count_errores: int = 0
 
         for index, row in df.iterrows():
             dni_val = str(row[dni_col]).strip()
             
             # Limpiar DNI: si se leyó como float 12345678.0, quitar el .0
-            if getattr(dni_val, "endswith", None) and dni_val.endswith('.0'):
+            if dni_val.endswith('.0'):
                 dni_val = dni_val[:-2]
             
             # Completar con ceros a la izquierda si tiene menos de 8

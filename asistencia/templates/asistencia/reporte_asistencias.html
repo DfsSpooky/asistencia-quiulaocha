@@ -252,7 +252,7 @@
                     Reporte generado el {{ current_date }}
                     {% if filtros.evento %}
                         <br>
-                        <strong>Evento:</strong> {{ filtros.evento.nombre }}
+                        <strong>Evento:</strong> {{ filtros.evento.nombre|default:filtros.evento }}
                     {% endif %}
                     {% if filtros.dni %}
                         <br>
@@ -278,9 +278,9 @@
                 </thead>
                 <tbody>
                     {% for item in unified_list %}
-                        <tr {% if item.is_absent %}style="background-color: #fef2f2;"{% endif %}>
+                        <tr {% if item.es_justificada %}style="background-color: #eef2ff;"{% elif item.is_absent %}style="background-color: #fef2f2;"{% endif %}>
                             <td>
-                                <strong style="{% if item.is_absent %}color: #dc2626;{% endif %}">
+                                <strong style="{% if item.es_justificada %}color: #4338ca;{% elif item.is_absent %}color: #dc2626;{% endif %}">
                                     {% if item.usuario %}
                                         {{ item.usuario.nombre }} {{ item.usuario.apellido }}
                                     {% else %}
@@ -299,7 +299,11 @@
                             </td>
                             <td>{{ item.fecha|date:"d/m/Y" }}</td>
                             
-                            {% if item.is_absent %}
+                            {% if item.es_justificada %}
+                                <td colspan="2" style="text-align: center;">
+                                    <span style="color: #3730a3; font-weight: 800; font-size: 10px; padding: 4px 8px; background: #e0e7ff; border-radius: 4px;">JUSTIFICADA</span>
+                                </td>
+                            {% elif item.is_absent %}
                                 <td colspan="2" style="text-align: center;">
                                     <span style="color: #dc2626; font-weight: 800; font-size: 10px; padding: 4px 8px; background: #fee2e2; border-radius: 4px;">AUSENTE</span>
                                 </td>
@@ -309,7 +313,12 @@
                             {% endif %}
                             
                             <td>
-                                {% if item.is_absent %}
+                                {% if item.es_justificada %}
+                                    <span style="font-size: 9px; color: #3730a3;">Falta justificada: {{ item.evento.nombre }}</span>
+                                    {% if item.justificacion_obs %}
+                                        <div style="font-size: 8px; color: #4338ca; margin-top: 2px;">Motivo: {{ item.justificacion_obs }}</div>
+                                    {% endif %}
+                                {% elif item.is_absent %}
                                     <span style="font-size: 9px; color: #dc2626;">Faltó: {{ item.evento.nombre }}</span>
                                 {% else %}
                                     <div>{{ item.evento.nombre|default:"Operación" }}</div>
@@ -318,11 +327,11 @@
                             </td>
                             
                             <td style="text-align: center;">
-                                {% if item.is_absent %}
-                                    <span style="font-size: 12px; color: #dc2626;">✕</span>
-                                {% elif item.es_justificada %}
+                                {% if item.es_justificada %}
                                      <span class="status-badge" style="background-color: #e0e7ff; color: #3730a3">JUSTIF.</span>
-                                {% elif item.hora_salida or (item.usuario and item.usuario.estado == 'EXONERADO') %}
+                                {% elif item.is_absent %}
+                                    <span style="font-size: 12px; color: #dc2626;">✕</span>
+                                {% elif item.hora_salida or item.usuario.estado == 'EXONERADO' %}
                                     <span class="status-badge status-yes">
                                         ASISTIÓ
                                     </span>

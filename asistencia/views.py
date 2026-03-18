@@ -1,19 +1,20 @@
 from django.db import models
-from django.shortcuts import render, redirect, get_object_or_404, redirect
+from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import logout as auth_logout, authenticate, login as auth_login
 from django.contrib.auth.models import User, Group
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.views import LoginView, LogoutView
 from django.contrib import messages
 from django.core.exceptions import ValidationError
-from django.views.decorators.csrf import csrf_exempt, csrf_protect
+from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_POST
 from django.utils.decorators import method_decorator
 from django.core.paginator import Paginator
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, FileResponse
 from django.views.decorators.cache import cache_page
 from django.views import View
 from django.db.models import Q, Count
+from django.db import connection
 from django.db import transaction
 import csv
 import openpyxl # Changed from `from openpyxl import Workbook` to `import openpyxl` for consistency with other imports
@@ -31,22 +32,26 @@ from django.utils import timezone
 from django.utils.html import escape
 from datetime import date, datetime, timedelta
 import base64
+from io import TextIOWrapper
+from django.conf import settings
+from django.template.loader import render_to_string
 from .utils.reports import (
     generate_attendance_csv, generate_attendance_excel, 
     generate_pdf_report, get_logo_base64, get_filtered_attendance_data
 )
-from django.core.management import call_command
 import os
 import subprocess
 import shutil
 import tarfile
+from django.db.migrations.executor import MigrationExecutor
+from .audit import log_critical_change
 
 def landing_page(request):
     """
-    Landing page pública para el sistema de asistencia de Quiulacocha.
+    Landing page pÃƒÂºblica para el sistema de asistencia de Quiulacocha.
     
-    Si el usuario está autenticado, muestra un botón para ir al dashboard.
-    Si no está autenticado, muestra la página de bienvenida con CTA para login.
+    Si el usuario estÃƒÂ¡ autenticado, muestra un botÃƒÂ³n para ir al dashboard.
+    Si no estÃƒÂ¡ autenticado, muestra la pÃƒÂ¡gina de bienvenida con CTA para login.
     """
     config = ConfiguracionSistema.objects.first()
     return render(request, 'asistencia/landing.html', {
@@ -71,6 +76,62 @@ def dashboard(request):
     }
     return render(request, 'asistencia/dashboard.html', context)
 
+
+@login_required
+@permission_required('asistencia.can_manage_users', raise_exception=True)
+def panel_salud(request):
+    db_status = 'OK'
+    db_latency_ms = None
+    try:
+        start = timezone.now()
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT 1')
+            cursor.fetchone()
+        db_latency_ms = int((timezone.now() - start).total_seconds() * 1000)
+    except Exception:
+        db_status = 'ERROR'
+
+    media_size = _dir_size(settings.MEDIA_ROOT)
+    backups_dir = os.path.join(settings.BASE_DIR, 'backups')
+    backups_size = _dir_size(backups_dir)
+
+    latest_backup = None
+    if os.path.exists(backups_dir):
+        backup_files = [
+            os.path.join(backups_dir, f)
+            for f in os.listdir(backups_dir)
+            if f.endswith('.tar.gz')
+        ]
+        if backup_files:
+            latest_backup = max(backup_files, key=os.path.getmtime)
+
+    disk_total, disk_used, disk_free = shutil.disk_usage(settings.BASE_DIR)
+
+    executor = MigrationExecutor(connection)
+    targets = executor.loader.graph.leaf_nodes()
+    plan = executor.migration_plan(targets)
+
+    restore_log = LogAccion.objects.filter(accion__icontains='Restaurar Backup').order_by('-fecha').first()
+
+    context = {
+        'can_scan_qr': request.user.has_perm('asistencia.can_scan_qr'),
+        'health': {
+            'db_status': db_status,
+            'db_latency_ms': db_latency_ms,
+            'db_engine': connection.vendor,
+            'pending_migrations': len(plan),
+            'disk_total': _format_bytes(disk_total),
+            'disk_used': _format_bytes(disk_used),
+            'disk_free': _format_bytes(disk_free),
+            'media_size': _format_bytes(media_size),
+            'backups_size': _format_bytes(backups_size),
+            'latest_backup': os.path.basename(latest_backup) if latest_backup else 'No disponible',
+            'latest_backup_at': datetime.fromtimestamp(os.path.getmtime(latest_backup)).strftime('%d/%m/%Y %H:%M') if latest_backup else 'N/A',
+            'last_restore': restore_log.fecha.strftime('%d/%m/%Y %H:%M') if restore_log else 'Sin restauraciones',
+        }
+    }
+    return render(request, 'asistencia/panel_salud.html', context)
+
 class CustomLoginView(LoginView):
     template_name = 'asistencia/login.html'
     redirect_authenticated_user = True
@@ -93,7 +154,7 @@ class CustomLoginView(LoginView):
 def custom_login(request):
     return CustomLoginView.as_view()(request)
 
-# @require_POST  <-- Comentado para compatibilidad con Jazzmin/Admin GET links
+@require_POST
 def custom_logout(request):
     auth_logout(request)
     return redirect('login')
@@ -124,7 +185,7 @@ def lista_usuarios(request):
         else:
             usuarios = usuarios.order_by('dni')
     
-    # Calcular estadísticas basadas en los resultados filtrados
+    # Calcular estadÃƒÂ­sticas basadas en los resultados filtrados
     total_usuarios = usuarios.count()
     usuarios_activos = usuarios.filter(estado=Usuario.ESTADO_ACTIVO).count()
     usuarios_pasivos = usuarios.filter(estado=Usuario.ESTADO_PASIVO).count()
@@ -176,16 +237,93 @@ def escanear_qr(request, evento_id=None):
         'ubicaciones': Ubicacion.objects.all(),
         'stats': stats,
         'selected_evento_id': target_event.id if target_event else None,
-        'can_scan_qr': request.user.has_perm('asistencia.can_scan_qr')
+        'can_scan_qr': request.user.has_perm('asistencia.can_scan_qr'),
+        'can_manage_users': request.user.has_perm('asistencia.can_manage_users'),
     })
 
 @login_required
 @permission_required('asistencia.can_scan_qr', raise_exception=True)
 def keep_alive(request):
     """
-    Vista para mantener viva la sesión del usuario mientras está en la página de escaneo.
+    Vista para mantener viva la sesiÃƒÂ³n del usuario mientras estÃƒÂ¡ en la pÃƒÂ¡gina de escaneo.
     """
-    return JsonResponse({'status': 'success', 'message': 'Sesión mantenida activa'})
+    return JsonResponse({'status': 'success', 'message': 'SesiÃƒÂ³n mantenida activa'})
+
+def _format_bytes(size):
+    units = ['B', 'KB', 'MB', 'GB', 'TB']
+    value = float(size)
+    for unit in units:
+        if value < 1024 or unit == units[-1]:
+            return f"{value:.1f} {unit}"
+        value /= 1024
+
+
+def _dir_size(path):
+    if not os.path.exists(path):
+        return 0
+    total = 0
+    for root, _, files in os.walk(path):
+        for file_name in files:
+            fp = os.path.join(root, file_name)
+            if os.path.exists(fp):
+                total += os.path.getsize(fp)
+    return total
+
+
+def _build_event_report_context(evento, filters=None):
+    filters = filters or {}
+    filters = {**filters, 'evento': evento}
+
+    data = get_filtered_attendance_data(filters)
+    unified_list = data.get('unified_report', [])
+
+    total_padron = Usuario.objects.filter(
+        estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_EXONERADO, Usuario.ESTADO_PASIVO]
+    ).count()
+
+    asistencias_fisicas = sum(
+        1 for item in unified_list
+        if not getattr(item, 'is_absent', False) and (getattr(item, 'hora_salida', None) or item.usuario.estado == 'EXONERADO')
+    )
+    justificadas = sum(1 for item in unified_list if getattr(item, 'es_justificada', False))
+    inasistencias_reales = sum(
+        1 for item in unified_list
+        if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False)
+    )
+    pendientes = sum(
+        1 for item in unified_list
+        if not getattr(item, 'is_absent', False) and not getattr(item, 'hora_salida', None) and item.usuario.estado != 'EXONERADO'
+    )
+    total_tardanzas = sum(
+        1 for item in unified_list
+        if not getattr(item, 'is_absent', False) and getattr(item, 'puntualidad', None) == Asistencia.PUNTUALIDAD_TARDE
+    )
+
+    total_asistentes_efectivos = asistencias_fisicas + justificadas
+    porcentaje_asistencia = (total_asistentes_efectivos / total_padron * 100) if total_padron > 0 else 0
+
+    context = {
+        'evento': evento,
+        'unified_list': unified_list,
+        'total_usuarios': total_padron,
+        'total_asistentes': asistencias_fisicas,
+        'justificadas': justificadas,
+        'total_inasistentes': inasistencias_reales,
+        'pendientes': pendientes,
+        'total_tardanzas': total_tardanzas,
+        'porcentaje_asistencia': porcentaje_asistencia,
+        'current_date': timezone.localtime(timezone.now()).strftime('%d/%m/%Y %H:%M'),
+        'logo_base64': get_logo_base64(),
+        'sistema_config': ConfiguracionSistema.objects.first(),
+        'filtros': {
+            'dni': filters.get('dni') or 'Todos',
+            'fecha_inicio': filters.get('fecha_inicio').strftime('%d/%m/%Y') if filters.get('fecha_inicio') else None,
+            'fecha_fin': filters.get('fecha_fin').strftime('%d/%m/%Y') if filters.get('fecha_fin') else None,
+            'evento': evento.nombre
+        }
+    }
+    return context, unified_list
+
 
 @login_required
 def solicitar_justificacion(request):
@@ -227,9 +365,17 @@ def admin_solicitar_justificacion(request):
         form = AdminJustificacionForm(request.POST, request.FILES)
         if form.is_valid():
             justificacion = form.save(commit=False)
+            before = {'estado': justificacion.estado}
             justificacion.estado = Justificacion.ESTADO_APROBADO
             justificacion.procesado_por = request.user
             justificacion.save()
+            log_critical_change(
+                request.user,
+                f'Justificacion:{justificacion.id}',
+                before,
+                {'estado': justificacion.estado},
+                action_label='Cambio estado justificacion',
+            )
             return redirect('lista_usuarios')
     else:
         form = AdminJustificacionForm(initial=initial_data)
@@ -247,14 +393,14 @@ def admin_solicitar_justificacion(request):
         'can_scan_qr': request.user.has_perm('asistencia.can_scan_qr')
     })
 
-@method_decorator(csrf_exempt, name='dispatch')
-@permission_classes([IsAuthenticated])
 class RegistrarAsistencia(APIView):
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
-        # Validación de autenticación y permisos (capa HTTP)
+        # ValidaciÃƒÂ³n de autenticaciÃƒÂ³n y permisos (capa HTTP)
         if not request.user.is_authenticated:
             return Response(
-                {'error': 'No estás autenticado. Por favor, inicia sesión.'}, 
+                {'error': 'No estÃƒÂ¡s autenticado. Por favor, inicia sesiÃƒÂ³n.'}, 
                 status=status.HTTP_403_FORBIDDEN
             )
         
@@ -270,7 +416,7 @@ class RegistrarAsistencia(APIView):
         evento_id = request.data.get('evento_id')
         tipo_escaneo = request.data.get('tipo_escaneo')
         
-        # Extraer timestamp opcional (para sincronización offline)
+        # Extraer timestamp opcional (para sincronizaciÃƒÂ³n offline)
         timestamp_str = request.data.get('timestamp')
         fecha_registro = None
         
@@ -278,17 +424,17 @@ class RegistrarAsistencia(APIView):
             from django.utils.dateparse import parse_datetime
             fecha_registro = parse_datetime(timestamp_str)
             
-            # Validar que el timestamp sea válido
+            # Validar que el timestamp sea vÃƒÂ¡lido
             if not fecha_registro:
                 return Response(
-                    {'error': 'Formato de timestamp inválido. Use ISO 8601.'},
+                    {'error': 'Formato de timestamp invÃƒÂ¡lido. Use ISO 8601.'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
         
         # Validar tipo de escaneo
         if tipo_escaneo not in ['ingreso', 'salida']:
             return Response(
-                {'error': 'Tipo de escaneo no válido. Debe ser "ingreso" o "salida".'}, 
+                {'error': 'Tipo de escaneo no vÃƒÂ¡lido. Debe ser "ingreso" o "salida".'}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -302,12 +448,12 @@ class RegistrarAsistencia(APIView):
             if evento_id:
                 evento = Evento.objects.get(id=evento_id, activo=True)
             
-            # Obtener ubicación si fue especificada
+            # Obtener ubicaciÃƒÂ³n si fue especificada
             ubicacion = None
             if ubicacion_id:
                 ubicacion = Ubicacion.objects.get(id=ubicacion_id)
             
-            # Delegar la lógica de negocio al servicio
+            # Delegar la lÃƒÂ³gica de negocio al servicio
             from .services import AsistenciaService
             
             if tipo_escaneo == 'ingreso':
@@ -337,30 +483,30 @@ class RegistrarAsistencia(APIView):
             }, status=status.HTTP_201_CREATED)
             
         except ValidationError as e:
-            # Errores de validación de negocio
+            # Errores de validaciÃƒÂ³n de negocio
             return Response({'error': str(e.message)}, status=status.HTTP_400_BAD_REQUEST)
         
         except Usuario.DoesNotExist:
             return Response(
-                {'error': 'El DNI escaneado no corresponde a ningún usuario registrado.'}, 
+                {'error': 'El DNI escaneado no corresponde a ningÃƒÂºn usuario registrado.'}, 
                 status=status.HTTP_404_NOT_FOUND
             )
         
         except Evento.DoesNotExist:
             return Response(
-                {'error': 'El evento seleccionado no es válido o no está activo.'}, 
+                {'error': 'El evento seleccionado no es vÃƒÂ¡lido o no estÃƒÂ¡ activo.'}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         except Ubicacion.DoesNotExist:
             return Response(
-                {'error': 'La ubicación seleccionada no es válida.'}, 
+                {'error': 'La ubicaciÃƒÂ³n seleccionada no es vÃƒÂ¡lida.'}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         except base64.binascii.Error:
             return Response(
-                {'error': 'El código QR escaneado es inválido.'}, 
+                {'error': 'El cÃƒÂ³digo QR escaneado es invÃƒÂ¡lido.'}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -439,29 +585,12 @@ def historial_asistencias(request):
         filters['ordenar_por'] = '-fecha'
         
     data = get_filtered_attendance_data(filters)
-    # Combinamos asistencias y no asistentes en una lista unificada para la tabla
-    asistencias = list(data.get('asistencias', []))
-    no_asistentes = data.get('usuarios_no_asistentes')
-    
-    if no_asistentes:
-        # Convertimos los usuarios no asistentes en objetos similares a Asistencia
-        # para que la tabla pueda iterar uniformemente
-        for u in no_asistentes:
-            u.is_absent = True
-            # Intentar buscar si tiene una justificación
-            u.es_justificada = Justificacion.objects.filter(
-                usuario=u, 
-                evento=filters.get('evento'),
-                estado='APROBADO'
-            ).exists()
-            asistencias.append(u)
-
-    # Si no hay ordenamiento específico de SQLAlchemy, ordenamos la lista resultante
-    # (Esto es necesario si mezclamos QuerySets de diferentes tipos)
-    unified_list = asistencias
+    # Usar siempre la lista unificada de la utilidad para mantener consistentes
+    # faltas, justificadas y asistencias en tabla/contadores/reportes.
+    unified_list = list(data.get('unified_report', []))
     
     # Re-ordenar la lista unificada si es necesario (ya que mezclamos tipos de objetos)
-    # Por defecto, los asistentes van primero o según la lógica de reports.py
+    # Por defecto, los asistentes van primero o segÃƒÂºn la lÃƒÂ³gica de reports.py
     
     total_registros = len(unified_list)
     # Mutuamente excluyentes:
@@ -470,7 +599,7 @@ def historial_asistencias(request):
     inasistencias = sum(1 for item in unified_list if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False))
     pendientes = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and not getattr(item, 'hora_salida', None) and item.usuario.estado != 'EXONERADO')
     
-    # Lógica de Contadores según selección de evento
+    # LÃƒÂ³gica de Contadores segÃƒÂºn selecciÃƒÂ³n de evento
     if not filters.get('evento'):
         # Si no hay evento seleccionado, mostrar todo en CERO
         total_registros = 0
@@ -479,8 +608,8 @@ def historial_asistencias(request):
         inasistencias = 0
         pendientes = 0
     else:
-        # Si hay evento, "Padrón Esperado" debe ser el total de usuarios empadronados (Activos + Pasivos + Exonerados)
-        # independientemente de cuántos registros traiga el filtrado (unified_list)
+        # Si hay evento, "PadrÃƒÂ³n Esperado" debe ser el total de usuarios empadronados (Activos + Pasivos + Exonerados)
+        # independientemente de cuÃƒÂ¡ntos registros traiga el filtrado (unified_list)
         total_registros = Usuario.objects.filter(estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_EXONERADO, Usuario.ESTADO_PASIVO]).count()
     
     paginator = Paginator(unified_list, 10)
@@ -511,10 +640,11 @@ def historial_asistencias(request):
     return render(request, 'asistencia/historial_asistencias.html', context)
 
 @login_required
+@permission_required('asistencia.can_manage_users', raise_exception=True)
 def descargar_reporte_global_pdf(request):
     """
-    Genera un PDF histórico de TODO el sistema, agrupado por eventos
-    en orden cronológico (Enero a Diciembre).
+    Genera un PDF histÃƒÂ³rico de TODO el sistema, agrupado por eventos
+    en orden cronolÃƒÂ³gico (Enero a Diciembre).
     """
     from .utils.reports import get_logo_base64
     
@@ -530,7 +660,7 @@ def descargar_reporte_global_pdf(request):
         asistencias = list(data.get('asistencias', []))
         no_asistentes = data.get('usuarios_no_asistentes', [])
         
-        # Procesar récords unificados para este evento
+        # Procesar rÃƒÂ©cords unificados para este evento
         records = []
         for a in asistencias:
             records.append({
@@ -544,7 +674,7 @@ def descargar_reporte_global_pdf(request):
                 total_general_asistencias += 1
                 
         for u in no_asistentes:
-            # Buscar justificación
+            # Buscar justificaciÃƒÂ³n
             just = Justificacion.objects.filter(usuario=u, evento=ev, estado='APROBADO').first()
             records.append({
                 'usuario': u,
@@ -553,13 +683,13 @@ def descargar_reporte_global_pdf(request):
                 'justificacion_obs': just.motivo if just else ""
             })
             
-        # Estadísticas del evento
-        total_padrón = len(records)
+        # EstadÃƒÂ­sticas del evento
+        total_padron = len(records)
         asistencias_fisicas = sum(1 for r in records if not r['is_absent'] and not r.get('es_justificada', False))
         justificadas = sum(1 for r in records if r.get('es_justificada', False))
         faltas_reales = sum(1 for r in records if r['is_absent'] and not r.get('es_justificada', False))
         presentes_totales = asistencias_fisicas + justificadas
-        porcentaje = (presentes_totales / total_padrón * 100) if total_padrón > 0 else 0
+        porcentaje = (presentes_totales / total_padron * 100) if total_padron > 0 else 0
         
         report_data.append({
             'evento': ev,
@@ -569,7 +699,7 @@ def descargar_reporte_global_pdf(request):
                 'justificadas': justificadas,
                 'inasistencias': faltas_reales,
                 'porcentaje': porcentaje,
-                'total_usuarios': total_padrón
+                'total_usuarios': total_padron
             }
         })
         
@@ -584,7 +714,7 @@ def descargar_reporte_global_pdf(request):
     LogAccion.objects.create(
         usuario=request.user,
         accion="Descargar Reporte Global PDF",
-        descripcion=f"{request.user.username} generó el reporte anual consolidado de {len(eventos)} eventos."
+        descripcion=f"{request.user.username} generÃƒÂ³ el reporte anual consolidado de {len(eventos)} eventos."
     )
     
     return generate_pdf_report('asistencia/reporte_global_anual.html', context, f"reporte_global_{datetime.now().year}.pdf")
@@ -599,44 +729,57 @@ def descargar_backup(request):
     if not request.user.is_superuser:
         messages.error(request, "Solo los superusuarios pueden generar copias de seguridad.")
         return redirect('dashboard')
-    
+
     try:
-        # El comando 'backup_db' retorna la ruta absoluta del archivo generado
-        from django.core.management import call_command
-        from io import StringIO
-        out = StringIO()
-        # Capturamos el path del archivo desde el comando (modificado para retornar path)
-        # Nota: He modificado el comando en el paso anterior para que retorne el path.
         from asistencia.management.commands.backup_db import Command as BackupCommand
         cmd = BackupCommand()
         file_path = cmd.handle()
-        
+
         if file_path and os.path.exists(file_path):
-            with open(file_path, 'rb') as f:
-                response = HttpResponse(f.read(), content_type="application/x-gzip")
-                response['Content-Disposition'] = f'attachment; filename="{os.path.basename(file_path)}"'
-                
-                # Opcional: registrar acción
-                LogAccion.objects.create(
-                    usuario=request.user,
-                    accion="Generar Backup",
-                    descripcion=f"{request.user.username} generó y descargó una copia de seguridad."
-                )
-                return response
+            # Stream para evitar cargar un backup completo en memoria RAM.
+            response = FileResponse(open(file_path, 'rb'), content_type="application/gzip")
+            response['Content-Disposition'] = f'attachment; filename="{os.path.basename(file_path)}"'
+
+            LogAccion.objects.create(
+                usuario=request.user,
+                accion="Generar Backup",
+                descripcion=f"{request.user.username} generÃ³ y descargó una copia de seguridad."
+            )
+            return response
         else:
             messages.error(request, "Error al generar el archivo de backup.")
-            
+
     except Exception as e:
         messages.error(request, f"Error inesperado al generar backup: {str(e)}")
-        
+
     return redirect('dashboard')
 
 def safe_extract(tar, path=".", members=None, *, numeric_owner=False):
+    base_path = os.path.abspath(path)
     for member in tar.getmembers():
+        if os.path.isabs(member.name):
+            raise Exception("Ruta absoluta detectada en el archivo de backup.")
+        if member.issym() or member.islnk():
+            raise Exception("No se permiten enlaces simbolicos o duros en backups.")
         member_path = os.path.join(path, member.name)
-        if os.path.commonpath([os.path.abspath(member_path), os.path.abspath(path)]) != os.path.abspath(path):
+        if os.path.commonpath([os.path.abspath(member_path), base_path]) != base_path:
             raise Exception("Intento de Path Traversal detectado en el archivo de backup.")
     tar.extractall(path, members, numeric_owner=numeric_owner)
+
+
+def validate_tar_limits(tar, *, max_members, max_total_uncompressed_size, label):
+    members = tar.getmembers()
+    if len(members) > max_members:
+        raise Exception(f"{label}: demasiados archivos en el backup (limite {max_members}).")
+
+    total_uncompressed = 0
+    for member in members:
+        if member.size < 0:
+            raise Exception(f"{label}: archivo invalido detectado en el backup.")
+        total_uncompressed += member.size
+        if total_uncompressed > max_total_uncompressed_size:
+            max_mb = max_total_uncompressed_size // (1024 * 1024)
+            raise Exception(f"{label}: tamano descomprimido excede el limite de {max_mb} MB.")
 
 @login_required
 @permission_required('asistencia.can_manage_users', raise_exception=True)
@@ -651,19 +794,34 @@ def restaurar_backup(request):
 
     if request.method == 'POST' and request.FILES.get('backup_file'):
         backup_file = request.FILES['backup_file']
-        
+        max_upload_size_bytes = 512 * 1024 * 1024  # 512 MB
+        max_members = 20000
+        max_uncompressed_main_bytes = 2 * 1024 * 1024 * 1024  # 2 GB
+        max_uncompressed_media_bytes = 4 * 1024 * 1024 * 1024  # 4 GB
+
+        before = {
+            'usuarios': Usuario.objects.count(),
+            'asistencias': Asistencia.objects.count(),
+            'eventos': Evento.objects.count(),
+        }
+
         if not backup_file.name.endswith('.tar.gz'):
-            messages.error(request, "El archivo debe ser un .tar.gz válido.")
+            messages.error(request, "El archivo debe ser un .tar.gz valido.")
             return redirect('dashboard')
 
-        # Directorio temporal para la restauración
+        if backup_file.size > max_upload_size_bytes:
+            max_mb = max_upload_size_bytes // (1024 * 1024)
+            messages.error(request, f"El backup supera el limite de {max_mb} MB.")
+            return redirect('dashboard')
+
+        # Directorio temporal para la restauracion
         temp_restore_root = os.path.join(settings.BASE_DIR, 'temp_restore_web')
         if os.path.exists(temp_restore_root):
             shutil.rmtree(temp_restore_root)
         os.makedirs(temp_restore_root)
 
         archive_path = os.path.join(temp_restore_root, 'uploaded_backup.tar.gz')
-        
+
         # Guardar archivo subido
         with open(archive_path, 'wb+') as f:
             for chunk in backup_file.chunks():
@@ -672,37 +830,39 @@ def restaurar_backup(request):
         try:
             # 1. Extraer el tar.gz principal
             with tarfile.open(archive_path, "r:gz") as tar:
+                validate_tar_limits(
+                    tar,
+                    max_members=max_members,
+                    max_total_uncompressed_size=max_uncompressed_main_bytes,
+                    label="Backup principal",
+                )
                 safe_extract(tar, path=temp_restore_root)
-            
+
             # Buscar el directorio interno que contiene database.sql
-            # El tar.gz suele tener una estructura: backup_name/database.sql
             internal_dirs = [d for d in os.listdir(temp_restore_root) if os.path.isdir(os.path.join(temp_restore_root, d))]
             if not internal_dirs:
-                raise Exception("Estructura de backup inválida.")
-            
+                raise Exception("Estructura de backup invalida.")
+
             extract_path = os.path.join(temp_restore_root, internal_dirs[0])
             sql_file = os.path.join(extract_path, 'database.sql')
             media_tar = os.path.join(extract_path, 'media.tar.gz')
 
             if not os.path.exists(sql_file):
-                raise Exception("No se encontró database.sql en el backup.")
+                raise Exception("No se encontro database.sql en el backup.")
 
-            # 2. Restaurar Base de Datos (usando psql directamente)
+            # 2. Restaurar Base de Datos
             db_conf = settings.DATABASES['default']
             env = os.environ.copy()
             env['PGPASSWORD'] = db_conf['PASSWORD']
-            
-            # Nota: El psql restaurará sobre la DB actual.
-            # No podemos 'dropear' la DB mientras estamos conectados, pero podemos sobreescribir esquemas 
-            # o simplemente importar. El pg_dump del comando anterior no usa --clean, 
-            # así que lo mejor es importar.
-            
+
             subprocess.run([
                 'psql',
                 '-h', db_conf['HOST'],
                 '-p', str(db_conf['PORT']),
                 '-U', db_conf['USER'],
                 '-d', db_conf['NAME'],
+                '-v', 'ON_ERROR_STOP=1',
+                '--single-transaction',
                 '-f', sql_file
             ], env=env, check=True)
 
@@ -711,21 +871,39 @@ def restaurar_backup(request):
                 media_root = settings.MEDIA_ROOT
                 if os.path.exists(media_root):
                     shutil.rmtree(media_root)
-                
+
                 with tarfile.open(media_tar, "r:gz") as mt:
+                    validate_tar_limits(
+                        mt,
+                        max_members=max_members,
+                        max_total_uncompressed_size=max_uncompressed_media_bytes,
+                        label="Media backup",
+                    )
                     # El media_tar contiene 'media/' como top level
                     safe_extract(mt, path=settings.BASE_DIR)
 
-            messages.success(request, "¡Sistema restaurado exitosamente!")
-            
+            messages.success(request, "Sistema restaurado exitosamente.")
+
             LogAccion.objects.create(
                 usuario=request.user,
                 accion="Restaurar Backup",
-                descripcion=f"{request.user.username} restauró el sistema desde {backup_file.name}."
+                descripcion=f"{request.user.username} restauro el sistema desde {backup_file.name}."
+            )
+            after = {
+                'usuarios': Usuario.objects.count(),
+                'asistencias': Asistencia.objects.count(),
+                'eventos': Evento.objects.count(),
+            }
+            log_critical_change(
+                request.user,
+                'Sistema',
+                before,
+                after,
+                action_label='Restauracion de backup',
             )
 
         except Exception as e:
-            messages.error(request, f"Error en restauración: {str(e)}")
+            messages.error(request, f"Error en restauracion: {str(e)}")
         finally:
             shutil.rmtree(temp_restore_root)
 
@@ -751,7 +929,7 @@ def exportar_asistencias_excel(request):
     LogAccion.objects.create(
         usuario=request.user,
         accion="Exportar Excel",
-        descripcion=f"{request.user.username} exportó las asistencias a Excel."
+        descripcion=f"{request.user.username} exportÃƒÂ³ las asistencias a Excel."
     )
     return generate_attendance_excel(unified_list)
 
@@ -759,7 +937,7 @@ def exportar_asistencias_excel(request):
 @permission_required('asistencia.can_manage_users', raise_exception=True)
 def exportar_reporte_global_excel(request):
     """
-    Genera un Excel histórico de TODO el sistema, similar al reporte global PDF.
+    Genera un Excel histÃƒÂ³rico de TODO el sistema, similar al reporte global PDF.
     """
     from .utils.reports import generate_global_attendance_excel, get_filtered_attendance_data
     
@@ -790,12 +968,12 @@ def exportar_reporte_global_excel(request):
                 'justificacion_obs': just.motivo if just else ""
             })
             
-        total_padrón = len(records)
+        total_padron = len(records)
         asistencias_fisicas = sum(1 for r in records if not r['is_absent'] and not r.get('es_justificada', False))
         justificadas = sum(1 for r in records if r.get('es_justificada', False))
         faltas_reales = sum(1 for r in records if r['is_absent'] and not r.get('es_justificada', False))
         presentes_totales = asistencias_fisicas + justificadas
-        porcentaje = (presentes_totales / total_padrón * 100) if total_padrón > 0 else 0
+        porcentaje = (presentes_totales / total_padron * 100) if total_padron > 0 else 0
         
         report_data.append({
             'evento': ev,
@@ -804,7 +982,7 @@ def exportar_reporte_global_excel(request):
                 'asistencias_fisicas': asistencias_fisicas,
                 'justificadas': justificadas,
                 'inasistencias': faltas_reales,
-                'total_usuarios': total_padrón,
+                'total_usuarios': total_padron,
                 'porcentaje': porcentaje,
             }
         })
@@ -814,7 +992,7 @@ def exportar_reporte_global_excel(request):
     LogAccion.objects.create(
         usuario=request.user,
         accion="Exportar Reporte Global Excel",
-        descripcion=f"{request.user.username} exportó el reporte anual consolidado a Excel ({len(eventos)} eventos)."
+        descripcion=f"{request.user.username} exportÃƒÂ³ el reporte anual consolidado a Excel ({len(eventos)} eventos)."
     )
     
     return generate_global_attendance_excel(report_data, system_config)
@@ -830,7 +1008,7 @@ def confirmar_asistencia(request, asistencia_id):
         LogAccion.objects.create(
             usuario=request.user,
             accion="Confirmar asistencia",
-            descripcion=f"{request.user.username} confirmó la asistencia de {asistencia.usuario.nombre} {asistencia.usuario.apellido} para el evento {asistencia.evento.nombre if asistencia.evento else 'sin evento'}."
+            descripcion=f"{request.user.username} confirmÃƒÂ³ la asistencia de {asistencia.usuario.nombre} {asistencia.usuario.apellido} para el evento {asistencia.evento.nombre if asistencia.evento else 'sin evento'}."
             )
     else:
         messages.warning(request, f"La asistencia de {asistencia.usuario} ya estaba confirmada.")
@@ -846,29 +1024,30 @@ def descargar_reporte_pdf(request):
     # Usar la lista unificada
     unified_list = data.get('unified_report', [])
     
-    # Calcular estadísticas detalladas
-    total_padrón = len(unified_list) # Usar el padrón del reporte (Activos + Exon)
+    # Calcular estadÃƒÂ­sticas detalladas
+    total_padron = len(unified_list) # Usar el padrÃƒÂ³n del reporte (Activos + Exon)
     asistencias_puras = sum(1 for item in unified_list if not getattr(item, 'is_absent', False))
     justificadas = sum(1 for item in unified_list if getattr(item, 'es_justificada', False))
     total_asistentes_efectivos = asistencias_puras + justificadas
     total_inasistentes_reales = sum(1 for item in unified_list if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False))
     
-    porcentaje_asistencia = (total_asistentes_efectivos / total_padrón * 100) if total_padrón > 0 else 0
+    porcentaje_asistencia = (total_asistentes_efectivos / total_padron * 100) if total_padron > 0 else 0
 
     context = {
         'unified_list': unified_list,
-        'total_usuarios': total_padrón,
+        'total_usuarios': total_padron,
         'total_asistentes': total_asistentes_efectivos,
         'asistencias_puras': asistencias_puras,
         'justificadas': justificadas,
         'total_inasistentes': total_inasistentes_reales,
         'porcentaje_asistencia': porcentaje_asistencia,
         'logo_base64': get_logo_base64(),
+        'sistema_config': ConfiguracionSistema.objects.first(),
         'current_date': datetime.now().strftime('%d/%m/%Y %H:%M'),
         'filtros': {
             'fecha_inicio': filters.get('fecha_inicio').strftime('%d/%m/%Y') if filters.get('fecha_inicio') else 'Inicio',
             'fecha_fin': filters.get('fecha_fin').strftime('%d/%m/%Y') if filters.get('fecha_fin') else 'Hoy',
-            'evento': filters.get('evento').nombre if filters.get('evento') else 'Todos',
+            'evento': filters.get('evento'),
             'dni': filters.get('dni') or 'Todos'
         }
     }
@@ -880,7 +1059,7 @@ def descargar_reporte_pdf(request):
 def descargar_reporte_usuario_pdf(request, dni):
     usuario = get_object_or_404(Usuario, dni=dni)
     
-    # 1. Obtener TODOS los eventos históricos ordenados por fecha descendente
+    # 1. Obtener TODOS los eventos histÃƒÂ³ricos ordenados por fecha descendente
     todos_eventos = Evento.objects.all().order_by('-fecha', '-hora_ingreso')
     
     # 2. Obtener asistencias del usuario mapeadas por ID de evento
@@ -896,17 +1075,17 @@ def descargar_reporte_usuario_pdf(request, dni):
     # 4. Construir la lista unificada recorriendo TODOS los eventos
     for evento in todos_eventos:
         if evento.id in asistencia_map:
-            # CASO 1: ASISTIÓ (O PENDIENTE)
+            # CASO 1: ASISTIÃƒâ€œ (O PENDIENTE)
             # El usuario tiene un registro de asistencia
             item = asistencia_map[evento.id]
-            # Aseguramos que los atributos helpers existan (aunque sea el objeto ORM)
-            item.is_absent = False
-            item.es_justificada = False
+            # Mantener el estado real de justificaciÃƒÂ³n guardado en el registro.
+            item.es_justificada = bool(getattr(item, 'es_justificada', False))
+            item.is_absent = item.es_justificada
             unified_list.append(item)
             
         elif evento.id in justificacion_map:
             # CASO 2: FALTA JUSTIFICADA
-            # No tiene asistencia pero sí justificación aprobada
+            # No tiene asistencia pero sÃƒÂ­ justificaciÃƒÂ³n aprobada
             justificacion = justificacion_map[evento.id]
             
             # Crear objeto mock para el template
@@ -915,9 +1094,9 @@ def descargar_reporte_usuario_pdf(request, dni):
                 'hora_ingreso': None,
                 'hora_salida': None,
                 'evento': evento,
-                'ubicacion': None, # No hay ubicación registrada para la falta
+                'ubicacion': None, # No hay ubicaciÃƒÂ³n registrada para la falta
                 'usuario': usuario,
-                'is_absent': True, # Es ausencia física
+                'is_absent': True, # Es ausencia fÃƒÂ­sica
                 'es_justificada': True, # Pero justificada
                 'justificacion_obs': justificacion.motivo,
                 'estado_display': 'JUSTIFICADA'
@@ -926,7 +1105,7 @@ def descargar_reporte_usuario_pdf(request, dni):
             
         else:
             # CASO 3: FALTA INJUSTIFICADA
-            # No hay registro ni justificación
+            # No hay registro ni justificaciÃƒÂ³n
             mock_item = type('MockAsistencia', (object,), {
                 'fecha': evento.fecha,
                 'hora_ingreso': None,
@@ -940,7 +1119,7 @@ def descargar_reporte_usuario_pdf(request, dni):
             })
             unified_list.append(mock_item)
 
-    # Calcular métricas avanzadas sobre la lista completa
+    # Calcular mÃƒÂ©tricas avanzadas sobre la lista completa
     total_eventos = len(todos_eventos)
     
     # Confirmadas: Tiene salida O es exonerado (y no es mock de falta/justificada)
@@ -965,12 +1144,12 @@ def descargar_reporte_usuario_pdf(request, dni):
     score_asistencia = (total_participaciones / total_eventos * 100) if total_eventos > 0 else 0
     
     # Calcular racha de asistencias (eventos consecutivos asistidos/justificados)
-    # La lista ya está ordenada por fecha descendente (más reciente primero).
+    # La lista ya estÃƒÂ¡ ordenada por fecha descendente (mÃƒÂ¡s reciente primero).
     # Para racha actual, contamos desde el inicio hasta que se rompa.
     racha_actual = 0
     for item in unified_list:
         if not getattr(item, 'is_absent', False) or getattr(item, 'es_justificada', False):
-             # Consideramos asistencia o justificación como continuar la racha
+             # Consideramos asistencia o justificaciÃƒÂ³n como continuar la racha
              racha_actual += 1
         else:
             if item.fecha < timezone.now().date(): # Si es falta pasada, rompe racha
@@ -979,10 +1158,10 @@ def descargar_reporte_usuario_pdf(request, dni):
             # Asumimos que todos_eventos son pasados o presentes.
             break
 
-    # Racha máxima (requiere recorrer cronológicamente o iterar toda la lista)
+    # Racha mÃƒÂ¡xima (requiere recorrer cronolÃƒÂ³gicamente o iterar toda la lista)
     racha_maxima = 0
     temp_racha = 0
-    # Recorremos en orden CRONOLÓGICO (invertido de unified_list)
+    # Recorremos en orden CRONOLÃƒâ€œGICO (invertido de unified_list)
     for item in reversed(unified_list):
         if not getattr(item, 'is_absent', False) or getattr(item, 'es_justificada', False):
             temp_racha += 1
@@ -991,7 +1170,7 @@ def descargar_reporte_usuario_pdf(request, dni):
         else:
             temp_racha = 0
 
-    # Últimas 5 asistencias (para el resumen visual, tomamos las 5 primeras del unified que son las recientes)
+    # ÃƒÅ¡ltimas 5 asistencias (para el resumen visual, tomamos las 5 primeras del unified que son las recientes)
     ultimas_asistencias = unified_list[:5]
     
     context = {
@@ -999,6 +1178,7 @@ def descargar_reporte_usuario_pdf(request, dni):
         'unified_list': unified_list,
         'current_date': timezone.localtime(timezone.now()).strftime('%d/%m/%Y %H:%M'),
         'logo_base64': get_logo_base64(),
+        'sistema_config': ConfiguracionSistema.objects.first(),
         'stats': {
             'total_eventos': total_eventos,
             'asistencias': asistencias_confirmadas,
@@ -1015,7 +1195,7 @@ def descargar_reporte_usuario_pdf(request, dni):
     LogAccion.objects.create(
         usuario=request.user,
         accion="Descargar reporte asistencias usuario PDF",
-        descripcion=f"{request.user.username} descargó el reporte de asistencias de {usuario.nombre} {usuario.apellido} (DNI: {usuario.dni}) en PDF."
+        descripcion=f"{request.user.username} descargÃƒÂ³ el reporte de asistencias de {usuario.nombre} {usuario.apellido} (DNI: {usuario.dni}) en PDF."
     )
     
     return generate_pdf_report('asistencia/reporte_asistencias_usuario.html', context, f"reporte_asistencias_{usuario.dni}.pdf")
@@ -1032,32 +1212,33 @@ def descargar_reporte_evento_pdf(request, evento_id):
     data = get_filtered_attendance_data(filters)
     unified_list = data.get('unified_report', [])
     
-    # Calcular estadísticas: Consideramos Justificadas como "Asistencia Efectiva"
-    total_padrón = Usuario.objects.filter(estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_EXONERADO, Usuario.ESTADO_PASIVO]).count()
+    # Calcular estadÃƒÂ­sticas: Consideramos Justificadas como "Asistencia Efectiva"
+    total_padron = Usuario.objects.filter(estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_EXONERADO, Usuario.ESTADO_PASIVO]).count()
     
-    # Asistieron físicamente y confirmados (tienen salida O son exonerados)
+    # Asistieron fÃƒÂ­sicamente y confirmados (tienen salida O son exonerados)
     asistencias_fisicas = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and (getattr(item, 'hora_salida', None) or item.usuario.estado == 'EXONERADO'))
     # Justificaron (con permiso aprobado)
     justificadas = sum(1 for item in unified_list if getattr(item, 'es_justificada', False))
     # Inasistencias reales (ni fueron ni justificaron)
     inasistencias_reales = sum(1 for item in unified_list if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False))
-    # Pendientes de confirmación física
+    # Pendientes de confirmaciÃƒÂ³n fÃƒÂ­sica
     pendientes = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and not getattr(item, 'hora_salida', None) and item.usuario.estado != 'EXONERADO')
     
     total_asistentes_efectivos = asistencias_fisicas + justificadas
-    porcentaje_asistencia = (total_asistentes_efectivos / total_padrón * 100) if total_padrón > 0 else 0
+    porcentaje_asistencia = (total_asistentes_efectivos / total_padron * 100) if total_padron > 0 else 0
     
     context = {
         'evento': evento,
         'unified_list': unified_list,
-        'total_usuarios': total_padrón,
-        'total_asistentes': asistencias_fisicas, # Solo fìsicos confirmados
+        'total_usuarios': total_padron,
+        'total_asistentes': asistencias_fisicas, # Solo fÃƒÂ¬sicos confirmados
         'justificadas': justificadas,
         'total_inasistentes': inasistencias_reales,
         'pendientes': pendientes,
         'porcentaje_asistencia': porcentaje_asistencia,
         'current_date': timezone.localtime(timezone.now()).strftime('%d/%m/%Y %H:%M'),
         'logo_base64': get_logo_base64(),
+        'sistema_config': ConfiguracionSistema.objects.first(),
         'filtros': {
             'dni': filters.get('dni') or 'Todos',
             'fecha_inicio': filters.get('fecha_inicio').strftime('%d/%m/%Y') if filters.get('fecha_inicio') else None,
@@ -1069,10 +1250,69 @@ def descargar_reporte_evento_pdf(request, evento_id):
     LogAccion.objects.create(
         usuario=request.user,
         accion="Descargar reporte evento PDF",
-        descripcion=f"{request.user.username} descargó el reporte del evento {evento.nombre} en PDF."
+        descripcion=f"{request.user.username} descargÃƒÂ³ el reporte del evento {evento.nombre} en PDF."
     )
     
     return generate_pdf_report('asistencia/reporte_evento.html', context, f"reporte_evento_{evento.id}.pdf")
+
+@login_required
+@permission_required('asistencia.can_manage_users', raise_exception=True)
+@require_POST
+def cerrar_evento(request, evento_id):
+    evento = get_object_or_404(Evento, id=evento_id)
+    if not evento.activo:
+        return JsonResponse({'error': 'El evento ya se encuentra cerrado.'}, status=400)
+
+    before = {'activo': evento.activo}
+    evento.activo = False
+    evento.save(update_fields=['activo'])
+
+    context, unified_list = _build_event_report_context(evento)
+    timestamp = timezone.localtime(timezone.now()).strftime('%Y%m%d_%H%M%S')
+    closure_dir = os.path.join(settings.MEDIA_ROOT, 'cierres_evento')
+    os.makedirs(closure_dir, exist_ok=True)
+
+    pdf_filename = f"resumen_evento_{evento.id}_{timestamp}.pdf"
+    excel_filename = f"resumen_evento_{evento.id}_{timestamp}.xlsx"
+    pdf_path = os.path.join(closure_dir, pdf_filename)
+    excel_path = os.path.join(closure_dir, excel_filename)
+
+    pdf_response = generate_pdf_report('asistencia/reporte_evento.html', context, pdf_filename)
+    if pdf_response.status_code >= 400:
+        evento.activo = True
+        evento.save(update_fields=['activo'])
+        return JsonResponse({'error': 'No se pudo generar el resumen PDF del cierre.'}, status=500)
+
+    with open(pdf_path, 'wb') as pdf_file:
+        pdf_file.write(pdf_response.content)
+
+    excel_response = generate_attendance_excel(unified_list, filename=excel_filename)
+    with open(excel_path, 'wb') as excel_file:
+        excel_file.write(excel_response.content)
+
+    after = {'activo': evento.activo}
+    log_critical_change(
+        request.user,
+        f'Evento:{evento.id}',
+        before,
+        after,
+        action_label='Cierre de evento con resumen automatico',
+    )
+    LogAccion.objects.create(
+        usuario=request.user,
+        accion="Cierre de evento",
+        descripcion=(
+            f"Se cerrÃƒÆ’Ã‚Â³ el evento {evento.nombre}. PDF: {pdf_filename}. "
+            f"Excel: {excel_filename}. Tardanzas: {context.get('total_tardanzas', 0)}."
+        ),
+    )
+
+    return JsonResponse({
+        'message': 'Evento cerrado y resumen generado correctamente.',
+        'pdf_url': f"{settings.MEDIA_URL}cierres_evento/{pdf_filename}",
+        'excel_url': f"{settings.MEDIA_URL}cierres_evento/{excel_filename}",
+    })
+
 
 @login_required
 def buscar_usuario_dni(request):
@@ -1089,15 +1329,38 @@ def buscar_usuario_dni(request):
 @login_required
 @permission_required('asistencia.can_manage_users', raise_exception=True)
 def descargar_reporte_filtrado_pdf(request):
-    """Genera un PDF con los filtros aplicados desde la página de historial"""
+    """Genera un PDF con los filtros aplicados desde la pÃƒÂ¡gina de historial"""
     form = FiltroAsistenciaForm(request.GET or None)
     
     filters = form.cleaned_data if form.is_valid() else {}
-    data = get_filtered_attendance_data(filters)
+    effective_filters = filters.copy()
+    auto_event_from_range = False
+
+    # Si no seleccionaron evento pero sÃƒÂ­ un rango de fechas, y ese rango contiene
+    # exactamente 1 evento, forzamos ese evento para calcular padrÃƒÂ³n/faltantes reales.
+    if (
+        not effective_filters.get('evento')
+        and effective_filters.get('fecha_inicio')
+        and effective_filters.get('fecha_fin')
+    ):
+        eventos_rango = Evento.objects.filter(
+            fecha__range=[effective_filters.get('fecha_inicio'), effective_filters.get('fecha_fin')]
+        ).order_by('fecha')
+        if eventos_rango.count() == 1:
+            effective_filters['evento'] = eventos_rango.first()
+            auto_event_from_range = True
+
+    data = get_filtered_attendance_data(effective_filters)
     unified_list = data.get('unified_report', [])
     
-    # Calcular estadísticas
-    total_registros = len(unified_list)
+    # Calcular estadÃƒÂ­sticas
+    if effective_filters.get('evento'):
+        total_registros = Usuario.objects.filter(
+            estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_EXONERADO, Usuario.ESTADO_PASIVO]
+        ).count()
+    else:
+        total_registros = len(unified_list)
+
     confirmadas = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and (getattr(item, 'hora_salida', None) or item.usuario.estado == 'EXONERADO'))
     pendientes = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and not getattr(item, 'hora_salida', None) and item.usuario.estado != 'EXONERADO')
     inasistencias = sum(1 for item in unified_list if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False))
@@ -1112,20 +1375,23 @@ def descargar_reporte_filtrado_pdf(request):
         'justificadas': justificadas,
         'current_date': timezone.localtime(timezone.now()).strftime('%d/%m/%Y %H:%M'),
         'logo_base64': get_logo_base64(),
+        'sistema_config': ConfiguracionSistema.objects.first(),
+        'is_event_scope': bool(effective_filters.get('evento')),
+        'auto_event_from_range': auto_event_from_range,
         'filtros': {
-            'dni': filters.get('dni') or 'Todos',
-            'fecha_inicio': filters.get('fecha_inicio').strftime('%d/%m/%Y') if filters.get('fecha_inicio') else 'Sin filtro',
-            'fecha_fin': filters.get('fecha_fin').strftime('%d/%m/%Y') if filters.get('fecha_fin') else 'Sin filtro',
-            'evento': filters.get('evento').nombre if filters.get('evento') else 'Todos los eventos',
-            'ubicacion': filters.get('ubicacion').nombre if filters.get('ubicacion') else 'Todas',
-            'estado': dict(form.fields['estado'].choices).get(filters.get('estado', ''), 'Todos') if filters.get('estado') else 'Todos',
+            'dni': effective_filters.get('dni') or 'Todos',
+            'fecha_inicio': effective_filters.get('fecha_inicio').strftime('%d/%m/%Y') if effective_filters.get('fecha_inicio') else 'Sin filtro',
+            'fecha_fin': effective_filters.get('fecha_fin').strftime('%d/%m/%Y') if effective_filters.get('fecha_fin') else 'Sin filtro',
+            'evento': effective_filters.get('evento').nombre if effective_filters.get('evento') else 'Todos los eventos',
+            'ubicacion': effective_filters.get('ubicacion').nombre if effective_filters.get('ubicacion') else 'Todas',
+            'estado': dict(form.fields['estado'].choices).get(effective_filters.get('estado', ''), 'Todos') if effective_filters.get('estado') else 'Todos',
         }
     }
     
     LogAccion.objects.create(
         usuario=request.user,
         accion="Descargar reporte filtrado PDF",
-        descripcion=f"{request.user.username} descargó un reporte filtrado en PDF."
+        descripcion=f"{request.user.username} descargÃƒÂ³ un reporte filtrado en PDF."
     )
     
     return generate_pdf_report('asistencia/reporte_filtrado.html', context, "reporte_filtrado.pdf")
@@ -1166,12 +1432,12 @@ def importar_usuarios(request):
                         if age >= 65:
                             estado = Usuario.ESTADO_EXONERADO
                     except ValueError:
-                        errores.append(f"Fila con DNI {dni}: Formato de fecha de nacimiento inválido (use YYYY-MM-DD).")
+                        errores.append(f"Fila con DNI {dni}: Formato de fecha de nacimiento invÃƒÂ¡lido (use YYYY-MM-DD).")
                         continue
 
                 if 'estado' in row and row['estado']:
                     if row['estado'] not in dict(Usuario.ESTADOS).keys():
-                        errores.append(f"Fila con DNI {dni}: Estado inválido. Debe ser ACTIVO, PASIVO o EXONERADO.")
+                        errores.append(f"Fila con DNI {dni}: Estado invÃƒÂ¡lido. Debe ser ACTIVO, PASIVO o EXONERADO.")
                         continue
 
                 usuario = Usuario.objects.create(
@@ -1184,7 +1450,7 @@ def importar_usuarios(request):
                 LogAccion.objects.create(
                     usuario=request.user,
                     accion="Importar usuario",
-                    descripcion=f"{request.user.username} importó al usuario {usuario.nombre} {usuario.apellido} (DNI: {usuario.dni})."
+                    descripcion=f"{request.user.username} importÃƒÂ³ al usuario {usuario.nombre} {usuario.apellido} (DNI: {usuario.dni})."
                 )
                 usuarios_importados += 1
             except Exception as e:
@@ -1234,7 +1500,7 @@ def registrar_usuario(request):
             LogAccion.objects.create(
                 usuario=request.user,
                 accion="Registrar usuario",
-                descripcion=f"{request.user.username} registró al usuario {usuario.nombre} {usuario.apellido} (DNI: {usuario.dni})."
+                descripcion=f"{request.user.username} registrÃƒÂ³ al usuario {usuario.nombre} {usuario.apellido} (DNI: {usuario.dni})."
             )
             return redirect('lista_usuarios')
     else:
@@ -1258,7 +1524,7 @@ def perfil_usuario(request):
         return render(request, 'asistencia/perfil_usuario.html', context)
     except Usuario.DoesNotExist:
         context = {
-            'error': 'No se encontró un usuario asociado a tu cuenta.',
+            'error': 'No se encontrÃƒÂ³ un usuario asociado a tu cuenta.',
             'can_scan_qr': request.user.has_perm('asistencia.can_scan_qr')
         }
         return render(request, 'asistencia/perfil_usuario.html', context)
@@ -1268,7 +1534,7 @@ def perfil_usuario(request):
 def descargar_todos_carnets_pdf(request):
     """
     Genera un PDF con todos los carnets usando el template HTML original.
-    Para evitar Out Of Memory (OOM), procesa los usuarios en lotes pequeños
+    Para evitar Out Of Memory (OOM), procesa los usuarios en lotes pequeÃƒÂ±os
     y combina los PDFs parciales con pypdf.
     """
     import io
@@ -1280,12 +1546,12 @@ def descargar_todos_carnets_pdf(request):
     try:
         from weasyprint import HTML
     except ImportError:
-        return HttpResponse("WeasyPrint no está instalado.", status=500)
+        return HttpResponse("WeasyPrint no estÃƒÂ¡ instalado.", status=500)
 
     try:
         from pypdf import PdfWriter, PdfReader
     except ImportError:
-        return HttpResponse("pypdf no está instalado. Añade 'pypdf' a requirements.txt", status=500)
+        return HttpResponse("pypdf no estÃƒÂ¡ instalado. AÃƒÂ±ade 'pypdf' a requirements.txt", status=500)
 
     # Obtener todos los usuarios ordenados
     usuarios = list(Usuario.objects.all().order_by('apellido', 'nombre'))
@@ -1293,13 +1559,13 @@ def descargar_todos_carnets_pdf(request):
     LogAccion.objects.create(
         usuario=request.user,
         accion="Descargar todos los carnets PDF",
-        descripcion=f"{request.user.username} inició la descarga de {len(usuarios)} carnets en PDF."
+        descripcion=f"{request.user.username} iniciÃƒÂ³ la descarga de {len(usuarios)} carnets en PDF."
     )
 
     logo = get_logo_base64()
     sys_config = ConfiguracionSistema.objects.first()
 
-    # Procesar en lotes pequeños para evitar OOM
+    # Procesar en lotes pequeÃƒÂ±os para evitar OOM
     # Cada lote se renderiza con WeasyPrint y se libera de memoria inmediatamente
     CHUNK_SIZE = 10
     writer = PdfWriter()
@@ -1326,13 +1592,13 @@ def descargar_todos_carnets_pdf(request):
             'sistema_config': sys_config
         }
 
-        # Renderizar el HTML con el template original (diseño bonito)
+        # Renderizar el HTML con el template original (diseÃƒÂ±o bonito)
         html_string = render_to_string('asistencia/reporte_todos_carnets.html', context)
 
         # Generar PDF del lote con WeasyPrint
         pdf_bytes = HTML(string=html_string).write_pdf()
 
-        # Agregar páginas al escritor final usando pypdf
+        # Agregar pÃƒÂ¡ginas al escritor final usando pypdf
         reader = PdfReader(io.BytesIO(pdf_bytes))
         for page in reader.pages:
             writer.add_page(page)
@@ -1354,10 +1620,15 @@ def descargar_todos_carnets_pdf(request):
     LogAccion.objects.create(
         usuario=request.user,
         accion="Descarga todos los carnets exitosa",
-        descripcion=f"{request.user.username} finalizó la descarga de {len(usuarios)} carnets en PDF."
+        descripcion=f"{request.user.username} finalizÃƒÂ³ la descarga de {len(usuarios)} carnets en PDF."
     )
 
     response = HttpResponse(final_pdf, content_type='application/pdf')
     response['Content-Disposition'] = 'inline; filename="todos_los_carnets.pdf"'
     response['Content-Length'] = len(final_pdf)
     return response
+
+
+
+
+

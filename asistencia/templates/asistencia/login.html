@@ -59,6 +59,9 @@
                           action="{% url 'login' %}"
                           hx-boost="false">
                         {% csrf_token %}
+                        {% if next %}
+                            <input type="hidden" name="next" value="{{ next }}">
+                        {% endif %}
                         {% if form.non_field_errors %}
                             <div class="p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-sm font-bold flex items-center gap-3 animate-shake">
                                 <i class="bi bi-exclamation-triangle-fill text-lg"></i>
@@ -78,6 +81,7 @@
                                 <input type="text"
                                        name="username"
                                        id="id_username"
+                                       value="{{ form.username.value|default:'' }}"
                                        required
                                        autofocus
                                        class="w-full pl-12 pr-5 py-4 bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none transition-all font-semibold text-slate-900 placeholder:text-slate-400"

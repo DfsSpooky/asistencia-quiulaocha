@@ -31,6 +31,7 @@
                 <!-- Global Actions -->
                 <div class="flex flex-wrap items-center gap-3">
                     <button onclick="descargarReporteGlobal()"
+                            data-global-report-url="{% url 'descargar_reporte_global_pdf' %}"
                        class="group flex items-center gap-4 px-8 py-5 bg-primary-500 hover:bg-primary-400 text-slate-900 rounded-[2rem] font-black transition-all duration-300 shadow-xl shadow-primary-500/20 transform hover:-translate-y-1 active:scale-95">
                         <div class="h-10 w-10 bg-slate-900 text-white rounded-xl flex items-center justify-center group-hover:rotate-12 transition-transform">
                             <i class="bi bi-file-earmark-pdf-fill text-xl"></i>
@@ -63,6 +64,7 @@
                         <p class="text-xs text-slate-500 mb-4">Descarga el historial completo de un socio ingresando su identificación.</p>
                         <div class="flex flex-col gap-2 w-full">
                              <input type="text" id="user-report-search" name="dni" placeholder="DNI del socio..."
+                                   data-user-report-base="{% url 'descargar_reporte_usuario_pdf' '__DNI__' %}"
                                    hx-get="{% url 'buscar_usuario_dni' %}"
                                    hx-trigger="keyup changed delay:500ms"
                                    hx-target="#user-verification-result"
@@ -78,7 +80,7 @@
                         <i class="bi bi-calendar-event text-3xl text-emerald-600 mb-4 block"></i>
                         <h5 class="font-black text-slate-900 mb-2">Reporte por Evento Individual</h5>
                         <p class="text-xs text-slate-500 mb-4">Selecciona un evento para generar su reporte detallado inmediatamente.</p>
-                        <select id="event-report-selector" onchange="downloadEventReport()" class="select2-searchable">
+                        <select id="event-report-selector" onchange="downloadEventReport()" data-event-report-base="{% url 'descargar_reporte_evento_pdf' 0 %}" class="select2-searchable">
                             <option value="">Selecciona un evento...</option>
                             {% for val, label in form.evento.field.choices %}
                                 {% if val %}<option value="{{ val }}">{{ label }}</option>{% endif %}
@@ -93,7 +95,7 @@
         <div class="bg-white rounded-[3rem] p-8 shadow-premium border border-slate-100">
             <form id="attendance-filter-form"
                   hx-get="{% url 'historial_asistencias' %}"
-                  hx-trigger="change from:select, input from:#dni-input delay:500ms"
+                  hx-trigger="submit, change from:select, change from:#fecha_inicio, change from:#fecha_fin, input from:#dni-input delay:500ms"
                   hx-target="#attendance-content-area"
                   hx-swap="innerHTML"
                   class="space-y-8">
@@ -120,6 +122,7 @@
                         <select name="estado" class="select2-searchable">
                             <option value="" {% if not form.estado.value %}selected{% endif %}>Todos (Asistencias + Faltas)</option>
                             <option value="asistieron" {% if form.estado.value == 'asistieron' %}selected{% endif %}>✅ Solo Asistieron</option>
+                            <option value="pendientes" {% if form.estado.value == 'pendientes' %}selected{% endif %}>🕒 Pendientes (Sin salida)</option>
                             <option value="faltaron" {% if form.estado.value == 'faltaron' %}selected{% endif %}>❌ Faltas (Todas)</option>
                             <option value="faltas_justificadas" {% if form.estado.value == 'faltas_justificadas' %}selected{% endif %}>📄 Faltas Justificadas</option>
                             <option value="faltas_injustificadas" {% if form.estado.value == 'faltas_injustificadas' %}selected{% endif %}>🚫 Faltas Injustificadas</option>
@@ -160,45 +163,70 @@
                         Filtros Avanzados (Fecha, Ubicación, Orden)
                     </button>
                     
-                    <div x-show="expanded" x-collapse x-cloak class="grid grid-cols-1 md:grid-cols-4 gap-6 mt-6">
+                    <div x-show="expanded" x-collapse x-cloak class="advanced-filters grid grid-cols-1 md:grid-cols-12 gap-6 mt-6">
                         <!-- Date Range Filters with Presets -->
-                        <div class="md:col-span-2 space-y-3">
+                        <div class="md:col-span-6 space-y-3">
                             <div class="flex items-center justify-between">
                                 <label class="text-[10px] font-bold text-slate-400 uppercase">Rango de Fechas</label>
-                                <div class="flex gap-1">
+                                <div class="flex flex-wrap gap-1 justify-end">
                                     <button type="button" onclick="setDateRange('today')" class="px-2 py-1 bg-slate-100/50 hover:bg-slate-100 text-slate-500 text-[10px] uppercase font-bold rounded-lg transition-colors">Hoy</button>
                                     <button type="button" onclick="setDateRange('week')" class="px-2 py-1 bg-slate-100/50 hover:bg-slate-100 text-slate-500 text-[10px] uppercase font-bold rounded-lg transition-colors">Semana</button>
-                                    <button type="button" onclick="setDateRange('month')" class="px-2 py-1 bg-slate-100/50 hover:bg-slate-100 text-slate-500 text-[10px] uppercase font-bold rounded-lg transition-colors">Mes</button>
+                                    <button type="button" onclick="setDateRange('month')" class="px-2 py-1 bg-slate-100/50 hover:bg-slate-100 text-slate-500 text-[10px] uppercase font-bold rounded-lg transition-colors">Este Mes</button>
+                                    <button type="button" onclick="setDateRange('last_month')" class="px-2 py-1 bg-slate-100/50 hover:bg-slate-100 text-slate-500 text-[10px] uppercase font-bold rounded-lg transition-colors">Mes Anterior</button>
                                 </div>
                             </div>
                             <div class="flex gap-2">
                                 <input type="date" name="fecha_inicio" id="fecha_inicio" value="{{ form.fecha_inicio.value|date:'Y-m-d' }}"
-                                       class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-primary-500 outline-none">
+                                       class="w-full h-11 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-primary-500 outline-none">
                                 <input type="date" name="fecha_fin" id="fecha_fin" value="{{ form.fecha_fin.value|date:'Y-m-d' }}"
-                                       class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-primary-500 outline-none">
+                                       class="w-full h-11 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-primary-500 outline-none">
                             </div>
+                            <div class="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+                                <div class="w-full sm:w-auto">
+                                    <label for="month_picker" class="text-[10px] font-bold text-slate-400 uppercase block mb-1">Filtrar por Mes</label>
+                                    <input type="month" id="month_picker"
+                                           class="w-full sm:w-auto h-11 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold focus:ring-2 focus:ring-primary-500 outline-none">
+                                </div>
+                                <div class="flex gap-2 pt-5 sm:pt-0">
+                                    <button type="button" onclick="setMonthRange()"
+                                            class="h-11 px-3 py-2 bg-primary-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-primary-700 transition-colors">
+                                        Aplicar Mes
+                                    </button>
+                                    <button type="button" onclick="clearDateRange()"
+                                            class="h-11 px-3 py-2 bg-slate-100 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-colors">
+                                        Limpiar Fechas
+                                    </button>
+                                </div>
+                            </div>
+                            <p class="text-[10px] text-slate-400 font-semibold">
+                                Consejo: para ver todos los eventos de un mes, usa “Filtrar por Mes” o “Este Mes”.
+                            </p>
                         </div>
 
-                        <div class="space-y-2">
+                        <div class="md:col-span-3 space-y-2">
                             <label class="text-[10px] font-bold text-slate-400 uppercase">Ubicación</label>
-                            <select name="ubicacion" class="select2-searchable">
+                            <select name="ubicacion" class="select2-searchable advanced-select">
                                 <option value="">Cualquier ubicación</option>
                                 {% for val, label in form.ubicacion.field.choices %}{% if val %}
                                     <option value="{{ val }}" {% if form.ubicacion.value|stringformat:"s" == val|stringformat:"s" %}selected{% endif %}>{{ label }}</option>
                                 {% endif %}{% endfor %}
                             </select>
                         </div>
-                        <div class="space-y-2">
+                        <div class="md:col-span-3 space-y-2">
                             <label class="text-[10px] font-bold text-slate-400 uppercase">Ordenar por</label>
-                            <select name="ordenar_por" class="select2-searchable">
+                            <select name="ordenar_por" class="select2-searchable advanced-select">
                                 {% for val, label in form.ordenar_por.field.choices %}
                                     <option value="{{ val }}" {% if form.ordenar_por.value == val %}selected{% endif %}>{{ label }}</option>
                                 {% endfor %}
                             </select>
                         </div>
                         <div class="flex items-end gap-3 md:col-span-4 justify-end">
+                            <button type="button" onclick="applyAdvancedFilters()"
+                                    class="h-11 px-6 py-3 bg-primary-600 text-white rounded-xl font-bold text-xs hover:bg-primary-700 transition-all">
+                                Aplicar Filtros Avanzados
+                            </button>
                             <button type="button" onclick="window.location.href='{% url 'historial_asistencias' %}'"
-                                    class="px-6 py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-xs hover:bg-slate-200 transition-all">
+                                    class="h-11 px-6 py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-xs hover:bg-slate-200 transition-all">
                                 Limpiar Filtros
                             </button>
                         </div>
@@ -215,19 +243,23 @@
 
     <script>
         // Select2 initialization handled globally in base.html
+        let showFiltersAppliedToast = false;
 
         function downloadEventReport() {
-            const eventId = document.getElementById('event-report-selector').value;
+            const selector = document.getElementById('event-report-selector');
+            const eventId = selector.value;
             if (eventId) {
-                // Using window.open prevents HTMX interference as it opens a new tab
-                window.open(`/descargar-reporte-evento/${eventId}/`, '_blank');
+                const baseUrl = selector.dataset.eventReportBase.replace(/0\/$/, '');
+                window.open(`${baseUrl}${eventId}/`, '_blank');
             }
         }
 
         function downloadUserReport() {
-            const dni = document.getElementById('user-report-search').value.trim();
+            const input = document.getElementById('user-report-search');
+            const dni = input.value.trim();
             if (dni) {
-                window.open(`/descargar-reporte-usuario/${dni}/`, '_blank');
+                const targetUrl = input.dataset.userReportBase.replace('__DNI__', encodeURIComponent(dni));
+                window.open(targetUrl, '_blank');
             } else {
                 Swal.fire('Atención', 'Por favor, ingresa un DNI válido.', 'warning');
             }
@@ -252,6 +284,7 @@
         }
 
         function descargarReporteGlobal() {
+            const trigger = document.querySelector('[data-global-report-url]');
             Swal.fire({
                 title: 'Generar Reporte Global',
                 text: "¿Deseas descargar el consolidado anual de todos los eventos? Este proceso puede tardar unos segundos.",
@@ -262,7 +295,7 @@
                 cancelButtonText: 'Cancelar'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    window.open("{% url 'descargar_reporte_global_pdf' %}", '_blank');
+                    window.open(trigger.dataset.globalReportUrl, '_blank');
                 }
             });
         }
@@ -278,10 +311,12 @@
                 const day = today.getDay();
                 const diff = today.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
                 start.setDate(diff);
-                // End is today (or end of week, let's use today for "this week so far")
             } else if (range === 'month') {
-                // First day of current month
                 start = new Date(today.getFullYear(), today.getMonth(), 1);
+                end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+            } else if (range === 'last_month') {
+                start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                end = new Date(today.getFullYear(), today.getMonth(), 0);
             }
 
             // Format YYYY-MM-DD
@@ -289,9 +324,86 @@
 
             document.getElementById('fecha_inicio').value = formatDate(start);
             document.getElementById('fecha_fin').value = formatDate(end);
+            document.getElementById('month_picker').value = '';
 
             // Trigger HTMX change
             htmx.trigger('#attendance-filter-form', 'change');
         }
+
+        function setMonthRange() {
+            const monthInput = document.getElementById('month_picker');
+            const monthValue = monthInput.value;
+            if (!monthValue) {
+                Swal.fire('Atención', 'Selecciona un mes para aplicar el filtro.', 'warning');
+                return;
+            }
+
+            const [year, month] = monthValue.split('-').map(Number);
+            const start = new Date(year, month - 1, 1);
+            const end = new Date(year, month, 0);
+            const formatDate = (d) => d.toISOString().split('T')[0];
+
+            document.getElementById('fecha_inicio').value = formatDate(start);
+            document.getElementById('fecha_fin').value = formatDate(end);
+            htmx.trigger('#attendance-filter-form', 'change');
+        }
+
+        function clearDateRange() {
+            document.getElementById('fecha_inicio').value = '';
+            document.getElementById('fecha_fin').value = '';
+            document.getElementById('month_picker').value = '';
+            htmx.trigger('#attendance-filter-form', 'change');
+        }
+
+        function applyAdvancedFilters() {
+            const start = document.getElementById('fecha_inicio').value;
+            const end = document.getElementById('fecha_fin').value;
+            if (start && end && start > end) {
+                Swal.fire('Rango inválido', 'La fecha inicio no puede ser mayor que la fecha fin.', 'warning');
+                return;
+            }
+            showFiltersAppliedToast = true;
+            htmx.trigger('#attendance-filter-form', 'submit');
+        }
+
+        document.body.addEventListener('htmx:afterSwap', function (evt) {
+            if (!showFiltersAppliedToast) return;
+            if (evt.target && evt.target.id === 'attendance-content-area') {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Filtros aplicados',
+                    text: 'La tabla y métricas se actualizaron correctamente.',
+                    timer: 1800,
+                    showConfirmButton: false
+                });
+                showFiltersAppliedToast = false;
+            }
+        });
     </script>
+    <style>
+        .advanced-filters .select2-container {
+            width: 100% !important;
+        }
+
+        .advanced-filters .select2-selection--single {
+            height: 44px !important;
+            border-radius: 0.75rem !important;
+            border: 1px solid #e2e8f0 !important;
+            background: #f8fafc !important;
+            display: flex !important;
+            align-items: center !important;
+            padding: 0 0.5rem !important;
+        }
+
+        .advanced-filters .select2-selection__rendered {
+            line-height: 1 !important;
+            font-size: 0.875rem !important;
+            font-weight: 600 !important;
+            color: #334155 !important;
+        }
+
+        .advanced-filters .select2-selection__arrow {
+            height: 44px !important;
+        }
+    </style>
 {% endblock content %}

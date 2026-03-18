@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 from pathlib import Path
 import mimetypes
+import importlib.util
 
 mimetypes.add_type("text/css", ".css", True)
 mimetypes.add_type("application/javascript", ".js", True)
@@ -34,11 +35,16 @@ elif not SECRET_KEY:
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
-ALLOWED_HOSTS.extend(['quiulacocha.theworkpc.com', 'www.quiulacocha.theworkpc.com', 'oversophisticated-dedra-overgross.ngrok-free.dev', '.ngrok-free.dev'])
+ALLOWED_HOSTS = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if h.strip()]
+EXTRA_ALLOWED_HOSTS = [h.strip() for h in os.environ.get('EXTRA_ALLOWED_HOSTS', '').split(',') if h.strip()]
+ALLOWED_HOSTS.extend(EXTRA_ALLOWED_HOSTS)
+ALLOWED_HOSTS = list(dict.fromkeys(ALLOWED_HOSTS))
 
 # CSRF Trusted Origins
-CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', 'http://localhost,http://127.0.0.1,https://quiulacocha.theworkpc.com').split(',')
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.environ.get(
+    'CSRF_TRUSTED_ORIGINS',
+    'http://localhost,http://127.0.0.1,https://quiulacocha.theworkpc.com'
+).split(',') if o.strip()]
 
 # Configuración para Proxy Inverso (Nginx/HestiaCP)
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
@@ -46,7 +52,6 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 # Application definition
 
 INSTALLED_APPS = [
-    'jazzmin',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -59,6 +64,8 @@ INSTALLED_APPS = [
     'widget_tweaks',
     'axes',  # Protección contra fuerza bruta
 ]
+if importlib.util.find_spec("jazzmin") is not None:
+    INSTALLED_APPS.insert(0, 'jazzmin')
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -180,7 +187,7 @@ if not DEBUG:
 
 # Security Hardening
 SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
-X_FRAME_OPTIONS = 'SAMEORIGIN'
+X_FRAME_OPTIONS = 'DENY'
 
 CACHES = {
     'default': {
@@ -195,7 +202,9 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.SessionAuthentication',
         # 'rest_framework.authentication.BasicAuthentication', # Eliminado por seguridad
     ],
-    'DEFAULT_PERMISSION_CLASSES': [],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
     'UNAUTHENTICATED_USER': None,
     # Throttling (Rate Limiting)
     'DEFAULT_THROTTLE_CLASSES': [

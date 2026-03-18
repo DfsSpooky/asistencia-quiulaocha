@@ -2,6 +2,7 @@ import os
 import subprocess
 import tarfile
 from datetime import datetime
+import shutil
 from django.core.management.base import BaseCommand
 from django.conf import settings
 
@@ -41,12 +42,17 @@ class Command(BaseCommand):
                 '-h', db_host,
                 '-p', str(db_port),
                 '-U', db_user,
+                '--clean',
+                '--if-exists',
+                '--no-owner',
+                '--no-privileges',
                 '-f', sql_file,
                 db_name
             ], env=env, check=True)
             self.stdout.write(self.style.SUCCESS('Base de datos exportada.'))
         except subprocess.CalledProcessError as e:
             self.stdout.write(self.style.ERROR(f'Error al exportar DB: {e}'))
+            shutil.rmtree(temp_path, ignore_errors=True)
             return
 
         # 2. Backup de Media
@@ -68,8 +74,8 @@ class Command(BaseCommand):
             tar.add(temp_path, arcname=backup_name)
         
         # Limpiar temporal
-        import shutil
         shutil.rmtree(temp_path)
 
         self.stdout.write(self.style.SUCCESS(f'Backup completado: {final_tar}'))
         return final_tar
+

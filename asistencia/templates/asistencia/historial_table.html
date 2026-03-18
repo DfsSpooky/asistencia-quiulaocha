@@ -57,12 +57,20 @@
                                 {% if item.is_absent %}
                                     {% if item.es_justificada %}
                                          <span class="text-[10px] font-black text-indigo-400">JUSTIFICADA</span>
+                                         {% if item.justificacion_obs %}
+                                             <p class="mt-1 text-[9px] text-indigo-500 max-w-[220px] mx-auto truncate" title="{{ item.justificacion_obs }}">
+                                                 {{ item.justificacion_obs }}
+                                             </p>
+                                         {% endif %}
                                     {% else %}
                                          <span class="text-[10px] font-black text-red-400">SIN REGISTRO</span>
                                     {% endif %}
                                 {% else %}
                                     <p class="text-xs font-black text-slate-700">{{ item.hora_ingreso|date:"H:i"|default:"--" }}</p>
                                     <p class="text-[9px] font-bold text-slate-400">Salida: {{ item.hora_salida|date:"H:i"|default:"--" }}</p>
+                                    <p class="text-[9px] font-black {% if item.puntualidad == 'TARDE' %}text-amber-600{% else %}text-emerald-600{% endif %}">
+                                        {{ item.get_puntualidad_display|default:"No aplica" }}
+                                    </p>
                                 {% endif %}
                             </td>
                             <td class="px-6 py-6 text-center">

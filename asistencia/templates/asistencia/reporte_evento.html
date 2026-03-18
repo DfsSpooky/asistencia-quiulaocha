@@ -305,6 +305,11 @@
                                     {{ item.nombre }} {{ item.apellido }}
                                 {% endif %}
                             </strong>
+                            {% if item.es_justificada and item.justificacion_obs %}
+                                <div style="font-size: 9px; color: #4338ca; margin-top: 3px;">
+                                    Motivo: {{ item.justificacion_obs }}
+                                </div>
+                            {% endif %}
                         </td>
                         <td>
                             <code style="background: #f1f5f9; padding: 2px 4px; border-radius: 3px;">

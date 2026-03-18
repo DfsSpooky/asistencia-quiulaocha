@@ -223,7 +223,7 @@
             <div class="stats-grid" style="grid-template-columns: repeat(5, 1fr);">
                 <div class="stats-card">
                     <span class="stats-num">{{ total_registros }}</span>
-                    <span class="stats-label">Padrón</span>
+                    <span class="stats-label">{% if is_event_scope %}Padrón{% else %}Registros{% endif %}</span>
                 </div>
                 <div class="stats-card">
                     <span class="stats-num" style="color: #86efac">{{ confirmadas }}</span>
@@ -248,6 +248,9 @@
                 <div class="filter-item">
                     <span class="filter-label">Evento:</span>
                     <span>{{ filtros.evento }}</span>
+                    {% if auto_event_from_range %}
+                        <span style="font-size: 9px; color: #c7d2fe;">(Detectado automáticamente por rango)</span>
+                    {% endif %}
                 </div>
                 <div class="filter-item">
                     <span class="filter-label">Estado:</span>
@@ -298,6 +301,11 @@
                                     {{ item.nombre }} {{ item.apellido }}
                                 {% endif %}
                             </strong>
+                            {% if item.es_justificada and item.justificacion_obs %}
+                                <div style="font-size: 9px; color: #4338ca; margin-top: 3px;">
+                                    Motivo: {{ item.justificacion_obs }}
+                                </div>
+                            {% endif %}
                         </td>
                         <td>
                             <code style="background: #f1f5f9; padding: 2px 4px; border-radius: 3px;">

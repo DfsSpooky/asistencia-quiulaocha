@@ -212,13 +212,67 @@
                 </div>
             </div>
         </div>
+        <div id="health-confirm-modal"
+             class="fixed inset-0 z-[109] hidden items-center justify-center bg-slate-900/65 backdrop-blur-sm">
+            <div class="w-[92%] max-w-md rounded-3xl bg-white shadow-premium border border-slate-200 p-6">
+                <div class="flex items-center gap-3 mb-3">
+                    <div class="h-10 w-10 rounded-xl bg-amber-100 flex items-center justify-center">
+                        <i class="bi bi-heart-pulse-fill text-amber-600"></i>
+                    </div>
+                    <div>
+                        <p class="text-sm font-black text-slate-900">Abrir Panel de Salud</p>
+                        <p class="text-xs text-slate-500">La carga puede tomar unos segundos.</p>
+                    </div>
+                </div>
+                <p class="text-sm text-slate-600 mb-5">
+                    Al continuar, el sistema calculara estado de base de datos, disco y backups.
+                </p>
+                <div class="flex items-center justify-end gap-2">
+                    <button id="health-cancel-btn"
+                            type="button"
+                            class="px-4 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs uppercase tracking-wide hover:bg-slate-200 transition">
+                        Cancelar
+                    </button>
+                    <button id="health-accept-btn"
+                            type="button"
+                            class="px-4 py-2 rounded-xl bg-amber-500 text-slate-900 font-black text-xs uppercase tracking-wide hover:bg-amber-400 transition">
+                        Aceptar
+                    </button>
+                </div>
+            </div>
+        </div>
+        <div id="health-loader"
+             class="fixed inset-0 z-[110] hidden items-center justify-center bg-slate-900/65 backdrop-blur-sm">
+            <div class="w-[92%] max-w-md rounded-3xl bg-white shadow-premium border border-slate-200 p-6">
+                <div class="flex items-center gap-3 mb-3">
+                    <div class="h-10 w-10 rounded-xl bg-amber-100 flex items-center justify-center">
+                        <i class="bi bi-heart-pulse-fill text-amber-600"></i>
+                    </div>
+                    <div>
+                        <p class="text-sm font-black text-slate-900">Cargando Panel de Salud</p>
+                        <p class="text-xs text-slate-500">Este proceso puede tomar unos segundos.</p>
+                    </div>
+                </div>
+                <div class="w-full h-3 rounded-full bg-slate-100 overflow-hidden">
+                    <div id="health-loader-bar"
+                         class="h-full bg-gradient-to-r from-amber-500 to-primary-500 transition-all duration-300 ease-out"
+                         style="width: 0%">
+                    </div>
+                </div>
+                <div class="mt-3 flex items-center justify-between">
+                    <p class="text-[11px] font-semibold text-slate-500">Analizando base de datos, disco y backups...</p>
+                    <span id="health-loader-percent" class="text-sm font-black text-slate-700">0%</span>
+                </div>
+            </div>
+        </div>
         <div class="flex flex-col min-h-screen">
             <!-- Modern Header -->
             <header class="sticky top-0 z-40 w-full glass-panel border-b border-slate-200/60">
                 <div class="container mx-auto px-4 lg:px-8">
                     <div class="flex h-20 items-center justify-between">
                         <!-- Brand Section -->
-                        <a href="{% url 'dashboard' %}" class="flex items-center gap-3 group">
+                        <a href="{% if user.is_authenticated %}{% url 'dashboard' %}{% else %}{% url 'landing_page' %}{% endif %}"
+                           class="flex items-center gap-3 group">
                             {% if sistema_config.logo %}
                                 <div class="h-11 w-11 bg-white rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/20 group-hover:rotate-6 transition-transform overflow-hidden">
                                      <img src="{{ sistema_config.logo.url }}" class="h-full w-full object-cover" alt="Logo">
@@ -244,6 +298,7 @@
                                 </a>
                                 {% if can_scan_qr %}
                                     <a href="{% url 'escanear_qr' %}"
+                                       hx-boost="false"
                                        class="nav-item group
                                               {% if request.resolver_match.url_name == 'escanear_qr' %}active{% endif %}">
                                         <div class="px-3 py-1 bg-primary-600 text-white rounded-lg group-hover:bg-primary-700 transition-colors shadow-sm">
@@ -261,6 +316,15 @@
                                           {% if request.resolver_match.url_name == 'historial_asistencias' %}active{% endif %}">
                                     <i class="bi bi-calendar3-range mr-2"></i> Historial
                                 </a>
+                                {% if perms.asistencia.can_manage_users %}
+                                    <a href="{% url 'panel_salud' %}"
+                                       data-health-link="1"
+                                       hx-boost="false"
+                                       class="nav-item
+                                              {% if request.resolver_match.url_name == 'panel_salud' %}active{% endif %}">
+                                        <i class="bi bi-heart-pulse-fill mr-2"></i> Salud
+                                    </a>
+                                {% endif %}
                                 <!-- User Actions -->
                                 <div class="h-8 w-[1px] bg-slate-200 mx-2"></div>
                                 <div class="relative"
@@ -295,7 +359,7 @@
                                             <a href="{% url 'admin:index' %}"
                                                hx-disable
                                                class="flex items-center px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 hover:text-primary-600 font-semibold transition-colors">
-                                                <i class="bi bi-gear mr-3"></i> Configuración
+                                                <i class="bi bi-gear mr-3"></i> Configuracion
                                             </a>
                                         {% endif %}
                                         <div class="h-[1px] bg-slate-100 my-2"></div>
@@ -303,7 +367,7 @@
                                             {% csrf_token %}
                                             <button type="submit"
                                                     class="w-full text-left px-4 py-3 text-sm text-red-500 hover:bg-red-50 font-bold transition-colors">
-                                                <i class="bi bi-box-arrow-right mr-3"></i> Cerrar Sesión
+                                                <i class="bi bi-box-arrow-right mr-3"></i> Cerrar Sesion
                                             </button>
                                         </form>
                                     </div>
@@ -311,7 +375,7 @@
                             {% else %}
                                 <a href="{% url 'login' %}"
                                    class="bg-primary-600 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-primary-700 transition-all shadow-lg shadow-primary-600/20 active:scale-95">
-                                    Iniciar Sesión
+                                    Iniciar Sesion
                                 </a>
                             {% endif %}
                         </nav>
@@ -340,6 +404,7 @@
                         </a>
                         {% if can_scan_qr %}
                             <a href="{% url 'escanear_qr' %}"
+                               hx-boost="false"
                                class="flex items-center p-4 rounded-xl font-bold bg-primary-600 text-white shadow-lg shadow-primary-600/20">
                                 <i class="bi bi-qr-code-scan mr-4"></i> Escanear QR
                             </a>
@@ -352,6 +417,14 @@
                            class="flex items-center p-4 rounded-xl font-bold text-slate-600 hover:bg-slate-50">
                             <i class="bi bi-calendar3-range mr-4"></i> Historial
                         </a>
+                        {% if perms.asistencia.can_manage_users %}
+                            <a href="{% url 'panel_salud' %}"
+                               data-health-link="1"
+                               hx-boost="false"
+                               class="flex items-center p-4 rounded-xl font-bold text-slate-600 hover:bg-slate-50">
+                                <i class="bi bi-heart-pulse-fill mr-4"></i> Salud del Sistema
+                            </a>
+                        {% endif %}
                         <div class="h-[1px] bg-slate-100 my-2"></div>
                         <form method="post" action="{% url 'logout' %}" hx-boost="false" hx-disable>
                             {% csrf_token %}
@@ -363,7 +436,7 @@
                     {% else %}
                         <a href="{% url 'login' %}"
                            class="flex items-center justify-center p-4 rounded-xl font-bold bg-primary-600 text-white">
-                            Iniciar Sesión
+                            Iniciar Sesion
                         </a>
                     {% endif %}
                 </div>
@@ -380,112 +453,207 @@
             <footer class="py-10 border-t border-slate-200 bg-white/50">
                 <div class="container mx-auto px-4 text-center">
                     <p class="text-sm font-bold text-slate-400">
-                        &copy; 2026 Quiulacocha <span class="mx-2">•</span> Sistema de Gestión de Asistencias
+                        &copy; 2026 Quiulacocha <span class="mx-2">-</span> Sistema de Gestion de Asistencias
                     </p>
                 </div>
             </footer>
         </div>
         <!-- Scripts -->
         <script>
-            /* 
-             * Configuración Global HTMX y UI
-             */
+    /*
+     * Global HTMX and UI config
+     */
 
-            // Función para inicializar componentes Select2
-            function initSelect2() {
-                if (typeof $ !== 'undefined' && $.fn.select2) {
-                    $('.select2-searchable').each(function() {
-                        // Destruir instancia previa si existe para evitar duplicados/errores
-                        if ($(this).data('select2')) {
-                            $(this).select2('destroy');
-                        }
-
-                        $(this).select2({
-                            placeholder: $(this).find('option:first').text() || 'Seleccionar...',
-                            allowClear: true,
-                            width: '100%',
-                            dropdownParent: $('body'), // Fix para z-index en modales/partials
-                            language: {
-                                noResults: function() {
-                                    return "No se encontraron resultados";
-                                },
-                                searching: function() {
-                                    return "Buscando...";
-                                }
-                            }
-                        }).on('select2:select select2:unselect', function(e) {
-                            // Propagar evento change nativo para que HTMX lo detecte
-                            this.dispatchEvent(new Event('change', { bubbles: true }));
-                        });
-                    });
+    function initSelect2() {
+        if (typeof $ !== 'undefined' && $.fn.select2) {
+            $('.select2-searchable').each(function() {
+                if ($(this).data('select2')) {
+                    $(this).select2('destroy');
                 }
+
+                $(this).select2({
+                    placeholder: $(this).find('option:first').text() || 'Seleccionar...',
+                    allowClear: true,
+                    width: '100%',
+                    dropdownParent: $('body'),
+                    language: {
+                        noResults: function() {
+                            return 'No se encontraron resultados';
+                        },
+                        searching: function() {
+                            return 'Buscando...';
+                        }
+                    }
+                }).on('select2:select select2:unselect', function() {
+                    this.dispatchEvent(new Event('change', { bubbles: true }));
+                });
+            });
+        }
+    }
+
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function(e) {
+            e.preventDefault();
+            const target = document.querySelector(this.getAttribute('href'));
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth' });
             }
+        });
+    });
 
-            // Smooth scroll implementation for hash links
-            document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-                anchor.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    const target = document.querySelector(this.getAttribute('href'));
-                    if (target) {
-                        target.scrollIntoView({
-                            behavior: 'smooth'
-                        });
-                    }
-                });
+    document.addEventListener('DOMContentLoaded', function() {
+        initSelect2();
+
+        const healthConfirmModal = document.getElementById('health-confirm-modal');
+        const healthAcceptBtn = document.getElementById('health-accept-btn');
+        const healthCancelBtn = document.getElementById('health-cancel-btn');
+        const healthLoader = document.getElementById('health-loader');
+        const healthLoaderBar = document.getElementById('health-loader-bar');
+        const healthLoaderPercent = document.getElementById('health-loader-percent');
+        let pendingHealthUrl = null;
+        let healthProgress = 0;
+        let healthTimer = null;
+
+        function setHealthProgress(value) {
+            healthProgress = Math.max(0, Math.min(100, value));
+            if (healthLoaderBar) healthLoaderBar.style.width = `${healthProgress}%`;
+            if (healthLoaderPercent) healthLoaderPercent.textContent = `${healthProgress}%`;
+        }
+
+        function showHealthConfirmModal(url) {
+            if (!healthConfirmModal) return;
+            pendingHealthUrl = url;
+            healthConfirmModal.classList.remove('hidden');
+            healthConfirmModal.classList.add('flex');
+        }
+
+        function hideHealthConfirmModal() {
+            if (!healthConfirmModal) return;
+            healthConfirmModal.classList.add('hidden');
+            healthConfirmModal.classList.remove('flex');
+            pendingHealthUrl = null;
+        }
+
+        function startHealthLoader() {
+            if (!healthLoader || healthTimer) return;
+            setHealthProgress(6);
+            healthLoader.classList.remove('hidden');
+            healthLoader.classList.add('flex');
+            healthTimer = setInterval(() => {
+                const maxCap = 93;
+                if (healthProgress < maxCap) {
+                    const step = Math.max(1, Math.floor((maxCap - healthProgress) / 8));
+                    setHealthProgress(healthProgress + step);
+                }
+            }, 180);
+        }
+
+        function finishHealthLoader() {
+            if (!healthLoader) return;
+            if (healthTimer) {
+                clearInterval(healthTimer);
+                healthTimer = null;
+            }
+            setHealthProgress(100);
+            setTimeout(() => {
+                healthLoader.classList.add('hidden');
+                healthLoader.classList.remove('flex');
+                setHealthProgress(0);
+            }, 280);
+        }
+
+        function isHealthRequest(evt) {
+            const path = evt?.detail?.pathInfo?.requestPath || '';
+            return path.includes('/sistema/panel-salud/');
+        }
+
+        // Captura temprana: intercepta antes de que HTMX (hx-boost) procese el clic.
+        document.addEventListener('click', function(evt) {
+            const link = evt.target.closest('a[data-health-link="1"]');
+            if (!link) return;
+            evt.preventDefault();
+            evt.stopPropagation();
+            if (typeof evt.stopImmediatePropagation === 'function') {
+                evt.stopImmediatePropagation();
+            }
+            showHealthConfirmModal(link.getAttribute('href'));
+        }, true);
+
+        if (healthCancelBtn) {
+            healthCancelBtn.addEventListener('click', () => hideHealthConfirmModal());
+        }
+
+        if (healthConfirmModal) {
+            healthConfirmModal.addEventListener('click', (evt) => {
+                if (evt.target === healthConfirmModal) hideHealthConfirmModal();
             });
+        }
 
-            // HTMX Event Listeners Globales
-            document.addEventListener('DOMContentLoaded', function() {
-                initSelect2(); // Inicialización inicial
+        document.addEventListener('keydown', (evt) => {
+            if (evt.key === 'Escape' && healthConfirmModal && !healthConfirmModal.classList.contains('hidden')) {
+                hideHealthConfirmModal();
+            }
+        });
 
-                // Manejo de errores de HTMX
-                document.body.addEventListener('htmx:responseError', function(evt) {
-                    const errorMsg = evt.detail.xhr.status === 0 ?
-                        "Error de conexión. Verifica tu internet." :
-                        `Error del servidor (${evt.detail.xhr.status}). Intenta nuevamente.`;
-
-                    Swal.fire({
-                        title: '¡Oops!',
-                        text: errorMsg,
-                        icon: 'error',
-                        confirmButtonText: 'Entendido',
-                        confirmButtonColor: '#eab308'
-                    });
-                });
-
-                document.body.addEventListener('htmx:sendError', function(evt) {
-                    Swal.fire({
-                        title: 'Error de Red',
-                        text: "No se pudo conectar con el servidor.",
-                        icon: 'warning',
-                        confirmButtonText: 'Reintentar',
-                        confirmButtonColor: '#eab308'
-                    });
-                });
-
-                // Reinicializar componentes después de cambios en el DOM por HTMX
-                document.body.addEventListener('htmx:afterSettle', function(evt) {
-                    // Re-init Select2
-                    initSelect2();
-
-                    // Scroll to top only on full page (body) navigation
-                    if (evt.detail.target === document.body) {
-                        window.scrollTo({
-                            top: 0,
-                            behavior: 'smooth'
-                        });
-                    }
-                });
-
-                // Forzar inicialización de Alpine.js en contenido nuevo
-                document.body.addEventListener('htmx:afterSwap', function(evt) {
-                    if (window.Alpine) {
-                        window.Alpine.initTree(evt.detail.target);
-                    }
-                });
+        if (healthAcceptBtn) {
+            healthAcceptBtn.addEventListener('click', () => {
+                if (!pendingHealthUrl) return;
+                const targetUrl = pendingHealthUrl;
+                hideHealthConfirmModal();
+                startHealthLoader();
+                setTimeout(() => {
+                    window.location.href = targetUrl;
+                }, 120);
             });
-        </script>
+        }
+
+        document.body.addEventListener('htmx:beforeRequest', function(evt) {
+            if (isHealthRequest(evt)) startHealthLoader();
+        });
+
+        document.body.addEventListener('htmx:afterSwap', function(evt) {
+            if (isHealthRequest(evt)) finishHealthLoader();
+            if (window.Alpine) {
+                window.Alpine.initTree(evt.detail.target);
+            }
+        });
+
+        document.body.addEventListener('htmx:responseError', function(evt) {
+            if (isHealthRequest(evt)) finishHealthLoader();
+            const errorMsg = evt.detail.xhr.status === 0
+                ? 'Error de conexion. Verifica tu internet.'
+                : `Error del servidor (${evt.detail.xhr.status}). Intenta nuevamente.`;
+
+            Swal.fire({
+                title: 'Oops',
+                text: errorMsg,
+                icon: 'error',
+                confirmButtonText: 'Entendido',
+                confirmButtonColor: '#eab308'
+            });
+        });
+
+        document.body.addEventListener('htmx:sendError', function() {
+            Swal.fire({
+                title: 'Error de Red',
+                text: 'No se pudo conectar con el servidor.',
+                icon: 'warning',
+                confirmButtonText: 'Reintentar',
+                confirmButtonColor: '#eab308'
+            });
+        });
+
+        document.body.addEventListener('htmx:afterSettle', function(evt) {
+            initSelect2();
+            if (evt.detail.target === document.body) {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+        });
+    });
+</script>
         {% block extra_js %}
         {% endblock %}
     </body>
 </html>
+
+

@@ -125,6 +125,15 @@ class Usuario(models.Model):
         ]
 
 class Asistencia(models.Model):
+    PUNTUALIDAD_PUNTUAL = 'PUNTUAL'
+    PUNTUALIDAD_TARDE = 'TARDE'
+    PUNTUALIDAD_NO_APLICA = 'NO_APLICA'
+    PUNTUALIDAD_CHOICES = [
+        (PUNTUALIDAD_PUNTUAL, 'Puntual'),
+        (PUNTUALIDAD_TARDE, 'Tardanza'),
+        (PUNTUALIDAD_NO_APLICA, 'No aplica'),
+    ]
+
     usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE)
     fecha = models.DateField(default=timezone.localdate)
     hora_ingreso = models.TimeField(null=True, blank=True)
@@ -133,6 +142,12 @@ class Asistencia(models.Model):
     evento = models.ForeignKey(Evento, on_delete=models.SET_NULL, null=True, blank=True)
     confirmada = models.BooleanField(default=False)
     es_justificada = models.BooleanField(default=False, help_text="Indica si la inasistencia fue justificada")
+    puntualidad = models.CharField(
+        max_length=12,
+        choices=PUNTUALIDAD_CHOICES,
+        default=PUNTUALIDAD_NO_APLICA,
+        help_text="Clasifica si el ingreso fue puntual o con tardanza.",
+    )
 
     def __str__(self):
         ingreso = self.hora_ingreso.strftime('%H:%M:%S') if self.hora_ingreso else 'No registrado'
@@ -144,6 +159,13 @@ class Asistencia(models.Model):
             models.Index(fields=['fecha']),
             models.Index(fields=['usuario']),
             models.Index(fields=['evento']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['usuario', 'evento', 'fecha'],
+                condition=models.Q(evento__isnull=False),
+                name='uniq_asistencia_usuario_evento_fecha',
+            ),
         ]
 
 class Justificacion(models.Model):
@@ -200,6 +222,14 @@ class Justificacion(models.Model):
             if asistencia:
                 asistencia.es_justificada = False
                 asistencia.save()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['usuario', 'evento'],
+                name='uniq_justificacion_usuario_evento',
+            ),
+        ]
 
 class LogAccion(models.Model):
     usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)

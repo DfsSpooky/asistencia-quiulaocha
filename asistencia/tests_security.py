@@ -38,6 +38,8 @@ class SecurityTests(TestCase):
         # Create a mock TarInfo with a path traversal attempt
         mock_member = MagicMock(spec=tarfile.TarInfo)
         mock_member.name = '../evil_file.txt'
+        mock_member.issym.return_value = False
+        mock_member.islnk.return_value = False
 
         mock_tar = MagicMock()
         mock_tar.getmembers.return_value = [mock_member]
@@ -47,6 +49,20 @@ class SecurityTests(TestCase):
             safe_extract(mock_tar, path='/tmp/restore')
 
         self.assertIn("Intento de Path Traversal detectado", str(cm.exception))
+
+    def test_backup_extract_rejects_symlinks(self):
+        mock_member = MagicMock(spec=tarfile.TarInfo)
+        mock_member.name = 'media/link'
+        mock_member.issym.return_value = True
+        mock_member.islnk.return_value = False
+
+        mock_tar = MagicMock()
+        mock_tar.getmembers.return_value = [mock_member]
+
+        with self.assertRaises(Exception) as cm:
+            safe_extract(mock_tar, path='/tmp/restore')
+
+        self.assertIn("No se permiten enlaces", str(cm.exception))
 
     def test_admin_url_change(self):
         # Check that old admin URL is gone (should return 404 or redirect to login depending on config, but likely 404 if not matched)
@@ -63,3 +79,13 @@ class SecurityTests(TestCase):
         # Admin index usually redirects to login if not authenticated or shows index if authenticated.
         # Since I am logged in as superuser, it should return 200 (admin index).
         self.assertEqual(response.status_code, 200)
+
+    def test_reporte_global_requires_manage_permission(self):
+        user = User.objects.create_user(username='normal', password='password')
+        self.client.force_login(user)
+        response = self.client.get('/descargar-reporte-global/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_logout_requires_post(self):
+        response = self.client.get('/logout/')
+        self.assertEqual(response.status_code, 405)
