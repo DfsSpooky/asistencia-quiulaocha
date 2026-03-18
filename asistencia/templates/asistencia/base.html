@@ -504,41 +504,62 @@
     document.addEventListener('DOMContentLoaded', function() {
         initSelect2();
 
-        const healthConfirmModal = document.getElementById('health-confirm-modal');
-        const healthAcceptBtn = document.getElementById('health-accept-btn');
-        const healthCancelBtn = document.getElementById('health-cancel-btn');
-        const healthLoader = document.getElementById('health-loader');
-        const healthLoaderBar = document.getElementById('health-loader-bar');
-        const healthLoaderPercent = document.getElementById('health-loader-percent');
         let pendingHealthUrl = null;
         let healthProgress = 0;
         let healthTimer = null;
 
+        function getHealthUi() {
+            return {
+                confirmModal: document.getElementById('health-confirm-modal'),
+                loader: document.getElementById('health-loader'),
+                loaderBar: document.getElementById('health-loader-bar'),
+                loaderPercent: document.getElementById('health-loader-percent')
+            };
+        }
+
         function setHealthProgress(value) {
+            const { loaderBar, loaderPercent } = getHealthUi();
             healthProgress = Math.max(0, Math.min(100, value));
-            if (healthLoaderBar) healthLoaderBar.style.width = `${healthProgress}%`;
-            if (healthLoaderPercent) healthLoaderPercent.textContent = `${healthProgress}%`;
+            if (loaderBar) loaderBar.style.width = `${healthProgress}%`;
+            if (loaderPercent) loaderPercent.textContent = `${healthProgress}%`;
         }
 
         function showHealthConfirmModal(url) {
-            if (!healthConfirmModal) return;
+            const { confirmModal } = getHealthUi();
+            if (!confirmModal) return;
             pendingHealthUrl = url;
-            healthConfirmModal.classList.remove('hidden');
-            healthConfirmModal.classList.add('flex');
+            confirmModal.classList.remove('hidden');
+            confirmModal.classList.add('flex');
         }
 
-        function hideHealthConfirmModal() {
-            if (!healthConfirmModal) return;
-            healthConfirmModal.classList.add('hidden');
-            healthConfirmModal.classList.remove('flex');
+        function hideHealthConfirmModal(clearUrl = true) {
+            const { confirmModal } = getHealthUi();
+            if (confirmModal) {
+                confirmModal.classList.add('hidden');
+                confirmModal.classList.remove('flex');
+            }
+            if (clearUrl) {
+                pendingHealthUrl = null;
+            }
+        }
+
+        function handleHealthAccept() {
+            if (!pendingHealthUrl) return;
+            const targetUrl = pendingHealthUrl;
+            hideHealthConfirmModal(false);
             pendingHealthUrl = null;
+            startHealthLoader();
+            setTimeout(() => {
+                window.location.href = targetUrl;
+            }, 120);
         }
 
         function startHealthLoader() {
-            if (!healthLoader || healthTimer) return;
+            const { loader } = getHealthUi();
+            if (!loader || healthTimer) return;
             setHealthProgress(6);
-            healthLoader.classList.remove('hidden');
-            healthLoader.classList.add('flex');
+            loader.classList.remove('hidden');
+            loader.classList.add('flex');
             healthTimer = setInterval(() => {
                 const maxCap = 93;
                 if (healthProgress < maxCap) {
@@ -549,15 +570,16 @@
         }
 
         function finishHealthLoader() {
-            if (!healthLoader) return;
+            const { loader } = getHealthUi();
+            if (!loader) return;
             if (healthTimer) {
                 clearInterval(healthTimer);
                 healthTimer = null;
             }
             setHealthProgress(100);
             setTimeout(() => {
-                healthLoader.classList.add('hidden');
-                healthLoader.classList.remove('flex');
+                loader.classList.add('hidden');
+                loader.classList.remove('flex');
                 setHealthProgress(0);
             }, 280);
         }
@@ -579,33 +601,29 @@
             showHealthConfirmModal(link.getAttribute('href'));
         }, true);
 
-        if (healthCancelBtn) {
-            healthCancelBtn.addEventListener('click', () => hideHealthConfirmModal());
-        }
+        document.addEventListener('click', function(evt) {
+            if (evt.target.closest('#health-cancel-btn')) {
+                hideHealthConfirmModal();
+                return;
+            }
 
-        if (healthConfirmModal) {
-            healthConfirmModal.addEventListener('click', (evt) => {
-                if (evt.target === healthConfirmModal) hideHealthConfirmModal();
-            });
-        }
+            if (evt.target.closest('#health-accept-btn')) {
+                handleHealthAccept();
+                return;
+            }
 
-        document.addEventListener('keydown', (evt) => {
-            if (evt.key === 'Escape' && healthConfirmModal && !healthConfirmModal.classList.contains('hidden')) {
+            const confirmModal = document.getElementById('health-confirm-modal');
+            if (confirmModal && evt.target === confirmModal) {
                 hideHealthConfirmModal();
             }
         });
 
-        if (healthAcceptBtn) {
-            healthAcceptBtn.addEventListener('click', () => {
-                if (!pendingHealthUrl) return;
-                const targetUrl = pendingHealthUrl;
+        document.addEventListener('keydown', (evt) => {
+            const { confirmModal } = getHealthUi();
+            if (evt.key === 'Escape' && confirmModal && !confirmModal.classList.contains('hidden')) {
                 hideHealthConfirmModal();
-                startHealthLoader();
-                setTimeout(() => {
-                    window.location.href = targetUrl;
-                }, 120);
-            });
-        }
+            }
+        });
 
         document.body.addEventListener('htmx:beforeRequest', function(evt) {
             if (isHealthRequest(evt)) startHealthLoader();

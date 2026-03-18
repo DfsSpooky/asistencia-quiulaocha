@@ -240,145 +240,173 @@
 
         <!-- Data Section -->
         {% include 'asistencia/historial_table.html' %}
-
+    </div>
     <script>
-        // Select2 initialization handled globally in base.html
-        let showFiltersAppliedToast = false;
+        (function() {
+            const historialState = window.__historialAsistenciasState || (window.__historialAsistenciasState = {
+                showFiltersAppliedToast: false,
+                toastListenerBound: false
+            });
 
-        function downloadEventReport() {
-            const selector = document.getElementById('event-report-selector');
-            const eventId = selector.value;
-            if (eventId) {
+            function formatDate(dateValue) {
+                return dateValue.toISOString().split('T')[0];
+            }
+
+            function triggerFilterForm(eventName) {
+                htmx.trigger('#attendance-filter-form', eventName);
+            }
+
+            window.downloadEventReport = function() {
+                const selector = document.getElementById('event-report-selector');
+                if (!selector) return;
+                const eventId = selector.value;
+                if (!eventId) return;
+
                 const baseUrl = selector.dataset.eventReportBase.replace(/0\/$/, '');
                 window.open(`${baseUrl}${eventId}/`, '_blank');
-            }
-        }
+            };
 
-        function downloadUserReport() {
-            const input = document.getElementById('user-report-search');
-            const dni = input.value.trim();
-            if (dni) {
-                const targetUrl = input.dataset.userReportBase.replace('__DNI__', encodeURIComponent(dni));
-                window.open(targetUrl, '_blank');
-            } else {
-                Swal.fire('Atención', 'Por favor, ingresa un DNI válido.', 'warning');
-            }
-        }
-
-        function generarPDFFiltrado() {
-            // Capturar los valores actuales de los filtros
-            const form = document.getElementById('attendance-filter-form');
-            const formData = new FormData(form);
-            
-            // Construir la URL con los parámetros
-            const params = new URLSearchParams();
-            for (let [key, value] of formData.entries()) {
-                if (value) {  // Solo agregar si tiene valor
-                    params.append(key, value);
+            window.downloadUserReport = function() {
+                const input = document.getElementById('user-report-search');
+                if (!input) return;
+                const dni = input.value.trim();
+                if (dni) {
+                    const targetUrl = input.dataset.userReportBase.replace('__DNI__', encodeURIComponent(dni));
+                    window.open(targetUrl, '_blank');
+                } else {
+                    Swal.fire('Atención', 'Por favor, ingresa un DNI válido.', 'warning');
                 }
-            }
-            
-            // Generar el PDF con los filtros aplicados
-            const url = '{% url "descargar_reporte_filtrado_pdf" %}?' + params.toString();
-            window.open(url, '_blank');
-        }
+            };
 
-        function descargarReporteGlobal() {
-            const trigger = document.querySelector('[data-global-report-url]');
-            Swal.fire({
-                title: 'Generar Reporte Global',
-                text: "¿Deseas descargar el consolidado anual de todos los eventos? Este proceso puede tardar unos segundos.",
-                icon: 'info',
-                showCancelButton: true,
-                confirmButtonColor: '#eab308',
-                confirmButtonText: 'Sí, descargar',
-                cancelButtonText: 'Cancelar'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    window.open(trigger.dataset.globalReportUrl, '_blank');
+            window.generarPDFFiltrado = function() {
+                const form = document.getElementById('attendance-filter-form');
+                if (!form) return;
+                const formData = new FormData(form);
+                const params = new URLSearchParams();
+
+                for (const [key, value] of formData.entries()) {
+                    if (value) {
+                        params.append(key, value);
+                    }
                 }
-            });
-        }
-        function setDateRange(range) {
-            const today = new Date();
-            let start = new Date();
-            let end = new Date();
 
-            if (range === 'today') {
-                // Start and End are today
-            } else if (range === 'week') {
-                // Monday of current week
-                const day = today.getDay();
-                const diff = today.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
-                start.setDate(diff);
-            } else if (range === 'month') {
-                start = new Date(today.getFullYear(), today.getMonth(), 1);
-                end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-            } else if (range === 'last_month') {
-                start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-                end = new Date(today.getFullYear(), today.getMonth(), 0);
-            }
+                const url = '{% url "descargar_reporte_filtrado_pdf" %}?' + params.toString();
+                window.open(url, '_blank');
+            };
 
-            // Format YYYY-MM-DD
-            const formatDate = (d) => d.toISOString().split('T')[0];
+            window.descargarReporteGlobal = function() {
+                const trigger = document.querySelector('[data-global-report-url]');
+                if (!trigger) return;
 
-            document.getElementById('fecha_inicio').value = formatDate(start);
-            document.getElementById('fecha_fin').value = formatDate(end);
-            document.getElementById('month_picker').value = '';
-
-            // Trigger HTMX change
-            htmx.trigger('#attendance-filter-form', 'change');
-        }
-
-        function setMonthRange() {
-            const monthInput = document.getElementById('month_picker');
-            const monthValue = monthInput.value;
-            if (!monthValue) {
-                Swal.fire('Atención', 'Selecciona un mes para aplicar el filtro.', 'warning');
-                return;
-            }
-
-            const [year, month] = monthValue.split('-').map(Number);
-            const start = new Date(year, month - 1, 1);
-            const end = new Date(year, month, 0);
-            const formatDate = (d) => d.toISOString().split('T')[0];
-
-            document.getElementById('fecha_inicio').value = formatDate(start);
-            document.getElementById('fecha_fin').value = formatDate(end);
-            htmx.trigger('#attendance-filter-form', 'change');
-        }
-
-        function clearDateRange() {
-            document.getElementById('fecha_inicio').value = '';
-            document.getElementById('fecha_fin').value = '';
-            document.getElementById('month_picker').value = '';
-            htmx.trigger('#attendance-filter-form', 'change');
-        }
-
-        function applyAdvancedFilters() {
-            const start = document.getElementById('fecha_inicio').value;
-            const end = document.getElementById('fecha_fin').value;
-            if (start && end && start > end) {
-                Swal.fire('Rango inválido', 'La fecha inicio no puede ser mayor que la fecha fin.', 'warning');
-                return;
-            }
-            showFiltersAppliedToast = true;
-            htmx.trigger('#attendance-filter-form', 'submit');
-        }
-
-        document.body.addEventListener('htmx:afterSwap', function (evt) {
-            if (!showFiltersAppliedToast) return;
-            if (evt.target && evt.target.id === 'attendance-content-area') {
                 Swal.fire({
-                    icon: 'success',
-                    title: 'Filtros aplicados',
-                    text: 'La tabla y métricas se actualizaron correctamente.',
-                    timer: 1800,
-                    showConfirmButton: false
+                    title: 'Generar Reporte Global',
+                    text: "¿Deseas descargar el consolidado anual de todos los eventos? Este proceso puede tardar unos segundos.",
+                    icon: 'info',
+                    showCancelButton: true,
+                    confirmButtonColor: '#eab308',
+                    confirmButtonText: 'Sí, descargar',
+                    cancelButtonText: 'Cancelar'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        window.open(trigger.dataset.globalReportUrl, '_blank');
+                    }
                 });
-                showFiltersAppliedToast = false;
+            };
+
+            window.setDateRange = function(range) {
+                const today = new Date();
+                let start = new Date();
+                let end = new Date();
+
+                if (range === 'week') {
+                    const day = today.getDay();
+                    const diff = today.getDate() - day + (day === 0 ? -6 : 1);
+                    start.setDate(diff);
+                } else if (range === 'month') {
+                    start = new Date(today.getFullYear(), today.getMonth(), 1);
+                    end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+                } else if (range === 'last_month') {
+                    start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                    end = new Date(today.getFullYear(), today.getMonth(), 0);
+                }
+
+                const startInput = document.getElementById('fecha_inicio');
+                const endInput = document.getElementById('fecha_fin');
+                const monthInput = document.getElementById('month_picker');
+                if (!startInput || !endInput || !monthInput) return;
+
+                startInput.value = formatDate(start);
+                endInput.value = formatDate(end);
+                monthInput.value = '';
+                triggerFilterForm('change');
+            };
+
+            window.setMonthRange = function() {
+                const monthInput = document.getElementById('month_picker');
+                const startInput = document.getElementById('fecha_inicio');
+                const endInput = document.getElementById('fecha_fin');
+                if (!monthInput || !startInput || !endInput) return;
+
+                const monthValue = monthInput.value;
+                if (!monthValue) {
+                    Swal.fire('Atención', 'Selecciona un mes para aplicar el filtro.', 'warning');
+                    return;
+                }
+
+                const [year, month] = monthValue.split('-').map(Number);
+                const start = new Date(year, month - 1, 1);
+                const end = new Date(year, month, 0);
+
+                startInput.value = formatDate(start);
+                endInput.value = formatDate(end);
+                triggerFilterForm('change');
+            };
+
+            window.clearDateRange = function() {
+                const startInput = document.getElementById('fecha_inicio');
+                const endInput = document.getElementById('fecha_fin');
+                const monthInput = document.getElementById('month_picker');
+                if (!startInput || !endInput || !monthInput) return;
+
+                startInput.value = '';
+                endInput.value = '';
+                monthInput.value = '';
+                triggerFilterForm('change');
+            };
+
+            window.applyAdvancedFilters = function() {
+                const startInput = document.getElementById('fecha_inicio');
+                const endInput = document.getElementById('fecha_fin');
+                if (!startInput || !endInput) return;
+
+                const start = startInput.value;
+                const end = endInput.value;
+                if (start && end && start > end) {
+                    Swal.fire('Rango inválido', 'La fecha inicio no puede ser mayor que la fecha fin.', 'warning');
+                    return;
+                }
+
+                historialState.showFiltersAppliedToast = true;
+                triggerFilterForm('submit');
+            };
+
+            if (!historialState.toastListenerBound) {
+                document.body.addEventListener('htmx:afterSwap', function(evt) {
+                    if (!historialState.showFiltersAppliedToast) return;
+                    if (evt.target && evt.target.id === 'attendance-content-area') {
+                        Swal.fire({
+                            icon: 'success',
+                            title: 'Filtros aplicados',
+                            text: 'La tabla y métricas se actualizaron correctamente.',
+                            timer: 1800,
+                            showConfirmButton: false
+                        });
+                        historialState.showFiltersAppliedToast = false;
+                    }
+                });
+                historialState.toastListenerBound = true;
             }
-        });
+        })();
     </script>
     <style>
         .advanced-filters .select2-container {
