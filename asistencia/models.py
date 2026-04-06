@@ -2,6 +2,7 @@ from django.db import models
 from django.core.files.base import ContentFile
 from django.core.exceptions import ValidationError
 from django.core.validators import FileExtensionValidator
+from django.templatetags.static import static
 import qrcode
 from io import BytesIO
 import base64
@@ -71,6 +72,16 @@ class Usuario(models.Model):
     qr_code = models.ImageField(upload_to='qr_codes/', blank=True)
     foto_perfil = models.ImageField(upload_to='perfil_fotos/', blank=True, null=True)
 
+    @property
+    def foto_perfil_url(self):
+        if self.foto_perfil:
+            try:
+                if self.foto_perfil.storage.exists(self.foto_perfil.name):
+                    return self.foto_perfil.url
+            except (OSError, ValueError):
+                pass
+        return static('images/default_avatar.svg')
+
     def clean(self):
         if not self.dni.isdigit() or len(self.dni) != 8:
             raise ValidationError({'dni': 'El DNI debe tener exactamente 8 dígitos numéricos.'})
@@ -96,10 +107,10 @@ class Usuario(models.Model):
                     save=False
                 )
             except Exception as e:
-                self.foto_perfil = 'images/default_avatar.png'
+                self.foto_perfil = None
 
         if not self.foto_perfil:
-            self.foto_perfil = 'images/default_avatar.png'
+            self.foto_perfil = None
 
         qr = qrcode.QRCode(version=1, box_size=5, border=2)
         encoded_dni = base64.b64encode(self.dni.encode()).decode()

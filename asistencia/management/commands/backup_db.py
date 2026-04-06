@@ -5,6 +5,7 @@ from datetime import datetime
 import shutil
 from django.core.management.base import BaseCommand
 from django.conf import settings
+from django.db import connection
 
 class Command(BaseCommand):
     help = 'Genera un backup completo de la base de datos y archivos media.'
@@ -24,33 +25,46 @@ class Command(BaseCommand):
 
         # 1. Backup de Base de Datos
         db_conf = settings.DATABASES['default']
-        db_name = db_conf['NAME']
-        db_user = db_conf['USER']
-        db_pass = db_conf['PASSWORD']
-        db_host = db_conf['HOST']
-        db_port = db_conf['PORT']
-        
-        sql_file = os.path.join(temp_path, 'database.sql')
-        
-        env = os.environ.copy()
-        env['PGPASSWORD'] = db_pass
-        
+        db_engine = db_conf.get('ENGINE', '')
+
         try:
             self.stdout.write('Exportando base de datos...')
-            subprocess.run([
-                'pg_dump',
-                '-h', db_host,
-                '-p', str(db_port),
-                '-U', db_user,
-                '--clean',
-                '--if-exists',
-                '--no-owner',
-                '--no-privileges',
-                '-f', sql_file,
-                db_name
-            ], env=env, check=True)
+
+            if db_engine.endswith('sqlite3'):
+                sqlite_source = str(db_conf['NAME'])
+                sqlite_backup = os.path.join(temp_path, 'database.sqlite3')
+
+                if not os.path.exists(sqlite_source):
+                    raise FileNotFoundError(f'No se encontro la base SQLite: {sqlite_source}')
+
+                connection.close()
+                shutil.copy2(sqlite_source, sqlite_backup)
+            else:
+                db_name = db_conf['NAME']
+                db_user = db_conf['USER']
+                db_pass = db_conf['PASSWORD']
+                db_host = db_conf['HOST']
+                db_port = db_conf['PORT']
+                sql_file = os.path.join(temp_path, 'database.sql')
+
+                env = os.environ.copy()
+                env['PGPASSWORD'] = str(db_pass or '')
+
+                subprocess.run([
+                    'pg_dump',
+                    '-h', db_host,
+                    '-p', str(db_port),
+                    '-U', db_user,
+                    '--clean',
+                    '--if-exists',
+                    '--no-owner',
+                    '--no-privileges',
+                    '-f', sql_file,
+                    db_name
+                ], env=env, check=True)
+
             self.stdout.write(self.style.SUCCESS('Base de datos exportada.'))
-        except subprocess.CalledProcessError as e:
+        except (subprocess.CalledProcessError, OSError) as e:
             self.stdout.write(self.style.ERROR(f'Error al exportar DB: {e}'))
             shutil.rmtree(temp_path, ignore_errors=True)
             return

@@ -270,6 +270,12 @@ def _dir_size(path):
     return total
 
 
+def _absolute_media_url(request, relative_or_absolute_url):
+    if not relative_or_absolute_url:
+        return None
+    return request.build_absolute_uri(relative_or_absolute_url)
+
+
 def _build_event_report_context(evento, filters=None):
     filters = filters or {}
     filters = {**filters, 'evento': evento}
@@ -479,7 +485,7 @@ class RegistrarAsistencia(APIView):
                 'nombre': f"{usuario.nombre} {usuario.apellido}",
                 'dni': usuario.dni,
                 'estado': usuario.get_estado_display(),
-                'foto_perfil': request.build_absolute_uri(usuario.foto_perfil.url) if usuario.foto_perfil else None
+                'foto_perfil': _absolute_media_url(request, usuario.foto_perfil_url)
             }, status=status.HTTP_201_CREATED)
             
         except ValidationError as e:
@@ -553,7 +559,7 @@ class ListDentroEvento(APIView):
             'dni': a.usuario.dni,
             'nombre': f"{a.usuario.nombre} {a.usuario.apellido}",
             'hora_ingreso': a.hora_ingreso.strftime('%H:%M:%S'),
-            'foto_perfil': request.build_absolute_uri(a.usuario.foto_perfil.url) if a.usuario.foto_perfil else None
+            'foto_perfil': _absolute_media_url(request, a.usuario.foto_perfil_url)
         } for a in asistencias]
         return Response(data)
 
@@ -838,33 +844,42 @@ def restaurar_backup(request):
                 )
                 safe_extract(tar, path=temp_restore_root)
 
-            # Buscar el directorio interno que contiene database.sql
+            # Buscar el directorio interno que contiene el respaldo de base de datos
             internal_dirs = [d for d in os.listdir(temp_restore_root) if os.path.isdir(os.path.join(temp_restore_root, d))]
             if not internal_dirs:
                 raise Exception("Estructura de backup invalida.")
 
             extract_path = os.path.join(temp_restore_root, internal_dirs[0])
             sql_file = os.path.join(extract_path, 'database.sql')
+            sqlite_file = os.path.join(extract_path, 'database.sqlite3')
             media_tar = os.path.join(extract_path, 'media.tar.gz')
-
-            if not os.path.exists(sql_file):
-                raise Exception("No se encontro database.sql en el backup.")
 
             # 2. Restaurar Base de Datos
             db_conf = settings.DATABASES['default']
-            env = os.environ.copy()
-            env['PGPASSWORD'] = db_conf['PASSWORD']
+            db_engine = db_conf.get('ENGINE', '')
 
-            subprocess.run([
-                'psql',
-                '-h', db_conf['HOST'],
-                '-p', str(db_conf['PORT']),
-                '-U', db_conf['USER'],
-                '-d', db_conf['NAME'],
-                '-v', 'ON_ERROR_STOP=1',
-                '--single-transaction',
-                '-f', sql_file
-            ], env=env, check=True)
+            if db_engine.endswith('sqlite3'):
+                if not os.path.exists(sqlite_file):
+                    raise Exception("No se encontro database.sqlite3 en el backup.")
+                connection.close()
+                shutil.copy2(sqlite_file, str(db_conf['NAME']))
+            else:
+                if not os.path.exists(sql_file):
+                    raise Exception("No se encontro database.sql en el backup.")
+
+                env = os.environ.copy()
+                env['PGPASSWORD'] = str(db_conf.get('PASSWORD', ''))
+
+                subprocess.run([
+                    'psql',
+                    '-h', db_conf['HOST'],
+                    '-p', str(db_conf['PORT']),
+                    '-U', db_conf['USER'],
+                    '-d', db_conf['NAME'],
+                    '-v', 'ON_ERROR_STOP=1',
+                    '--single-transaction',
+                    '-f', sql_file
+                ], env=env, check=True)
 
             # 3. Restaurar Media
             if os.path.exists(media_tar):

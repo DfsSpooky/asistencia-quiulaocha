@@ -10,118 +10,129 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
-from pathlib import Path
-import mimetypes
 import importlib.util
+import mimetypes
+import os
+from pathlib import Path
+
+from qr_asistencia.env import get_bool, get_csv, get_first, load_environment, resolve_path
 
 mimetypes.add_type("text/css", ".css", True)
 mimetypes.add_type("application/javascript", ".js", True)
 
-import os
-
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_environment()
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = get_bool("DEBUG", True)
+
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('SECRET_KEY')
-if not SECRET_KEY and not os.environ.get('DEBUG') == 'True':
+SECRET_KEY = os.environ.get("SECRET_KEY")
+if not SECRET_KEY and not DEBUG:
     raise Exception("SECRET_KEY must be set in production environment.")
 elif not SECRET_KEY:
-    SECRET_KEY = 'django-insecure-fallback-only-for-dev'
+    SECRET_KEY = "django-insecure-fallback-only-for-dev"
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG', 'True') == 'True'
-
-ALLOWED_HOSTS = [h.strip() for h in os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',') if h.strip()]
-EXTRA_ALLOWED_HOSTS = [h.strip() for h in os.environ.get('EXTRA_ALLOWED_HOSTS', '').split(',') if h.strip()]
-ALLOWED_HOSTS.extend(EXTRA_ALLOWED_HOSTS)
+default_allowed_hosts = "*" if DEBUG else "localhost,127.0.0.1"
+ALLOWED_HOSTS = get_csv("ALLOWED_HOSTS", default_allowed_hosts)
+ALLOWED_HOSTS.extend(get_csv("EXTRA_ALLOWED_HOSTS", ""))
 ALLOWED_HOSTS = list(dict.fromkeys(ALLOWED_HOSTS))
 
 # CSRF Trusted Origins
-CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.environ.get(
-    'CSRF_TRUSTED_ORIGINS',
-    'http://localhost,http://127.0.0.1,https://quiulacocha.theworkpc.com'
-).split(',') if o.strip()]
+default_csrf_origins = (
+    "http://localhost,http://127.0.0.1,"
+    "http://localhost:8000,http://127.0.0.1:8000,"
+    "http://localhost:8001,http://127.0.0.1:8001,"
+    "https://quiulacocha.theworkpc.com"
+)
+CSRF_TRUSTED_ORIGINS = list(
+    dict.fromkeys(get_csv("CSRF_TRUSTED_ORIGINS", default_csrf_origins))
+)
 
-# Configuración para Proxy Inverso (Nginx/HestiaCP)
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+# Configuracion para Proxy Inverso (Nginx/HestiaCP)
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Application definition
 
 INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
-    'django.contrib.contenttypes',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'asistencia',
-    'rest_framework',
-    'rest_framework.authtoken',
-    'widget_tweaks',
-    'axes',  # Protección contra fuerza bruta
+    "django.contrib.admin",
+    "django.contrib.auth",
+    "django.contrib.contenttypes",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
+    "asistencia",
+    "rest_framework",
+    "rest_framework.authtoken",
+    "widget_tweaks",
+    "axes",  # Proteccion contra fuerza bruta
 ]
 if importlib.util.find_spec("jazzmin") is not None:
-    INSTALLED_APPS.insert(0, 'jazzmin')
+    INSTALLED_APPS.insert(0, "jazzmin")
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'axes.middleware.AxesMiddleware',  # Debe ir después de AuthenticationMiddleware
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "axes.middleware.AxesMiddleware",  # Debe ir despues de AuthenticationMiddleware
 ]
 
-ROOT_URLCONF = 'qr_asistencia.urls'
+ROOT_URLCONF = "qr_asistencia.urls"
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [BASE_DIR / 'templates'],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
-                'asistencia.context_processors.sistema_config',  # Agregamos el context processor
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [BASE_DIR / "templates"],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+                "asistencia.context_processors.sistema_config",
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = 'qr_asistencia.wsgi.application'
+WSGI_APPLICATION = "qr_asistencia.wsgi.application"
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
-
-POSTGRES_DB = os.environ.get('POSTGRES_DB')
-POSTGRES_USER = os.environ.get('POSTGRES_USER')
-POSTGRES_PASSWORD = os.environ.get('POSTGRES_PASSWORD')
-POSTGRES_HOST = os.environ.get('POSTGRES_HOST')
-POSTGRES_PORT = os.environ.get('POSTGRES_PORT')
+POSTGRES_DB = get_first("POSTGRES_DB", "DB_NAME")
+POSTGRES_USER = get_first("POSTGRES_USER", "DB_USER")
+POSTGRES_PASSWORD = get_first("POSTGRES_PASSWORD", "DB_PASSWORD")
+POSTGRES_HOST = get_first("POSTGRES_HOST", "DB_HOST")
+POSTGRES_PORT = get_first("POSTGRES_PORT", "DB_PORT")
 
 if all([POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST, POSTGRES_PORT]):
-    DATABASES['default'] = {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': POSTGRES_DB,
-        'USER': POSTGRES_USER,
-        'PASSWORD': POSTGRES_PASSWORD,
-        'HOST': POSTGRES_HOST,
-        'PORT': POSTGRES_PORT,
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": str(POSTGRES_DB),
+            "USER": str(POSTGRES_USER),
+            "PASSWORD": str(POSTGRES_PASSWORD),
+            "HOST": str(POSTGRES_HOST),
+            "PORT": str(POSTGRES_PORT),
+            "CONN_MAX_AGE": 60,
+        }
+    }
+else:
+    sqlite_name = get_first("SQLITE_NAME", "SQLITE_PATH", default="db.sqlite3")
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": str(resolve_path(sqlite_name, base_dir=BASE_DIR)),
+        }
     }
 
 # Password validation
@@ -129,25 +140,25 @@ if all([POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST, POSTGRES_P
 
 AUTH_PASSWORD_VALIDATORS = [
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
     },
 ]
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.2/topics/i18n/
 
-LANGUAGE_CODE = 'es-us'
+LANGUAGE_CODE = "es-pe"
 
-TIME_ZONE = 'America/Lima'
+TIME_ZONE = "America/Lima"
 
 USE_I18N = True
 
@@ -156,70 +167,68 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = '/static/'
-STATICFILES_DIRS = [BASE_DIR / "static"]
-STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATIC_URL = os.environ.get("STATIC_URL", "/static/")
+STATICFILES_DIRS = [BASE_DIR / "static"] if (BASE_DIR / "static").exists() else []
+STATIC_ROOT = resolve_path(get_first("STATIC_ROOT", default="staticfiles"), base_dir=BASE_DIR)
 
-MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_URL = os.environ.get("MEDIA_URL", "/media/")
+MEDIA_ROOT = resolve_path(get_first("MEDIA_ROOT", default="media"), base_dir=BASE_DIR)
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# Configuración de sesiones
-SESSION_COOKIE_AGE = 43200  # 12 horas (en segundos) - suficiente para jornadas de escaneo largas
-SESSION_SAVE_EVERY_REQUEST = True  # Renueva el timer en CADA request, así solo expira tras 12h de INACTIVIDAD
-SESSION_COOKIE_SECURE = not DEBUG
-CSRF_COOKIE_SECURE = not DEBUG
-SECURE_SSL_REDIRECT = not DEBUG
+# Configuracion de sesiones
+SESSION_COOKIE_AGE = 43200  # 12 horas
+SESSION_SAVE_EVERY_REQUEST = True
+SESSION_COOKIE_SECURE = get_bool("SESSION_COOKIE_SECURE", not DEBUG)
+CSRF_COOKIE_SECURE = get_bool("CSRF_COOKIE_SECURE", not DEBUG)
+SECURE_SSL_REDIRECT = get_bool("SECURE_SSL_REDIRECT", not DEBUG)
 SESSION_COOKIE_HTTPONLY = True
-SESSION_COOKIE_SAMESITE = 'Lax'
-SESSION_EXPIRE_AT_BROWSER_CLOSE = False  # No cerrar sesión al cerrar el navegador
+SESSION_COOKIE_SAMESITE = "Lax"
+SESSION_EXPIRE_AT_BROWSER_CLOSE = False
 
-# Seguridad adicional para producción
+# Seguridad adicional para produccion
 if not DEBUG:
-    SECURE_HSTS_SECONDS = 31536000 # 1 año
+    SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
 
 # Security Hardening
-SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
-X_FRAME_OPTIONS = 'DENY'
+SECURE_REFERRER_POLICY = "strict-origin-when-cross-origin"
+X_FRAME_OPTIONS = "DENY"
 
 CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'unique-snowflake',
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "unique-snowflake",
     }
 }
 
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': [
-        'rest_framework.authentication.TokenAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
-        # 'rest_framework.authentication.BasicAuthentication', # Eliminado por seguridad
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.TokenAuthentication",
+        "rest_framework.authentication.SessionAuthentication",
     ],
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
     ],
-    'UNAUTHENTICATED_USER': None,
-    # Throttling (Rate Limiting)
-    'DEFAULT_THROTTLE_CLASSES': [
-        'rest_framework.throttling.AnonRateThrottle',
-        'rest_framework.throttling.UserRateThrottle',
+    "UNAUTHENTICATED_USER": None,
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
     ],
-    'DEFAULT_THROTTLE_RATES': {
-        'anon': '100/hour',   # Usuarios anónimos: 100 requests por hora
-        'user': '1000/hour',  # Usuarios autenticados: 1000 requests por hora
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": "100/hour",
+        "user": "1000/hour",
     },
 }
 
-LOGIN_URL = '/login/'
-LOGIN_REDIRECT_URL = '/perfil/'
-# Configuración de Jazzmin
+LOGIN_URL = "/login/"
+LOGIN_REDIRECT_URL = "/perfil/"
+
 JAZZMIN_SETTINGS = {
     "site_title": "QR Asistencia Admin",
     "site_header": "QR Asistencia",
@@ -229,7 +238,7 @@ JAZZMIN_SETTINGS = {
     "login_logo_dark": None,
     "site_logo_classes": "img-circle",
     "site_icon": None,
-    "welcome_sign": "Bienvenido al panel de administración de QR Asistencia",
+    "welcome_sign": "Bienvenido al panel de administracion de QR Asistencia",
     "copyright": "QR Asistencia Ltd",
     "search_model": ["asistencia.Usuario"],
     "user_avatar": None,
@@ -289,27 +298,23 @@ JAZZMIN_UI_TWEAKS = {
         "info": "btn-info",
         "warning": "btn-warning",
         "danger": "btn-danger",
-        "success": "btn-success"
-    }
+        "success": "btn-success",
+    },
 }
 
 # ============================================
-# CONFIGURACIÓN DE DJANGO-AXES (Seguridad Login)
+# CONFIGURACION DE DJANGO-AXES (Seguridad Login)
 # ============================================
 
-# Backend de autenticación (axes debe ir primero)
 AUTHENTICATION_BACKENDS = [
-    'axes.backends.AxesStandaloneBackend',  # Axes debe ir primero
-    'django.contrib.auth.backends.ModelBackend',
+    "axes.backends.AxesStandaloneBackend",
+    "django.contrib.auth.backends.ModelBackend",
 ]
 
-# Configuración de Axes
-AXES_FAILURE_LIMIT = 5  # Número de intentos fallidos antes de bloquear
-AXES_COOLOFF_TIME = 1  # Tiempo de bloqueo en horas (1 hora)
-# AXES_LOCK_OUT_BY_COMBINATION_USER_AND_IP = True  # Deprecated
-AXES_LOCKOUT_PARAMETERS = ["username", "ip_address"]  # Bloquear por usuario + IP (Nueva configuración)
-AXES_RESET_ON_SUCCESS = True  # Resetear contador al login exitoso
-AXES_LOCKOUT_TEMPLATE = None  # Usar mensaje de error por defecto
-AXES_VERBOSE = True  # Logs detallados
-AXES_ENABLE_ADMIN = True  # Habilitar en admin de Django
-
+AXES_FAILURE_LIMIT = 5
+AXES_COOLOFF_TIME = 1
+AXES_LOCKOUT_PARAMETERS = ["username", "ip_address"]
+AXES_RESET_ON_SUCCESS = True
+AXES_LOCKOUT_TEMPLATE = None
+AXES_VERBOSE = True
+AXES_ENABLE_ADMIN = True

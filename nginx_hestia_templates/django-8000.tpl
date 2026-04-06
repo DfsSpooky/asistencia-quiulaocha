@@ -32,7 +32,11 @@ server {
     }
 
 	location / {
-		proxy_pass      http://127.0.0.1:8000;
+		proxy_pass              http://127.0.0.1:8000;
+		proxy_set_header        Host $host;
+		proxy_set_header        X-Real-IP $remote_addr;
+		proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+		proxy_set_header        X-Forwarded-Proto $scheme;
 		location ~* ^.+\.(%proxy_extentions%)$ {
 			try_files  $uri @fallback;
 			root       %docroot%;
@@ -43,7 +47,11 @@ server {
 	}
 
 	location @fallback {
-		proxy_pass      http://127.0.0.1:8000;
+		proxy_pass              http://127.0.0.1:8000;
+		proxy_set_header        Host $host;
+		proxy_set_header        X-Real-IP $remote_addr;
+		proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+		proxy_set_header        X-Forwarded-Proto $scheme;
 	}
 
 	location /error/ {

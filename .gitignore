@@ -1,4 +1,7 @@
 
+# Docker override (solo desarrollo local, NO subir al servidor)
+docker-compose.override.yml
+
 # Python
 *.pyc
 __pycache__/

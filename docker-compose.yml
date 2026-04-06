@@ -1,16 +1,23 @@
 services:
   web:
     build: .
-    command: gunicorn qr_asistencia.wsgi:application --bind 0.0.0.0:8000 --timeout 600 --workers 2
-    volumes:
-      - .:/app
+    command: /bin/sh /app/scripts/start-web.sh
     ports:
       - "127.0.0.1:8000:8000"
+    volumes:
+      - ./staticfiles:/app/staticfiles
+      - ./media:/app/media
     env_file:
       - .env
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/').read()"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
     restart: always
 
   db:

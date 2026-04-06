@@ -4,379 +4,511 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Comunidad Campesina de Quiulacocha - Cerro de Pasco, Perú</title>
-    <meta name="description" content="Comunidad Campesina San Francisco de Asís de Quiulacocha, Cerro de Pasco, Pasco, Perú. Tradición andina, organización comunal y cultura viva en los Andes.">
-    
-    <!-- Tailwind CSS CDN -->
+    <title>Comunidad Campesina de Quiulacocha | Cerro de Pasco, Peru</title>
+    <meta name="description" content="Portal web de la Comunidad Campesina de Quiulacocha, distrito de Simon Bolivar, Pasco. Informacion territorial, identidad comunal y gestion digital.">
+
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Google Fonts -->
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800;900&display=swap" rel="stylesheet">
-    
-    <!-- Bootstrap Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;700;800&family=Sora:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    
+
     <style>
         body {
-            font-family: 'Inter', sans-serif;
-        }
-        
-        .hero-gradient {
-            background: linear-gradient(135deg, rgba(15, 23, 42, 0.92) 0%, rgba(71, 85, 105, 0.88) 100%);
-        }
-        
-        .card-hover {
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        
-        .card-hover:hover {
-            transform: translateY(-8px);
-            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.15);
-        }
-        
-        .animate-float {
-            animation: float 6s ease-in-out infinite;
-        }
-        
-        @keyframes float {
-            0%, 100% { transform: translateY(0px); }
-            50% { transform: translateY(-15px); }
-        }
-        
-        .text-glow {
-            text-shadow: 0 0 30px rgba(251, 191, 36, 0.4);
+            font-family: 'Sora', sans-serif;
+            background:
+                radial-gradient(circle at top left, rgba(217, 119, 6, 0.14), transparent 32%),
+                radial-gradient(circle at top right, rgba(15, 118, 110, 0.12), transparent 26%),
+                #f4efe6;
+            color: #172033;
         }
 
-        .parallax {
-            background-attachment: fixed;
-            background-position: center;
-            background-repeat: no-repeat;
-            background-size: cover;
+        h1, h2, h3, .font-display {
+            font-family: 'Bitter', serif;
         }
 
-        .dots-pattern {
-            background-image: radial-gradient(circle, currentColor 1px, transparent 1px);
-            background-size: 30px 30px;
+        .hero-surface {
+            background:
+                linear-gradient(140deg, rgba(18, 31, 53, 0.96) 0%, rgba(15, 68, 74, 0.92) 54%, rgba(170, 89, 21, 0.88) 100%);
+        }
+
+        .hero-grid {
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+            background-size: 34px 34px;
+        }
+
+        .terrain-band {
+            background:
+                radial-gradient(circle at 15% 20%, rgba(245, 158, 11, 0.28), transparent 20%),
+                radial-gradient(circle at 70% 10%, rgba(56, 189, 248, 0.18), transparent 18%),
+                linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.12));
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            box-shadow: 0 24px 80px rgba(4, 12, 24, 0.24);
+            backdrop-filter: blur(18px);
+        }
+
+        .earth-panel {
+            background: rgba(255, 255, 255, 0.76);
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            box-shadow: 0 18px 45px rgba(25, 36, 56, 0.08);
+        }
+
+        .soft-card {
+            transition: transform 0.28s ease, box-shadow 0.28s ease, border-color 0.28s ease;
+        }
+
+        .soft-card:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 20px 48px rgba(15, 23, 42, 0.12);
+            border-color: rgba(217, 119, 6, 0.24);
+        }
+
+        .section-ring {
+            position: relative;
+        }
+
+        .section-ring::before {
+            content: "";
+            position: absolute;
+            inset: -18px auto auto -18px;
+            width: 70px;
+            height: 70px;
+            border-radius: 9999px;
+            border: 1px solid rgba(217, 119, 6, 0.22);
+            opacity: 0.65;
         }
     </style>
 </head>
-<body class="antialiased bg-slate-50">
-    
-    <!-- Navbar -->
-    <nav class="fixed w-full top-0 z-50 bg-slate-900/95 backdrop-blur-md border-b border-white/10">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex justify-between items-center h-20">
-                <!-- Logo -->
-                <div class="flex items-center space-x-3">
-                    {% if config and config.logo %}
-                    <img src="{{ config.logo.url }}" alt="Logo Quiulacocha" class="h-12 w-auto object-contain drop-shadow-lg">
-                    {% else %}
-                    <div class="w-12 h-12 bg-amber-500 rounded-xl flex items-center justify-center shadow-lg">
-                        <i class="bi bi-geo-alt-fill text-slate-900 text-2xl"></i>
-                    </div>
-                    {% endif %}
-                    <div>
-                        <h1 class="text-white font-black text-lg leading-tight uppercase tracking-wide">Quiulacocha</h1>
-                        <p class="text-amber-400 text-[10px] font-bold tracking-widest uppercase">Cerro de Pasco</p>
-                    </div>
+<body class="antialiased">
+
+    <nav class="fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-slate-950/80 backdrop-blur-xl">
+        <div class="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center gap-3">
+                {% if config and config.logo %}
+                <img src="{{ config.logo.url }}" alt="Logo Quiulacocha" class="h-12 w-auto object-contain">
+                {% else %}
+                <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/20">
+                    <i class="bi bi-geo-alt-fill text-2xl"></i>
                 </div>
-                
-                <!-- Login Button (Discreto) -->
-                <a href="{% url 'login' %}" 
-                   class="px-5 py-2 bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-slate-900 font-bold rounded-lg transition-all text-sm border border-amber-500/20 hover:border-amber-500">
-                    <i class="bi bi-box-arrow-in-right mr-2"></i>Acceso
-                </a>
+                {% endif %}
+                <div>
+                    <p class="text-[11px] font-semibold uppercase tracking-[0.35em] text-amber-300">Quiulacocha</p>
+                    <h1 class="font-display text-lg font-extrabold text-white">Comunidad Campesina</h1>
+                </div>
             </div>
+
+            <div class="hidden items-center gap-8 text-sm font-semibold text-slate-200 md:flex">
+                <a href="#territorio" class="transition hover:text-amber-300">Territorio</a>
+                <a href="#identidad" class="transition hover:text-amber-300">Identidad</a>
+                <a href="#actualidad" class="transition hover:text-amber-300">Actualidad</a>
+                <a href="#fuentes" class="transition hover:text-amber-300">Fuentes</a>
+            </div>
+
+            <a href="{% url 'login' %}"
+               class="inline-flex items-center gap-2 rounded-full border border-amber-300/30 bg-amber-300/10 px-5 py-2.5 text-sm font-bold text-amber-200 transition hover:border-amber-300 hover:bg-amber-300 hover:text-slate-950">
+                <i class="bi bi-box-arrow-in-right"></i>
+                Ingreso
+            </a>
         </div>
     </nav>
-    
-    <!-- Hero Section -->
-    <section class="relative min-h-screen flex items-center justify-center overflow-hidden">
-        <!-- Background Image -->
-        <div class="absolute inset-0 z-0">
-            <img src="https://images.unsplash.com/photo-1589182373726-e4f658ab50f0?q=80&w=2070" 
-                 alt="Andes Peruanos"
-                 class="w-full h-full object-cover scale-105">
-            <div class="absolute inset-0 hero-gradient"></div>
-        </div>
-        
-        <!-- Hero Content -->
-        <div class="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center pt-24 pb-20">
-            <div class="animate-float">
-                <div class="inline-block mb-6">
-                    <span class="px-6 py-2 bg-white/10 backdrop-blur-sm text-white rounded-full text-xs font-bold tracking-widest uppercase border border-white/20">
-                        <i class="bi bi-geo-alt-fill text-amber-400 mr-2"></i>
-                        Cerro de Pasco, Pasco, Perú
-                    </span>
-                </div>
-                
-                <h1 class="text-5xl sm:text-7xl lg:text-8xl font-black text-white mb-6 leading-tight drop-shadow-2xl">
-                    Comunidad Campesina
-                    <br>
-                    <span class="text-transparent bg-clip-text bg-gradient-to-r from-amber-300 via-amber-400 to-amber-500 text-glow">
-                        Quiulacocha
-                    </span>
-                </h1>
-                
-                <p class="text-xl sm:text-2xl text-slate-200 mb-12 max-w-3xl mx-auto font-medium leading-relaxed drop-shadow-lg">
-                    Tradición andina, organización comunal y cultura viva en el corazón de los Andes peruanos.
-                </p>
-                
-                <a href="#historia" 
-                   class="inline-flex items-center px-8 py-4 bg-white/10 backdrop-blur-sm border border-white/30 hover:bg-white/20 text-white font-bold rounded-2xl transition-all text-lg group">
-                    <span class="mr-3">Conoce nuestra historia</span>
-                    <i class="bi bi-chevron-down group-hover:translate-y-1 transition-transform"></i>
-                </a>
-            </div>
-        </div>
-    </section>
-    
-    <!-- Sección: Nuestra Historia -->
-    <section id="historia" class="py-24 bg-white">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="grid lg:grid-cols-2 gap-16 items-center">
+
+    <main>
+        <section class="relative overflow-hidden hero-surface pt-32 text-white">
+            <div class="absolute inset-0 hero-grid opacity-30"></div>
+            <div class="absolute -left-16 top-28 h-72 w-72 rounded-full bg-amber-400/18 blur-3xl"></div>
+            <div class="absolute right-0 top-12 h-64 w-64 rounded-full bg-cyan-300/16 blur-3xl"></div>
+
+            <div class="relative mx-auto grid max-w-7xl gap-14 px-4 pb-20 sm:px-6 lg:grid-cols-[1.2fr_0.8fr] lg:px-8 lg:pb-28">
                 <div>
-                    <div class="inline-block px-4 py-1.5 mb-6 rounded-full bg-amber-100 text-amber-700 text-xs font-black uppercase tracking-widest border border-amber-200">
-                        Nuestra Identidad
+                    <div class="mb-6 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/8 px-4 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-slate-100">
+                        <i class="bi bi-shield-check text-amber-300"></i>
+                        Portal comunal con datos referenciales 2023-2026
                     </div>
-                    <h2 class="text-4xl lg:text-5xl font-black text-slate-900 mb-6">
-                        Historia y Tradición Andina
+
+                    <h2 class="font-display max-w-4xl text-5xl font-extrabold leading-tight text-white sm:text-6xl lg:text-7xl">
+                        Quiulacocha:
+                        <span class="text-amber-300">territorio altoandino, memoria viva y gesti&oacute;n comunal digital.</span>
                     </h2>
-                    <div class="w-24 h-1.5 bg-amber-500 rounded-full mb-8"></div>
-                    <div class="space-y-6 text-lg text-slate-600 leading-relaxed">
-                        <p>
-                            La <strong class="text-slate-900">Comunidad Campesina San Francisco de Asís de Quiulacocha</strong> es una organización ancestral ubicada en el distrito de Simón Bolívar, provincia y departamento de Pasco, en el corazón de los Andes centrales del Perú.
-                        </p>
-                        <p>
-                            Nuestra comunidad mantiene vivas las tradiciones de organización colectiva, trabajo comunal y respeto por la tierra que nos han caracterizado por generaciones. A través de las <strong class="text-slate-900">faenas</strong> y <strong class="text-slate-900">asambleas comunales</strong>, fortalecemos los lazos que nos unen como pueblo.
-                        </p>
-                        <p>
-                            Ubicados a más de 4,000 metros sobre el nivel del mar, en la región de Cerro de Pasco, somos guardianes de un territorio rico en historia, cultura y recursos naturales.
-                        </p>
+
+                    <p class="mt-7 max-w-3xl text-lg leading-8 text-slate-200 sm:text-xl">
+                        Comunidad campesina del distrito de Sim&oacute;n Bol&iacute;var, en la provincia de Pasco, con identidad cultural propia,
+                        vida comunal activa y un territorio altoandino marcado por su entorno lacustre, su memoria hist&oacute;rica
+                        y los actuales procesos de recuperaci&oacute;n ambiental.
+                    </p>
+
+                    <div class="mt-10 flex flex-col gap-4 sm:flex-row">
+                        <a href="#territorio"
+                           class="inline-flex items-center justify-center gap-3 rounded-2xl bg-amber-300 px-7 py-4 text-base font-bold text-slate-950 transition hover:bg-amber-200">
+                            Ver perfil comunal
+                            <i class="bi bi-arrow-down-right"></i>
+                        </a>
+                        <a href="{% url 'login' %}"
+                           class="inline-flex items-center justify-center gap-3 rounded-2xl border border-white/20 bg-white/8 px-7 py-4 text-base font-bold text-white transition hover:bg-white/14">
+                            Ir al sistema
+                            <i class="bi bi-arrow-up-right"></i>
+                        </a>
+                    </div>
+
+                    <div class="mt-12 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                        <article class="glass-panel rounded-3xl p-5">
+                            <div class="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-300 text-slate-950">
+                                <i class="bi bi-buildings-fill text-lg"></i>
+                            </div>
+                            <p class="text-xs uppercase tracking-[0.28em] text-slate-300">Distrito</p>
+                            <p class="mt-2 text-lg font-bold text-white">Sim&oacute;n Bol&iacute;var</p>
+                        </article>
+                        <article class="glass-panel rounded-3xl p-5">
+                            <div class="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-cyan-200 text-slate-950">
+                                <i class="bi bi-signpost-2-fill text-lg"></i>
+                            </div>
+                            <p class="text-xs uppercase tracking-[0.28em] text-slate-300">Altitud ref.</p>
+                            <p class="mt-2 text-lg font-bold text-white">4,409 m s. n. m.</p>
+                        </article>
+                        <article class="glass-panel rounded-3xl p-5">
+                            <div class="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-200 text-slate-950">
+                                <i class="bi bi-people-fill text-lg"></i>
+                            </div>
+                            <p class="text-xs uppercase tracking-[0.28em] text-slate-300">Poblacion ref.</p>
+                            <p class="mt-2 text-lg font-bold text-white">897 habitantes</p>
+                        </article>
+                        <article class="glass-panel rounded-3xl p-5">
+                            <div class="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-rose-200 text-slate-950">
+                                <i class="bi bi-calendar-event-fill text-lg"></i>
+                            </div>
+                            <p class="text-xs uppercase tracking-[0.28em] text-slate-300">Festividad</p>
+                            <p class="mt-2 text-lg font-bold text-white">Carnavales de San Sebasti&aacute;n</p>
+                        </article>
                     </div>
                 </div>
-                <div class="relative">
-                    <div class="aspect-[4/3] rounded-3xl overflow-hidden shadow-2xl">
-                        <img src="https://images.unsplash.com/photo-1531065208531-4036c0dba3ca?q=80&w=2070" 
-                             alt="Paisaje andino de Cerro de Pasco"
-                             class="w-full h-full object-cover">
+
+                <div class="terrain-band rounded-[2rem] border border-white/12 p-6 shadow-2xl shadow-slate-950/30">
+                    <div class="glass-panel rounded-[1.75rem] p-7">
+                        <div class="mb-6 flex items-center justify-between">
+                            <div>
+                                <p class="text-xs uppercase tracking-[0.28em] text-amber-200">Ficha rapida</p>
+                                <h3 class="font-display mt-2 text-3xl font-extrabold text-white">Quiulacocha hoy</h3>
+                            </div>
+                            <div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/12 text-2xl text-amber-200">
+                                <i class="bi bi-compass-fill"></i>
+                            </div>
+                        </div>
+
+                        <div class="space-y-4">
+                            <div class="rounded-2xl border border-white/10 bg-slate-950/22 p-4">
+                                <p class="text-xs uppercase tracking-[0.24em] text-slate-300">Ubicacion politica</p>
+                                <p class="mt-2 text-sm leading-7 text-slate-100">
+                                    Comunidad campesina del distrito de Sim&oacute;n Bol&iacute;var, en la provincia y departamento de Pasco.
+                                </p>
+                            </div>
+                            <div class="rounded-2xl border border-white/10 bg-slate-950/22 p-4">
+                                <p class="text-xs uppercase tracking-[0.24em] text-slate-300">Entorno</p>
+                                <p class="mt-2 text-sm leading-7 text-slate-100">
+                                    Meseta de puna, cuerpos de agua cercanos y una geograf&iacute;a que exige organizaci&oacute;n, resiliencia y cuidado del territorio.
+                                </p>
+                            </div>
+                            <div class="rounded-2xl border border-white/10 bg-slate-950/22 p-4">
+                                <p class="text-xs uppercase tracking-[0.24em] text-slate-300">Memoria cultural</p>
+                                <p class="mt-2 text-sm leading-7 text-slate-100">
+                                    El Ministerio de Cultura registra en Quiulacocha la presencia del awki danza en carnavales dedicados a San Sebasti&aacute;n.
+                                </p>
+                            </div>
+                            <div class="rounded-2xl border border-white/10 bg-slate-950/22 p-4">
+                                <p class="text-xs uppercase tracking-[0.24em] text-slate-300">Utilidad de la webapp</p>
+                                <p class="mt-2 text-sm leading-7 text-slate-100">
+                                    Registro de usuarios, control de asistencia y administraci&oacute;n de eventos comunales desde una sola plataforma.
+                                </p>
+                            </div>
+                        </div>
                     </div>
-                    <div class="absolute -bottom-6 -right-6 w-64 h-64 bg-amber-400/20 rounded-full blur-3xl -z-10"></div>
                 </div>
             </div>
-        </div>
-    </section>
+        </section>
 
-    <!-- Sección: Cultura y Tradiciones -->
-    <section class="py-24 bg-slate-50">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="text-center mb-20">
-                <div class="inline-block px-4 py-1.5 mb-6 rounded-full bg-amber-100 text-amber-700 text-xs font-black uppercase tracking-widest border border-amber-200">
-                    Nuestras Raíces
-                </div>
-                <h2 class="text-4xl lg:text-5xl font-black text-slate-900 mb-6">
-                    Cultura y Organización Comunal
-                </h2>
-                <div class="w-24 h-1.5 bg-amber-500 mx-auto rounded-full mb-8"></div>
-                <p class="text-xl text-slate-600 max-w-3xl mx-auto">
-                    La vida comunal se sustenta en principios de reciprocidad, trabajo colectivo y respeto mutuo.
-                </p>
-            </div>
-            
-            <div class="grid md:grid-cols-3 gap-10">
-                <!-- Faenas Comunales -->
-                <div class="card-hover bg-white rounded-3xl shadow-xl p-10 border-b-8 border-amber-500">
-                    <div class="w-16 h-16 bg-amber-500 rounded-2xl flex items-center justify-center mb-8 shadow-lg">
-                        <i class="bi bi-people-fill text-white text-3xl"></i>
+        <section id="territorio" class="px-4 py-20 sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-7xl">
+                <div class="mb-14 max-w-3xl">
+                    <div class="section-ring inline-block">
+                        <span class="inline-flex items-center gap-2 rounded-full bg-amber-100 px-4 py-2 text-xs font-bold uppercase tracking-[0.28em] text-amber-800">
+                            <i class="bi bi-map-fill"></i>
+                            Territorio
+                        </span>
                     </div>
-                    <h3 class="text-2xl font-black text-slate-900 mb-4 uppercase tracking-tight">
-                        Faenas Comunales
-                    </h3>
-                    <p class="text-slate-600 leading-relaxed text-lg">
-                        Trabajo colectivo para el mantenimiento de caminos, canales de riego y espacios comunes. Una tradición que fortalece nuestra unión.
-                    </p>
-                </div>
-
-                <!-- Asambleas -->
-                <div class="card-hover bg-white rounded-3xl shadow-xl p-10 border-b-8 border-slate-900">
-                    <div class="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center mb-8 shadow-lg">
-                        <i class="bi bi-megaphone-fill text-amber-400 text-3xl"></i>
-                    </div>
-                    <h3 class="text-2xl font-black text-slate-900 mb-4 uppercase tracking-tight">
-                        Asambleas Generales
-                    </h3>
-                    <p class="text-slate-600 leading-relaxed text-lg">
-                        Espacio democrático donde todos los comuneros tienen voz y voto para decidir el futuro de nuestra comunidad.
-                    </p>
-                </div>
-
-                <!-- Festividades -->
-                <div class="card-hover bg-white rounded-3xl shadow-xl p-10 border-b-8 border-amber-400">
-                    <div class="w-16 h-16 bg-amber-400 rounded-2xl flex items-center justify-center mb-8 shadow-lg">
-                        <i class="bi bi-calendar-event-fill text-slate-900 text-3xl"></i>
-                    </div>
-                    <h3 class="text-2xl font-black text-slate-900 mb-4 uppercase tracking-tight">
-                        Festividades
-                    </h3>
-                    <p class="text-slate-600 leading-relaxed text-lg">
-                        Celebramos nuestras tradiciones con fiestas patronales, danzas típicas y ceremonias que honran nuestra herencia cultural.
-                    </p>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Sección: Ubicación -->
-    <section class="py-24 bg-slate-900 text-white relative overflow-hidden">
-        <div class="absolute inset-0 opacity-10">
-            <div class="absolute inset-0 opacity-10 dots-pattern"></div>
-        </div>
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-            <div class="grid lg:grid-cols-2 gap-16 items-center">
-                <div>
-                    <div class="inline-block px-4 py-1.5 mb-6 rounded-full bg-amber-500/20 text-amber-400 text-xs font-black uppercase tracking-widest border border-amber-500/30">
-                        Dónde Estamos
-                    </div>
-                    <h2 class="text-4xl lg:text-5xl font-black mb-6">
-                        Corazón de los Andes
+                    <h2 class="font-display mt-6 text-4xl font-extrabold text-slate-900 sm:text-5xl">
+                        Un perfil territorial m&aacute;s preciso para la portada.
                     </h2>
-                    <div class="w-24 h-1.5 bg-amber-500 rounded-full mb-8"></div>
-                    <div class="space-y-6 text-lg text-slate-300 leading-relaxed">
-                        <div class="flex items-start space-x-4">
-                            <i class="bi bi-geo-alt-fill text-amber-400 text-2xl mt-1"></i>
-                            <div>
-                                <p class="font-bold text-white mb-1">Ubicación</p>
-                                <p>Distrito de Simón Bolívar, Provincia de Pasco, Departamento de Pasco, Perú</p>
-                            </div>
-                        </div>
-                        <div class="flex items-start space-x-4">
-                            <i class="bi bi-mountain text-amber-400 text-2xl mt-1"></i>
-                            <div>
-                                <p class="font-bold text-white mb-1">Altitud</p>
-                                <p>Más de 4,000 metros sobre el nivel del mar</p>
-                            </div>
-                        </div>
-                        <div class="flex items-start space-x-4">
-                            <i class="bi bi-thermometer-half text-amber-400 text-2xl mt-1"></i>
-                            <div>
-                                <p class="font-bold text-white mb-1">Clima</p>
-                                <p>Frío de alta montaña, típico de la puna andina</p>
-                            </div>
-                        </div>
-                    </div>
+                    <p class="mt-5 text-lg leading-8 text-slate-700">
+                        En lugar de una narrativa gen&eacute;rica, este landing resume datos concretos sobre Quiulacocha y su contexto altoandino.
+                        As&iacute; la webapp se presenta como una herramienta comunal conectada con el territorio real.
+                    </p>
                 </div>
-                <div class="relative">
-                    <div class="aspect-square rounded-3xl overflow-hidden shadow-2xl border-4 border-white/10">
-                        <img src="https://images.unsplash.com/photo-1526392060635-9d6019884377?q=80&w=2070" 
-                             alt="Mapa de Perú - Cerro de Pasco"
-                             class="w-full h-full object-cover">
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
 
-    <!-- Sección: Galería Visual -->
-    <section class="py-24 bg-white">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="text-center mb-20">
-                <div class="inline-block px-4 py-1.5 mb-6 rounded-full bg-amber-100 text-amber-700 text-xs font-black uppercase tracking-widest border border-amber-200">
-                    Nuestra Tierra
-                </div>
-                <h2 class="text-4xl lg:text-5xl font-black text-slate-900 mb-6">
-                    Paisajes de Quiulacocha
-                </h2>
-                <div class="w-24 h-1.5 bg-amber-500 mx-auto rounded-full"></div>
-            </div>
-            
-            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-                <div class="aspect-[4/3] rounded-2xl overflow-hidden shadow-xl card-hover">
-                    <img src="https://images.unsplash.com/photo-1531065208531-4036c0dba3ca?q=80&w=2070" 
-                         alt="Paisaje andino"
-                         class="w-full h-full object-cover">
-                </div>
-                <div class="aspect-[4/3] rounded-2xl overflow-hidden shadow-xl card-hover">
-                    <img src="https://images.unsplash.com/photo-1589182373726-e4f658ab50f0?q=80&w=2070" 
-                         alt="Montañas de los Andes"
-                         class="w-full h-full object-cover">
-                </div>
-                <div class="aspect-[4/3] rounded-2xl overflow-hidden shadow-xl card-hover">
-                    <img src="https://images.unsplash.com/photo-1526392060635-9d6019884377?q=80&w=2070" 
-                         alt="Comunidad andina"
-                         class="w-full h-full object-cover">
-                </div>
-            </div>
-        </div>
-    </section>
-    
-    <!-- Footer -->
-    <footer class="bg-slate-950 text-white pt-20 pb-10 border-t border-white/5">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="grid md:grid-cols-3 gap-12 mb-16">
-                <!-- Info -->
-                <div class="md:col-span-2">
-                    <div class="flex items-center space-x-4 mb-8">
-                        {% if config and config.logo %}
-                        <img src="{{ config.logo.url }}" alt="Logo" class="h-14 w-auto object-contain brightness-110">
-                        {% else %}
-                        <div class="w-12 h-12 bg-amber-500 rounded-xl flex items-center justify-center">
-                            <i class="bi bi-geo-alt-fill text-2xl text-slate-950"></i>
+                <div class="grid gap-6 lg:grid-cols-4">
+                    <article class="earth-panel soft-card rounded-[1.8rem] p-7">
+                        <div class="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-900 text-xl text-amber-300">
+                            <i class="bi bi-geo-alt-fill"></i>
                         </div>
-                        {% endif %}
+                        <h3 class="font-display text-2xl font-bold text-slate-900">Ubicacion</h3>
+                        <p class="mt-4 text-sm leading-7 text-slate-700">
+                            Quiulacocha forma parte del distrito de Sim&oacute;n Bol&iacute;var, dentro de la provincia y departamento de Pasco.
+                        </p>
+                    </article>
+
+                    <article class="earth-panel soft-card rounded-[1.8rem] p-7">
+                        <div class="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-teal-900 text-xl text-amber-200">
+                            <i class="bi bi-layers-fill"></i>
+                        </div>
+                        <h3 class="font-display text-2xl font-bold text-slate-900">Altitud de referencia</h3>
+                        <p class="mt-4 text-sm leading-7 text-slate-700">
+                            Documentos municipales ubican terrenos de Quiulacocha alrededor de los <strong class="font-semibold text-slate-900">4,409 m s. n. m.</strong>
+                        </p>
+                    </article>
+
+                    <article class="earth-panel soft-card rounded-[1.8rem] p-7">
+                        <div class="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500 text-xl text-slate-950">
+                            <i class="bi bi-people-fill"></i>
+                        </div>
+                        <h3 class="font-display text-2xl font-bold text-slate-900">Escala poblacional</h3>
+                        <p class="mt-4 text-sm leading-7 text-slate-700">
+                            Una publicaci&oacute;n de la Municipalidad Provincial de Pasco reporta <strong class="font-semibold text-slate-900">897 habitantes</strong> para Quiulacocha.
+                        </p>
+                    </article>
+
+                    <article class="earth-panel soft-card rounded-[1.8rem] p-7">
+                        <div class="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-100 text-xl text-cyan-900">
+                            <i class="bi bi-water"></i>
+                        </div>
+                        <h3 class="font-display text-2xl font-bold text-slate-900">Entorno lacustre</h3>
+                        <p class="mt-4 text-sm leading-7 text-slate-700">
+                            Estudios municipales describen el sector como una zona rodeada por cuerpos h&iacute;dricos y con sensibilidad ambiental.
+                        </p>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+        <section id="identidad" class="bg-slate-950 px-4 py-20 text-white sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-7xl">
+                <div class="grid gap-12 lg:grid-cols-[0.82fr_1.18fr] lg:items-start">
+                    <div>
+                        <span class="inline-flex items-center gap-2 rounded-full border border-amber-300/25 bg-amber-300/10 px-4 py-2 text-xs font-bold uppercase tracking-[0.28em] text-amber-200">
+                            <i class="bi bi-stars"></i>
+                            Identidad viva
+                        </span>
+                        <h2 class="font-display mt-6 text-4xl font-extrabold leading-tight sm:text-5xl">
+                            La historia local puede sentirse en la interfaz, no solo en el texto.
+                        </h2>
+                        <p class="mt-6 text-lg leading-8 text-slate-300">
+                            Reorganic&eacute; el contenido para que la portada hable de memoria, cultura y pertenencia.
+                            As&iacute; el ingreso al sistema no compite con la identidad comunal: la acompa&ntilde;a.
+                        </p>
+                    </div>
+
+                    <div class="grid gap-6 md:grid-cols-3">
+                        <article class="rounded-[1.8rem] border border-white/10 bg-white/6 p-7 shadow-xl shadow-slate-950/20">
+                            <div class="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 text-2xl text-amber-200">
+                                <i class="bi bi-journal-medical"></i>
+                            </div>
+                            <h3 class="font-display text-2xl font-bold text-white">Memoria historica</h3>
+                            <p class="mt-4 text-sm leading-7 text-slate-300">
+                                La UNDAC reconoce a Quiulacocha como lugar de nacimiento de Daniel Alcides Carri&oacute;n y ha impulsado acciones ligadas a su casa museo.
+                            </p>
+                        </article>
+
+                        <article class="rounded-[1.8rem] border border-white/10 bg-white/6 p-7 shadow-xl shadow-slate-950/20">
+                            <div class="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 text-2xl text-emerald-200">
+                                <i class="bi bi-calendar-event-fill"></i>
+                            </div>
+                            <h3 class="font-display text-2xl font-bold text-white">Cultura festiva</h3>
+                            <p class="mt-4 text-sm leading-7 text-slate-300">
+                                El Ministerio de Cultura ubica en Quiulacocha la presencia del awki danza durante los carnavales en honor a San Sebasti&aacute;n.
+                            </p>
+                        </article>
+
+                        <article class="rounded-[1.8rem] border border-white/10 bg-white/6 p-7 shadow-xl shadow-slate-950/20">
+                            <div class="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 text-2xl text-cyan-200">
+                                <i class="bi bi-diagram-3-fill"></i>
+                            </div>
+                            <h3 class="font-display text-2xl font-bold text-white">Vida comunal</h3>
+                            <p class="mt-4 text-sm leading-7 text-slate-300">
+                                La webapp est&aacute; pensada para acompa&ntilde;ar la coordinaci&oacute;n de eventos, la asistencia y el orden administrativo de la comunidad.
+                            </p>
+                        </article>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="actualidad" class="px-4 py-20 sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-7xl">
+                <div class="mb-14 max-w-3xl">
+                    <span class="inline-flex items-center gap-2 rounded-full bg-teal-100 px-4 py-2 text-xs font-bold uppercase tracking-[0.28em] text-teal-800">
+                        <i class="bi bi-lightning-charge-fill"></i>
+                        Actualidad comunal
+                    </span>
+                    <h2 class="font-display mt-6 text-4xl font-extrabold text-slate-900 sm:text-5xl">
+                        Una portada que tambi&eacute;n reconozca los retos y procesos actuales.
+                    </h2>
+                    <p class="mt-5 text-lg leading-8 text-slate-700">
+                        Quiulacocha no es solo pasado. Tambi&eacute;n es restauraci&oacute;n ambiental, coordinaci&oacute;n institucional y una necesidad
+                        concreta de herramientas digitales para ordenar la gesti&oacute;n del d&iacute;a a d&iacute;a.
+                    </p>
+                </div>
+
+                <div class="grid gap-6 lg:grid-cols-3">
+                    <article class="earth-panel soft-card rounded-[2rem] p-8">
+                        <div class="mb-5 flex h-16 w-16 items-center justify-center rounded-3xl bg-emerald-100 text-3xl text-emerald-900">
+                            <i class="bi bi-tree-fill"></i>
+                        </div>
+                        <h3 class="font-display text-3xl font-bold text-slate-900">Recuperacion del paisaje</h3>
+                        <p class="mt-4 text-base leading-8 text-slate-700">
+                            AMSAC report&oacute; acciones recientes de forestaci&oacute;n con quinuales en Quiulacocha, una se&ntilde;al concreta de recuperaci&oacute;n ecol&oacute;gica en la zona.
+                        </p>
+                    </article>
+
+                    <article class="earth-panel soft-card rounded-[2rem] p-8">
+                        <div class="mb-5 flex h-16 w-16 items-center justify-center rounded-3xl bg-sky-100 text-3xl text-sky-900">
+                            <i class="bi bi-water"></i>
+                        </div>
+                        <h3 class="font-display text-3xl font-bold text-slate-900">Territorio sensible</h3>
+                        <p class="mt-4 text-base leading-8 text-slate-700">
+                            Diversos estudios oficiales describen a Quiulacocha como un entorno con lagunas, humedad altoandina y vulnerabilidad ambiental que exige gesti&oacute;n cuidadosa.
+                        </p>
+                    </article>
+
+                    <article class="earth-panel soft-card rounded-[2rem] p-8">
+                        <div class="mb-5 flex h-16 w-16 items-center justify-center rounded-3xl bg-amber-100 text-3xl text-amber-900">
+                            <i class="bi bi-house-heart-fill"></i>
+                        </div>
+                        <h3 class="font-display text-3xl font-bold text-slate-900">Herramienta para la comunidad</h3>
+                        <p class="mt-4 text-base leading-8 text-slate-700">
+                            Esta plataforma aporta orden para el padr&oacute;n, las reuniones, la asistencia y la trazabilidad de actividades sin perder el car&aacute;cter comunal del proyecto.
+                        </p>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+        <section id="fuentes" class="bg-white/70 px-4 py-20 sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-7xl">
+                <div class="mb-10 max-w-3xl">
+                    <span class="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-xs font-bold uppercase tracking-[0.28em] text-white">
+                        <i class="bi bi-file-earmark-text-fill"></i>
+                        Fuentes publicas
+                    </span>
+                    <h2 class="font-display mt-6 text-4xl font-extrabold text-slate-900 sm:text-5xl">
+                        Datos base para una presentaci&oacute;n m&aacute;s real.
+                    </h2>
+                    <p class="mt-5 text-lg leading-8 text-slate-700">
+                        Dej&eacute; visibles las instituciones de referencia para que el contenido del landing no dependa solo de frases gen&eacute;ricas.
+                    </p>
+                </div>
+
+                <div class="grid gap-6 md:grid-cols-2 xl:grid-cols-5">
+                    <a href="https://munipasco.gob.pe/wp-content/uploads/2023/07/ANEXO-N%C2%B0-1.7-G-PONDERACION-POR-CALIDAD-DE-LA-VIVIENDA.pdf"
+                       target="_blank"
+                       rel="noopener noreferrer"
+                       class="earth-panel soft-card rounded-[1.6rem] p-6">
+                        <p class="text-xs font-bold uppercase tracking-[0.25em] text-amber-700">Municipalidad Provincial de Pasco</p>
+                        <h3 class="mt-3 font-display text-2xl font-bold text-slate-900">Poblacion referencial</h3>
+                        <p class="mt-3 text-sm leading-7 text-slate-700">Documento 2023 con registro de 897 habitantes para Quiulacocha.</p>
+                    </a>
+
+                    <a href="https://munipasco.gob.pe/wp-content/uploads/2023/08/RESOLUCION-ALCALDIA-0331-2023-APROBAR-ESTUDIO-SELECCION-AREA-INFRAESTRUCTURA-RESIDUOS-SOLIDOS-MUNICIPALES.pdf"
+                       target="_blank"
+                       rel="noopener noreferrer"
+                       class="earth-panel soft-card rounded-[1.6rem] p-6">
+                        <p class="text-xs font-bold uppercase tracking-[0.25em] text-teal-700">Municipalidad Provincial de Pasco</p>
+                        <h3 class="mt-3 font-display text-2xl font-bold text-slate-900">Altitud y entorno</h3>
+                        <p class="mt-3 text-sm leading-7 text-slate-700">Estudio 2023 que ubica terrenos de Quiulacocha a 4,409 m s. n. m. y describe cuerpos hidricos cercanos.</p>
+                    </a>
+
+                    <a href="https://transparencia.cultura.gob.pe/sites/default/files/transparencia/2024/11/resoluciones-del-viceministerio-de-patrimonio-cultural-e-industrias-culturales/rvm000332-2024-vmpcic-mc-informe837.pdf"
+                       target="_blank"
+                       rel="noopener noreferrer"
+                       class="earth-panel soft-card rounded-[1.6rem] p-6">
+                        <p class="text-xs font-bold uppercase tracking-[0.25em] text-cyan-700">Ministerio de Cultura</p>
+                        <h3 class="mt-3 font-display text-2xl font-bold text-slate-900">Awki danza</h3>
+                        <p class="mt-3 text-sm leading-7 text-slate-700">Informe 2024 que ubica la danza en carnavales de San Sebastian dentro de Quiulacocha.</p>
+                    </a>
+
+                    <a href="https://undac.edu.pe/undac-rindio-homenaje-al-dr-daniel-alcides-carrion-en-el-c-p-quiulacocha/"
+                       target="_blank"
+                       rel="noopener noreferrer"
+                       class="earth-panel soft-card rounded-[1.6rem] p-6">
+                        <p class="text-xs font-bold uppercase tracking-[0.25em] text-rose-700">UNDAC</p>
+                        <h3 class="mt-3 font-display text-2xl font-bold text-slate-900">Memoria de Carri&oacute;n</h3>
+                        <p class="mt-3 text-sm leading-7 text-slate-700">Publicacion institucional sobre Quiulacocha y la casa museo vinculada a Daniel Alcides Carri&oacute;n.</p>
+                    </a>
+
+                    <a href="https://www.gob.pe/institucion/amsac/noticias/1367088-pasco-amsac-impulsa-forestacion-de-500-quinuales-en-quiulacocha"
+                       target="_blank"
+                       rel="noopener noreferrer"
+                       class="earth-panel soft-card rounded-[1.6rem] p-6">
+                        <p class="text-xs font-bold uppercase tracking-[0.25em] text-emerald-700">AMSAC</p>
+                        <h3 class="mt-3 font-display text-2xl font-bold text-slate-900">Recuperacion ambiental</h3>
+                        <p class="mt-3 text-sm leading-7 text-slate-700">Nota 2026 sobre forestaci&oacute;n con 500 quinuales y restauraci&oacute;n del ecosistema altoandino.</p>
+                    </a>
+                </div>
+            </div>
+        </section>
+
+        <section class="px-4 py-16 sm:px-6 lg:px-8">
+            <div class="mx-auto max-w-7xl">
+                <div class="overflow-hidden rounded-[2.2rem] hero-surface p-8 text-white shadow-2xl shadow-slate-900/20 sm:p-12">
+                    <div class="grid gap-8 lg:grid-cols-[1fr_auto] lg:items-center">
                         <div>
-                            <h3 class="font-black text-xl uppercase tracking-wider">Quiulacocha</h3>
-                            <p class="text-amber-500 text-xs font-bold tracking-widest uppercase">Comunidad Campesina</p>
+                            <p class="text-xs font-bold uppercase tracking-[0.3em] text-amber-200">Sistema web comunal</p>
+                            <h2 class="font-display mt-4 text-4xl font-extrabold sm:text-5xl">
+                                Una portada mejor alineada con la comunidad y lista para crecer con el proyecto.
+                            </h2>
+                            <p class="mt-5 max-w-3xl text-lg leading-8 text-slate-200">
+                                El mensaje principal ahora combina identidad territorial con utilidad digital: la comunidad se reconoce en la web y la web sirve mejor a la comunidad.
+                            </p>
                         </div>
+                        <a href="{% url 'login' %}"
+                           class="inline-flex items-center justify-center gap-3 rounded-2xl bg-amber-300 px-7 py-4 text-base font-bold text-slate-950 transition hover:bg-amber-200">
+                            Entrar al sistema
+                            <i class="bi bi-arrow-up-right"></i>
+                        </a>
                     </div>
-                    <p class="text-slate-400 max-w-lg leading-relaxed text-lg italic">
-                        "Preservando nuestras tradiciones ancestrales mientras construimos el futuro de nuestra comunidad."
-                    </p>
-                </div>
-                
-                <!-- Contacto -->
-                <div>
-                    <h4 class="font-black text-xs uppercase tracking-widest text-amber-500 mb-6">
-                        Ubicación
-                    </h4>
-                    <p class="text-slate-200 font-bold mb-3">Plaza Principal</p>
-                    <p class="text-slate-500 leading-loose">
-                        Quiulacocha, Simón Bolívar<br>
-                        Cerro de Pasco, Pasco<br>
-                        Perú
-                    </p>
                 </div>
             </div>
-            
-            <div class="border-t border-white/5 pt-8 flex flex-col md:flex-row justify-between items-center text-slate-600 text-xs font-bold uppercase tracking-wider">
-                <p>© 2026 Comunidad Campesina de Quiulacocha</p>
-                <div class="flex items-center mt-4 md:mt-0 space-x-6">
-                    <span class="text-slate-500">Pasco, Perú</span>
-                    <div class="flex space-x-4 text-lg">
-                        <i class="bi bi-facebook hover:text-white cursor-pointer transition-colors"></i>
-                        <i class="bi bi-whatsapp hover:text-white cursor-pointer transition-colors"></i>
-                    </div>
-                </div>
+        </section>
+    </main>
+
+    <footer class="border-t border-slate-200/80 px-4 py-10 text-sm text-slate-600 sm:px-6 lg:px-8">
+        <div class="mx-auto flex max-w-7xl flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <p>&copy; {% now "Y" %} Comunidad Campesina de Quiulacocha. Portal de gesti&oacute;n y referencia territorial.</p>
+            <div class="flex items-center gap-5">
+                <span>Pasco, Per&uacute;</span>
+                <a href="#fuentes" class="font-semibold text-slate-900 transition hover:text-amber-700">Ver fuentes</a>
             </div>
         </div>
     </footer>
-    
-    <!-- Smooth Scroll -->
+
     <script>
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function (e) {
-                e.preventDefault();
+        document.querySelectorAll('a[href^="#"]').forEach((anchor) => {
+            anchor.addEventListener('click', function(event) {
                 const target = document.querySelector(this.getAttribute('href'));
-                if (target) {
-                    target.scrollIntoView({
-                        behavior: 'smooth',
-                        block: 'start'
-                    });
+                if (!target) {
+                    return;
                 }
+
+                event.preventDefault();
+                target.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start',
+                });
             });
         });
     </script>
-    
 </body>
 </html>

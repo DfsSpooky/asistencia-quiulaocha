@@ -1,16 +1,33 @@
-# asistencia_scanner_app_3
+# Asistencia Scanner App
 
-A new Flutter project.
+App Flutter para login de escaneadores y registro de asistencia mediante QR.
 
-## Getting Started
+## Configuracion del backend
 
-This project is a starting point for a Flutter application.
+La URL del backend se define con `--dart-define`, asi que ya no hace falta editar el codigo para cambiar entre local y produccion.
 
-A few resources to get you started if this is your first Flutter project:
+Produccion:
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+```bash
+flutter run --dart-define=API_BASE_URL=https://quiulacocha.theworkpc.com
+```
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+Android Emulator:
+
+```bash
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
+```
+
+Dispositivo fisico en red local:
+
+```bash
+flutter run --dart-define=API_BASE_URL=http://192.168.1.100:8000
+```
+
+## Comandos utiles
+
+```bash
+flutter pub get
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
+flutter build apk --release --dart-define=API_BASE_URL=https://quiulacocha.theworkpc.com
+```

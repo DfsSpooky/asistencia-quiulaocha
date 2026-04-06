@@ -8,6 +8,17 @@ APP_DIR="/home/$USER_HESTIA/web/$DOMAIN/public_html"
 REPO_URL="https://github.com/Start-Games/asistencia-quiulaocha.git"
 BRANCH="main"
 
+generate_secret_key() {
+    if command -v openssl >/dev/null 2>&1; then
+        openssl rand -hex 32
+    else
+        python3 - <<'PY'
+import secrets
+print(secrets.token_urlsafe(50))
+PY
+    fi
+}
+
 # Colors
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -46,14 +57,15 @@ if [ ! -f ".env" ]; then
     cp .env.example .env 2>/dev/null || touch .env
 
     grep -q "POSTGRES_DB" .env || echo "POSTGRES_DB=asistencia_db" >> .env
-    grep -q "POSTGRES_USER" .env || echo "POSTGRES_USER=usuario_db" >> .env
+    grep -q "POSTGRES_USER" .env || echo "POSTGRES_USER=postgres" >> .env
     grep -q "POSTGRES_PASSWORD" .env || echo "POSTGRES_PASSWORD=change_me_please" >> .env
     grep -q "POSTGRES_HOST" .env || echo "POSTGRES_HOST=db" >> .env
     grep -q "POSTGRES_PORT" .env || echo "POSTGRES_PORT=5432" >> .env
     grep -q "ALLOWED_HOSTS" .env || echo "ALLOWED_HOSTS=$DOMAIN,localhost,127.0.0.1" >> .env
     grep -q "CSRF_TRUSTED_ORIGINS" .env || echo "CSRF_TRUSTED_ORIGINS=https://$DOMAIN" >> .env
+    grep -q "SECURE_SSL_REDIRECT" .env || echo "SECURE_SSL_REDIRECT=False" >> .env
     grep -q "DEBUG" .env || echo "DEBUG=False" >> .env
-    grep -q "SECRET_KEY" .env || echo "SECRET_KEY=change_me_super_secret_$(date +%s)" >> .env
+    grep -q "SECRET_KEY" .env || echo "SECRET_KEY=$(generate_secret_key)" >> .env
 
     chown "$USER_HESTIA:$USER_HESTIA" .env
 fi
@@ -62,12 +74,12 @@ fi
 echo "Building and starting containers for production..."
 docker compose -f docker-compose.yml up -d --build
 
-# 5. Migrations & Static
-echo "Running migrations..."
-docker compose exec -T web python manage.py migrate
+# 5. Sanity Check
+echo "Running Django system check..."
+docker compose -f docker-compose.yml exec -T web python manage.py check
 
-echo "Collecting static files..."
-docker compose exec -T web python manage.py collectstatic --noinput
+echo "Current container status:"
+docker compose -f docker-compose.yml ps
 
 # 6. Final Permission Fix
 echo "Fixing ownership for Hestia CP..."

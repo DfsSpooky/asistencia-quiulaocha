@@ -1,13 +1,11 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'core/app_config.dart';
 import 'services/logger_service.dart';
 
 class ApiService {
-  // Update this with your server URL.
-  // For Android Emulator, 10.0.2.2 usually points to localhost.
-  // Using the ngrok URL from settings.py would be more reliable if available.
-  static const String baseUrl = 'https://quiulacocha.theworkpc.com';
+  static String get baseUrl => AppConfig.apiBaseUrl;
 
   Future<String?> login(String username, String password) async {
     logger.i('--- LOGIN ATTEMPT ---');
