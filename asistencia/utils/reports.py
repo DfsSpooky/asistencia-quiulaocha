@@ -178,40 +178,48 @@ def get_filtered_attendance_data(filters):
         target_events = None
         if evento:
             target_events = [evento]
-        elif fecha_inicio and fecha_fin and fecha_inicio == fecha_fin:
-            target_events = list(Evento.objects.filter(fecha=fecha_inicio))
+        elif fecha_inicio and fecha_fin:
+            target_events = list(Evento.objects.filter(fecha__range=[fecha_inicio, fecha_fin]).order_by('fecha'))
             
         if target_events:
-            asistentes_ids = Asistencia.objects.filter(
-                evento__in=target_events
-            ).values_list('usuario_id', flat=True)
-            
-            usuarios_no_asistentes_base = Usuario.objects.filter(
+            base_users_qs = Usuario.objects.filter(
                 estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_EXONERADO, Usuario.ESTADO_PASIVO]
-            ).exclude(id__in=asistentes_ids)
-            
+            )
             if dni:
-                usuarios_no_asistentes_base = usuarios_no_asistentes_base.filter(
+                base_users_qs = base_users_qs.filter(
                     Q(dni__icontains=dni) |
                     Q(nombre__icontains=dni) |
                     Q(apellido__icontains=dni)
                 )
+
+            base_users = list(base_users_qs)
+            all_attendances = set(
+                Asistencia.objects.filter(evento__in=target_events).values_list('usuario_id', 'evento_id')
+            )
+            all_justifications = {}
+            just_qs = Justificacion.objects.filter(
+                evento__in=target_events,
+                estado='APROBADO'
+            ).select_related('evento', 'usuario')
+            for j in just_qs:
+                all_justifications[(j.usuario_id, j.evento_id)] = j
             
-            # Convertir QuerySet a lista de objetos enriquecidos
             lista_inasistentes = []
-            target_ev = target_events[0] if len(target_events) == 1 else None
             
-            for u in usuarios_no_asistentes_base:
-                just = None
-                if target_ev:
-                    just = Justificacion.objects.filter(usuario=u, evento=target_ev, estado='APROBADO').first()
-                
-                u.is_absent = True
-                u.es_justificada = just is not None
-                u.justificacion_obs = just.motivo if just else ""
-                u.evento = target_ev
-                u.fecha = target_ev.fecha if target_ev else None
-                lista_inasistentes.append(u)
+            for ev in target_events:
+                for u in base_users:
+                    if (u.id, ev.id) in all_attendances:
+                        continue
+
+                    just = all_justifications.get((u.id, ev.id))
+                    import copy
+                    u_proxy = copy.copy(u)
+                    u_proxy.is_absent = True
+                    u_proxy.es_justificada = just is not None
+                    u_proxy.justificacion_obs = just.motivo if just else ""
+                    u_proxy.evento = ev
+                    u_proxy.fecha = ev.fecha
+                    lista_inasistentes.append(u_proxy)
             
             usuarios_no_asistentes = lista_inasistentes
 

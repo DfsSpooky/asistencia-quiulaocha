@@ -24,15 +24,28 @@
                                 style="--row-idx: {{ forloop.counter }}">
                                 <td class="px-8 py-6">
                                     <div class="flex items-center gap-4">
-                                        <div class="h-12 w-12 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 text-slate-500 flex items-center justify-center font-black text-sm border border-slate-200">
-                                            {{ usuario.nombre|first }}{{ usuario.apellido|first }}
+                                        <div class="relative group h-12 w-12 shrink-0" id="avatar-container-{{ usuario.dni }}">
+                                            {% if usuario.foto_perfil %}
+                                                <img src="{{ usuario.foto_perfil_url }}" alt="Foto" class="h-12 w-12 rounded-2xl object-cover border border-slate-200 shadow-sm">
+                                            {% else %}
+                                                <div class="h-12 w-12 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 text-slate-500 flex items-center justify-center font-black text-sm border border-slate-200">
+                                                    {{ usuario.nombre|first }}{{ usuario.apellido|first }}
+                                                </div>
+                                            {% endif %}
+
+                                            <label class="absolute inset-0 bg-slate-900/60 rounded-2xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer ring-2 ring-primary-500 ring-offset-1 ring-offset-white z-10" title="Actualizar foto">
+                                                <i class="bi bi-camera-fill text-white text-lg drop-shadow-md"></i>
+                                                <input type="file" name="foto" accept="image/*" class="hidden"
+                                                       hx-post="{% url 'actualizar_foto_rapida' usuario.dni %}"
+                                                       hx-trigger="change"
+                                                       hx-encoding="multipart/form-data"
+                                                       hx-target="#avatar-container-{{ usuario.dni }}"
+                                                       hx-swap="outerHTML">
+                                            </label>
                                         </div>
                                         <div>
                                             <p class="text-base font-bold text-slate-900 leading-tight">{{ usuario.nombre }} {{ usuario.apellido }}</p>
-                                            <p class="text-xs font-medium text-slate-400 mt-0.5 italic">
-                                                Comunero
-                                                registrado
-                                            </p>
+                                            <p class="text-xs font-medium text-slate-400 mt-0.5 italic">Comunero registrado</p>
                                         </div>
                                     </div>
                                 </td>

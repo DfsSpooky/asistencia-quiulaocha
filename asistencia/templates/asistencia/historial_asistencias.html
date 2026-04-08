@@ -95,9 +95,10 @@
         <div class="bg-white rounded-[3rem] p-8 shadow-premium border border-slate-100">
             <form id="attendance-filter-form"
                   hx-get="{% url 'historial_asistencias' %}"
-                  hx-trigger="submit, change from:select, change from:#fecha_inicio, change from:#fecha_fin, input from:#dni-input delay:500ms"
+                  hx-trigger="submit, change from:#evento-select, change from:#estado-select, input from:#dni-input delay:500ms"
                   hx-target="#attendance-content-area"
                   hx-swap="innerHTML"
+                  hx-push-url="true"
                   class="space-y-8">
                 
                 <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-end">
@@ -119,7 +120,7 @@
                     <!-- Status Tabs (Attendees vs Absentees) -->
                     <div class="lg:col-span-4 space-y-3">
                         <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Estado de Asistencia</label>
-                        <select name="estado" class="select2-searchable">
+                        <select name="estado" id="estado-select" class="select2-searchable">
                             <option value="" {% if not form.estado.value %}selected{% endif %}>Todos (Asistencias + Faltas)</option>
                             <option value="asistieron" {% if form.estado.value == 'asistieron' %}selected{% endif %}>✅ Solo Asistieron</option>
                             <option value="pendientes" {% if form.estado.value == 'pendientes' %}selected{% endif %}>🕒 Pendientes (Sin salida)</option>
@@ -140,17 +141,27 @@
                         </div>
                     </div>
 
-                    <!-- Export PDF Button -->
-                    <div class="lg:col-span-12 mt-4">
-                        <button type="button" onclick="generarPDFFiltrado()"
+                    <!-- Export Buttons -->
+                    <div class="lg:col-span-12 mt-4 flex flex-wrap gap-3">
+                        <button type="button" onclick="exportFilteredReport('pdf')"
                                 class="w-full lg:w-auto inline-flex items-center justify-center gap-3 px-8 py-4 bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white rounded-2xl font-black shadow-xl shadow-red-600/20 transition-all transform hover:-translate-y-1 active:scale-95">
                             <div class="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
                                 <i class="bi bi-file-earmark-pdf-fill text-xl"></i>
                             </div>
                             <div class="text-left">
                                 <p class="text-[10px] uppercase tracking-widest leading-none opacity-80 mb-1">Exportar Vista Actual</p>
-                                <p class="text-sm leading-none">GENERAR PDF CON FILTROS</p>
+                                <p class="text-sm leading-none">PDF FILTRADO</p>
                             </div>
+                        </button>
+                        <button type="button" onclick="exportFilteredReport('excel')"
+                                class="w-full lg:w-auto inline-flex items-center justify-center gap-3 px-6 py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black shadow-lg shadow-emerald-600/20 transition-all">
+                            <i class="bi bi-file-earmark-excel-fill text-lg"></i>
+                            <span class="text-sm">EXCEL FILTRADO</span>
+                        </button>
+                        <button type="button" onclick="exportFilteredReport('csv')"
+                                class="w-full lg:w-auto inline-flex items-center justify-center gap-3 px-6 py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black shadow-lg transition-all">
+                            <i class="bi bi-filetype-csv text-lg"></i>
+                            <span class="text-sm">CSV FILTRADO</span>
                         </button>
                     </div>
                 </div>
@@ -160,12 +171,12 @@
                     <button type="button" @click="expanded = !expanded" 
                             class="flex items-center gap-2 text-[10px] font-black text-primary-600 uppercase tracking-widest hover:text-primary-700 transition-colors">
                         <i class="bi" :class="expanded ? 'bi-dash-lg' : 'bi-plus-lg'"></i>
-                        Filtros Avanzados (Fecha, Ubicación, Orden)
+                        Filtros Avanzados Exactos (Fecha, Estado, Ubicación, Confirmación y Orden)
                     </button>
                     
-                    <div x-show="expanded" x-collapse x-cloak class="advanced-filters grid grid-cols-1 md:grid-cols-12 gap-6 mt-6">
+                    <div x-show="expanded" x-collapse x-cloak class="advanced-filters grid grid-cols-1 lg:grid-cols-12 gap-6 mt-6">
                         <!-- Date Range Filters with Presets -->
-                        <div class="md:col-span-6 space-y-3">
+                        <div class="lg:col-span-5 space-y-3">
                             <div class="flex items-center justify-between">
                                 <label class="text-[10px] font-bold text-slate-400 uppercase">Rango de Fechas</label>
                                 <div class="flex flex-wrap gap-1 justify-end">
@@ -203,7 +214,18 @@
                             </p>
                         </div>
 
-                        <div class="md:col-span-3 space-y-2">
+                        <div class="lg:col-span-3 space-y-2">
+                            <label class="text-[10px] font-bold text-slate-400 uppercase">Estado de Asistencia</label>
+                            <select name="estado" class="select2-searchable advanced-select">
+                                <option value="" {% if not form.estado.value %}selected{% endif %}>Todos (Asistencias + Faltas)</option>
+                                <option value="asistieron" {% if form.estado.value == 'asistieron' %}selected{% endif %}>Solo Asistieron</option>
+                                <option value="pendientes" {% if form.estado.value == 'pendientes' %}selected{% endif %}>Pendientes (Sin salida)</option>
+                                <option value="faltaron" {% if form.estado.value == 'faltaron' %}selected{% endif %}>Faltas (Todas)</option>
+                                <option value="faltas_justificadas" {% if form.estado.value == 'faltas_justificadas' %}selected{% endif %}>Faltas Justificadas</option>
+                                <option value="faltas_injustificadas" {% if form.estado.value == 'faltas_injustificadas' %}selected{% endif %}>Faltas Injustificadas</option>
+                            </select>
+                        </div>
+                        <div class="lg:col-span-2 space-y-2">
                             <label class="text-[10px] font-bold text-slate-400 uppercase">Ubicación</label>
                             <select name="ubicacion" class="select2-searchable advanced-select">
                                 <option value="">Cualquier ubicación</option>
@@ -212,7 +234,15 @@
                                 {% endif %}{% endfor %}
                             </select>
                         </div>
-                        <div class="md:col-span-3 space-y-2">
+                        <div class="lg:col-span-2 space-y-2">
+                            <label class="text-[10px] font-bold text-slate-400 uppercase">Confirmacion</label>
+                            <select name="confirmada" class="select2-searchable advanced-select">
+                                {% for val, label in form.confirmada.field.choices %}
+                                    <option value="{{ val }}" {% if form.confirmada.value == val %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="lg:col-span-12 xl:col-span-4 space-y-2">
                             <label class="text-[10px] font-bold text-slate-400 uppercase">Ordenar por</label>
                             <select name="ordenar_por" class="select2-searchable advanced-select">
                                 {% for val, label in form.ordenar_por.field.choices %}
@@ -220,7 +250,11 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="flex items-end gap-3 md:col-span-4 justify-end">
+                        <div class="flex flex-wrap items-end gap-3 lg:col-span-12 justify-end">
+                            <button type="button" onclick="exportAdvancedFilteredPdf()"
+                                    class="h-11 px-6 py-3 bg-red-600 text-white rounded-xl font-bold text-xs hover:bg-red-700 transition-all">
+                                Generar PDF Exacto
+                            </button>
                             <button type="button" onclick="applyAdvancedFilters()"
                                     class="h-11 px-6 py-3 bg-primary-600 text-white rounded-xl font-bold text-xs hover:bg-primary-700 transition-all">
                                 Aplicar Filtros Avanzados
@@ -278,9 +312,9 @@
                 }
             };
 
-            window.generarPDFFiltrado = function() {
+            function buildFilterQueryParams() {
                 const form = document.getElementById('attendance-filter-form');
-                if (!form) return;
+                if (!form) return null;
                 const formData = new FormData(form);
                 const params = new URLSearchParams();
 
@@ -289,7 +323,43 @@
                         params.append(key, value);
                     }
                 }
+                return params;
+            }
 
+            function validateAdvancedFilters() {
+                const startInput = document.getElementById('fecha_inicio');
+                const endInput = document.getElementById('fecha_fin');
+                if (!startInput || !endInput) return true;
+
+                const start = startInput.value;
+                const end = endInput.value;
+                if (start && end && start > end) {
+                    Swal.fire('Rango invÃ¡lido', 'La fecha inicio no puede ser mayor que la fecha fin.', 'warning');
+                    return false;
+                }
+                return true;
+            }
+
+            window.exportFilteredReport = function(format) {
+                const params = buildFilterQueryParams();
+                if (!params) return;
+
+                const routes = {
+                    pdf: '{% url "descargar_reporte_filtrado_pdf" %}',
+                    excel: '{% url "exportar_asistencias_excel" %}',
+                    csv: '{% url "exportar_asistencias_csv" %}'
+                };
+
+                const baseUrl = routes[format];
+                if (!baseUrl) return;
+                const url = baseUrl + '?' + params.toString();
+                window.open(url, '_blank');
+            };
+
+            window.exportAdvancedFilteredPdf = function() {
+                if (!validateAdvancedFilters()) return;
+                const params = buildFilterQueryParams();
+                if (!params) return;
                 const url = '{% url "descargar_reporte_filtrado_pdf" %}?' + params.toString();
                 window.open(url, '_blank');
             };
@@ -338,7 +408,6 @@
                 startInput.value = formatDate(start);
                 endInput.value = formatDate(end);
                 monthInput.value = '';
-                triggerFilterForm('change');
             };
 
             window.setMonthRange = function() {
@@ -359,7 +428,6 @@
 
                 startInput.value = formatDate(start);
                 endInput.value = formatDate(end);
-                triggerFilterForm('change');
             };
 
             window.clearDateRange = function() {
@@ -371,20 +439,10 @@
                 startInput.value = '';
                 endInput.value = '';
                 monthInput.value = '';
-                triggerFilterForm('change');
             };
 
-            window.applyAdvancedFilters = function() {
-                const startInput = document.getElementById('fecha_inicio');
-                const endInput = document.getElementById('fecha_fin');
-                if (!startInput || !endInput) return;
-
-                const start = startInput.value;
-                const end = endInput.value;
-                if (start && end && start > end) {
-                    Swal.fire('Rango inválido', 'La fecha inicio no puede ser mayor que la fecha fin.', 'warning');
-                    return;
-                }
+window.applyAdvancedFilters = function() {
+                if (!validateAdvancedFilters()) return;
 
                 historialState.showFiltersAppliedToast = true;
                 triggerFilterForm('submit');

@@ -278,79 +278,92 @@
         <h2>
             <span style="color: #6366f1;">●</span> Registros ({{ unified_list|length }})
         </h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Socio / Titular</th>
-                    <th>DNI</th>
-                    <th>Fecha</th>
-                    <th>Evento</th>
-                    <th>Ingreso</th>
-                    <th>Salida</th>
-                    <th>Estado</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in unified_list %}
-                    <tr {% if item.is_absent %}style="background-color: #fef2f2;"{% endif %}>
-                        <td>
-                            <strong {% if item.is_absent %}style="color: #dc2626;"{% endif %}>
-                                {% if item.usuario %}
-                                    {{ item.usuario.nombre }} {{ item.usuario.apellido }}
-                                {% else %}
-                                    {{ item.nombre }} {{ item.apellido }}
+        {% for group in grouped_items %}
+            <div style="font-size: 13px; font-weight: 800; color: #312e81; margin: 18px 0 10px; padding: 10px 12px; background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 12px;">
+                {{ group.evento.nombre|default:"General" }}
+                {% if group.fecha %}
+                    <span style="font-size: 10px; color: #475569; font-weight: 700;"> | {{ group.fecha|date:"d/m/Y" }}</span>
+                {% endif %}
+                <span style="font-size: 10px; color: #475569; font-weight: 700;"> | {{ group.items|length }} registros</span>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Socio / Titular</th>
+                        <th>DNI</th>
+                        <th>Fecha</th>
+                        <th>Evento</th>
+                        <th>Ingreso</th>
+                        <th>Salida</th>
+                        <th>Estado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in group.items %}
+                        <tr {% if item.is_absent %}style="background-color: #fef2f2;"{% endif %}>
+                            <td>
+                                <strong {% if item.is_absent %}style="color: #dc2626;"{% endif %}>
+                                    {% if item.usuario %}
+                                        {{ item.usuario.nombre }} {{ item.usuario.apellido }}
+                                    {% else %}
+                                        {{ item.nombre }} {{ item.apellido }}
+                                    {% endif %}
+                                </strong>
+                                {% if item.es_justificada and item.justificacion_obs %}
+                                    <div style="font-size: 9px; color: #4338ca; margin-top: 3px;">
+                                        Motivo: {{ item.justificacion_obs }}
+                                    </div>
                                 {% endif %}
-                            </strong>
-                            {% if item.es_justificada and item.justificacion_obs %}
-                                <div style="font-size: 9px; color: #4338ca; margin-top: 3px;">
-                                    Motivo: {{ item.justificacion_obs }}
-                                </div>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <code style="background: #f1f5f9; padding: 2px 4px; border-radius: 3px;">
-                                {% if item.usuario %}
-                                    {{ item.usuario.dni }}
-                                {% else %}
-                                    {{ item.dni }}
-                                {% endif %}
-                            </code>
-                        </td>
-                        <td>{{ item.fecha|date:"d/m/Y" }}</td>
-                        <td style="font-size: 9px;">{{ item.evento.nombre|default:"General" }}</td>
-                        {% if item.es_justificada %}
-                            <td colspan="2" style="text-align: center;">
-                                <span style="color: #6366f1; font-weight: 800; font-size: 10px; padding: 4px 8px; background: #e0e7ff; border-radius: 4px;">JUSTIFICADA</span>
                             </td>
-                        {% elif item.is_absent %}
-                            {% if item.is_late_absent %}
+                            <td>
+                                <code style="background: #f1f5f9; padding: 2px 4px; border-radius: 3px;">
+                                    {% if item.usuario %}
+                                        {{ item.usuario.dni }}
+                                    {% else %}
+                                        {{ item.dni }}
+                                    {% endif %}
+                                </code>
+                            </td>
+                            <td>{{ item.fecha|date:"d/m/Y" }}</td>
+                            <td style="font-size: 9px;">{{ item.evento.nombre|default:"General" }}</td>
+                            {% if item.es_justificada %}
+                                <td colspan="2" style="text-align: center;">
+                                    <span style="color: #6366f1; font-weight: 800; font-size: 10px; padding: 4px 8px; background: #e0e7ff; border-radius: 4px;">JUSTIFICADA</span>
+                                </td>
+                            {% elif item.is_absent %}
+                                {% if item.is_late_absent %}
+                                    <td style="color: #166534; font-weight: 600;">{{ item.hora_ingreso|date:"H:i"|default:"--" }}</td>
+                                    <td style="color: #9a3412; font-weight: 600;">{{ item.hora_salida|date:"H:i"|default:"--" }}</td>
+                                {% else %}
+                                    <td colspan="2" style="text-align: center;">
+                                        <span style="color: #dc2626; font-weight: 800; font-size: 10px; padding: 4px 8px; background: #fee2e2; border-radius: 4px;">AUSENTE</span>
+                                    </td>
+                                {% endif %}
+                            {% else %}
                                 <td style="color: #166534; font-weight: 600;">{{ item.hora_ingreso|date:"H:i"|default:"--" }}</td>
                                 <td style="color: #9a3412; font-weight: 600;">{{ item.hora_salida|date:"H:i"|default:"--" }}</td>
-                            {% else %}
-                                <td colspan="2" style="text-align: center;">
-                                    <span style="color: #dc2626; font-weight: 800; font-size: 10px; padding: 4px 8px; background: #fee2e2; border-radius: 4px;">AUSENTE</span>
-                                </td>
                             {% endif %}
-                        {% else %}
-                            <td style="color: #166534; font-weight: 600;">{{ item.hora_ingreso|date:"H:i"|default:"--" }}</td>
-                            <td style="color: #9a3412; font-weight: 600;">{{ item.hora_salida|date:"H:i"|default:"--" }}</td>
-                        {% endif %}
-                        <td>
-                            {% if item.es_justificada %}
-                                <span class="badge badge-info">JUSTIFICADA</span>
-                            {% elif item.is_absent %}
-                                <span class="badge badge-danger">FALTÓ</span>
-                                {% if item.is_late_absent %}
-                                    <span class="badge badge-warning">TARDE</span>
+                            <td>
+                                {% if item.es_justificada %}
+                                    <span class="badge badge-info">JUSTIFICADA</span>
+                                {% elif item.is_absent %}
+                                    <span class="badge badge-danger">FALTÓ</span>
+                                    {% if item.is_late_absent %}
+                                        <span class="badge badge-warning">TARDE</span>
+                                    {% endif %}
+                                {% elif item.hora_salida or item.usuario.estado == 'EXONERADO' %}
+                                    <span class="badge badge-success">ASISTIÓ</span>
+                                {% else %}
+                                    <span class="badge badge-warning">PENDIENTE</span>
                                 {% endif %}
-                            {% elif item.hora_salida or item.usuario.estado == 'EXONERADO' %}
-                                <span class="badge badge-success">ASISTIÓ</span>
-                            {% else %}
-                                <span class="badge badge-warning">PENDIENTE</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                {% empty %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% empty %}
+            <table>
+                <tbody>
                     <tr>
                         <td colspan="7"
                             style="text-align: center;
@@ -358,9 +371,9 @@
                                    color: #94a3b8;
                                    font-style: italic">No se encontraron registros con los filtros aplicados.</td>
                     </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                </tbody>
+            </table>
+        {% endfor %}
         <div class="footer">
             Documento oficial generado por el Sistema de Padron Quiulacocha. Reservados todos los derechos.
         </div>

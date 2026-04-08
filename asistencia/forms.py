@@ -61,6 +61,16 @@ class FiltroAsistenciaForm(forms.Form):
         label='Ordenar Por'
     )
 
+    def clean(self):
+        cleaned_data = super().clean()
+        fecha_inicio = cleaned_data.get('fecha_inicio')
+        fecha_fin = cleaned_data.get('fecha_fin')
+
+        if fecha_inicio and fecha_fin and fecha_inicio > fecha_fin:
+            raise forms.ValidationError('La fecha inicio no puede ser mayor que la fecha fin.')
+
+        return cleaned_data
+
 class ImportarUsuariosForm(forms.Form):
     archivo_csv = forms.FileField(label='Archivo CSV')
 

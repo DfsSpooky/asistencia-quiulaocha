@@ -9,7 +9,7 @@ import base64
 import re
 from django.contrib.auth.models import User
 from django.utils import timezone
-from PIL import Image
+from PIL import Image, ImageOps
 from datetime import date, datetime
 
 class Ubicacion(models.Model):
@@ -54,6 +54,8 @@ class Evento(models.Model):
         return f"{self.nombre} ({self.fecha})"
 
 class Usuario(models.Model):
+    FOTO_PERFIL_SIZE = (320, 320)
+    FOTO_PERFIL_QUALITY = 72
     ESTADO_ACTIVO = 'ACTIVO'
     ESTADO_PASIVO = 'PASIVO'
     ESTADO_EXONERADO = 'EXONERADO'
@@ -96,10 +98,17 @@ class Usuario(models.Model):
         if self.foto_perfil:
             try:
                 img = Image.open(self.foto_perfil)
-                img = img.convert('RGB')
-                img = img.resize((200, 200), Image.Resampling.LANCZOS)
+                img = ImageOps.exif_transpose(img).convert('RGB')
+                # Genera un recorte centrado optimizado para avatar y reduce el peso final.
+                img = ImageOps.fit(img, self.FOTO_PERFIL_SIZE, Image.Resampling.LANCZOS)
                 buffer = BytesIO()
-                img.save(buffer, format='JPEG', quality=70)
+                img.save(
+                    buffer,
+                    format='JPEG',
+                    quality=self.FOTO_PERFIL_QUALITY,
+                    optimize=True,
+                    progressive=True,
+                )
                 buffer.seek(0)
                 self.foto_perfil.save(
                     f'perfil_{self.dni}.jpg',

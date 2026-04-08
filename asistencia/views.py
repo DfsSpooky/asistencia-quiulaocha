@@ -35,6 +35,7 @@ import base64
 from io import TextIOWrapper
 from django.conf import settings
 from django.template.loader import render_to_string
+from django.urls import reverse
 from .utils.reports import (
     generate_attendance_csv, generate_attendance_excel, 
     generate_pdf_report, get_logo_base64, get_filtered_attendance_data
@@ -610,7 +611,10 @@ def historial_asistencias(request):
     pendientes = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and not getattr(item, 'hora_salida', None) and item.usuario.estado != 'EXONERADO')
     
     # LÃƒÂ³gica de Contadores segÃƒÂºn selecciÃƒÂ³n de evento
-    if not filters.get('evento'):
+    advanced_filters_active = any(
+        filters.get(key) for key in ['fecha_inicio', 'fecha_fin', 'ubicacion', 'confirmada']
+    )
+    if not filters.get('evento') and not advanced_filters_active and not filters.get('dni') and not filters.get('estado'):
         # Si no hay evento seleccionado, mostrar todo en CERO
         total_registros = 0
         confirmadas = 0
@@ -620,7 +624,12 @@ def historial_asistencias(request):
     else:
         # Si hay evento, "PadrÃƒÂ³n Esperado" debe ser el total de usuarios empadronados (Activos + Pasivos + Exonerados)
         # independientemente de cuÃƒÂ¡ntos registros traiga el filtrado (unified_list)
-        total_registros = Usuario.objects.filter(estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_EXONERADO, Usuario.ESTADO_PASIVO]).count()
+        if filters.get('evento'):
+            total_registros = Usuario.objects.filter(
+                estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_EXONERADO, Usuario.ESTADO_PASIVO]
+            ).count()
+        else:
+            total_registros = len(unified_list)
     
     paginator = Paginator(unified_list, 10)
     page_number = request.GET.get('page')
@@ -1372,20 +1381,12 @@ def descargar_reporte_filtrado_pdf(request):
     filters = form.cleaned_data if form.is_valid() else {}
     effective_filters = filters.copy()
     auto_event_from_range = False
+    eventos_en_rango = Evento.objects.none()
 
-    # Si no seleccionaron evento pero sÃƒÂ­ un rango de fechas, y ese rango contiene
-    # exactamente 1 evento, forzamos ese evento para calcular padrÃƒÂ³n/faltantes reales.
-    if (
-        not effective_filters.get('evento')
-        and effective_filters.get('fecha_inicio')
-        and effective_filters.get('fecha_fin')
-    ):
-        eventos_rango = Evento.objects.filter(
+    if effective_filters.get('fecha_inicio') and effective_filters.get('fecha_fin'):
+        eventos_en_rango = Evento.objects.filter(
             fecha__range=[effective_filters.get('fecha_inicio'), effective_filters.get('fecha_fin')]
-        ).order_by('fecha')
-        if eventos_rango.count() == 1:
-            effective_filters['evento'] = eventos_rango.first()
-            auto_event_from_range = True
+        ).order_by('fecha', 'hora_ingreso')
 
     data = get_filtered_attendance_data(effective_filters)
     unified_list = data.get('unified_report', [])
@@ -1402,9 +1403,24 @@ def descargar_reporte_filtrado_pdf(request):
     pendientes = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and not getattr(item, 'hora_salida', None) and item.usuario.estado != 'EXONERADO')
     inasistencias = sum(1 for item in unified_list if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False))
     justificadas = sum(1 for item in unified_list if getattr(item, 'es_justificada', False))
+
+    grouped_items = []
+    grouped_map = {}
+    for item in unified_list:
+        evento_obj = getattr(item, 'evento', None)
+        evento_key = getattr(evento_obj, 'id', None) or f"sin-evento-{getattr(item, 'fecha', None)}"
+        if evento_key not in grouped_map:
+            grouped_map[evento_key] = {
+                'evento': evento_obj,
+                'fecha': getattr(item, 'fecha', None),
+                'items': [],
+            }
+            grouped_items.append(grouped_map[evento_key])
+        grouped_map[evento_key]['items'].append(item)
     
     context = {
         'unified_list': unified_list,
+        'grouped_items': grouped_items,
         'total_registros': total_registros,
         'confirmadas': confirmadas,
         'pendientes': pendientes,
@@ -1419,7 +1435,15 @@ def descargar_reporte_filtrado_pdf(request):
             'dni': effective_filters.get('dni') or 'Todos',
             'fecha_inicio': effective_filters.get('fecha_inicio').strftime('%d/%m/%Y') if effective_filters.get('fecha_inicio') else 'Sin filtro',
             'fecha_fin': effective_filters.get('fecha_fin').strftime('%d/%m/%Y') if effective_filters.get('fecha_fin') else 'Sin filtro',
-            'evento': effective_filters.get('evento').nombre if effective_filters.get('evento') else 'Todos los eventos',
+            'evento': (
+                effective_filters.get('evento').nombre
+                if effective_filters.get('evento')
+                else (
+                    f"{eventos_en_rango.count()} eventos dentro del rango"
+                    if eventos_en_rango.exists()
+                    else 'Todos los eventos'
+                )
+            ),
             'ubicacion': effective_filters.get('ubicacion').nombre if effective_filters.get('ubicacion') else 'Todas',
             'estado': dict(form.fields['estado'].choices).get(effective_filters.get('estado', ''), 'Todos') if effective_filters.get('estado') else 'Todos',
         }
@@ -1572,6 +1596,51 @@ def perfil_usuario(request):
             'can_scan_qr': request.user.has_perm('asistencia.can_scan_qr')
         }
         return render(request, 'asistencia/perfil_usuario.html', context)
+
+@login_required
+@permission_required('asistencia.can_manage_users', raise_exception=True)
+@require_POST
+def actualizar_foto_rapida(request, dni):
+    usuario = get_object_or_404(Usuario, dni=dni)
+
+    if request.FILES.get('foto'):
+        usuario.foto_perfil = request.FILES['foto']
+        usuario.save()  # El modelo ya procesa y normaliza la imagen
+
+        LogAccion.objects.create(
+            usuario=request.user,
+            accion="Actualización de foto rápida",
+            descripcion=f"{request.user.username} actualizó la foto de {usuario.nombre} {usuario.apellido} desde la lista."
+        )
+
+    avatar_html = (
+        f'<img src="{escape(usuario.foto_perfil_url)}" alt="Foto" '
+        'class="h-12 w-12 rounded-2xl object-cover border border-slate-200 shadow-sm">'
+        if usuario.foto_perfil else
+        (
+            '<div class="h-12 w-12 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 '
+            'text-slate-500 flex items-center justify-center font-black text-sm border border-slate-200">'
+            f'{escape(usuario.nombre[:1])}{escape(usuario.apellido[:1])}'
+            '</div>'
+        )
+    )
+
+    html = f"""
+    <div class="relative group h-12 w-12 shrink-0" id="avatar-container-{usuario.dni}">
+        {avatar_html}
+        <label class="absolute inset-0 bg-slate-900/60 rounded-2xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer ring-2 ring-primary-500 ring-offset-1 ring-offset-white z-10" title="Actualizar foto">
+            <i class="bi bi-camera-fill text-white text-lg drop-shadow-md"></i>
+            <input type="file" name="foto" accept="image/*" class="hidden"
+                   hx-post="{reverse('actualizar_foto_rapida', args=[usuario.dni])}"
+                   hx-trigger="change"
+                   hx-encoding="multipart/form-data"
+                   hx-target="#avatar-container-{usuario.dni}"
+                   hx-swap="outerHTML">
+        </label>
+    </div>
+    """
+    return HttpResponse(html)
+
 
 @login_required
 @permission_required('asistencia.can_manage_users', raise_exception=True)

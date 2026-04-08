@@ -8,7 +8,8 @@ from .views import (
     solicitar_justificacion, admin_solicitar_justificacion,
     ListEventosActivos, ListUbicaciones, ListDentroEvento, buscar_usuario_dni, SystemConfigView,
     descargar_todos_carnets_pdf, descargar_reporte_global_pdf, descargar_reporte_filtrado_pdf,
-    exportar_reporte_global_excel, descargar_backup, restaurar_backup, cerrar_evento, panel_salud
+    exportar_reporte_global_excel, descargar_backup, restaurar_backup, cerrar_evento, panel_salud,
+    actualizar_foto_rapida
 )
 from rest_framework.authtoken.views import obtain_auth_token
 
@@ -17,6 +18,7 @@ urlpatterns = [
     path('dashboard/', dashboard, name='dashboard'),
     path('lista_usuarios/', lista_usuarios, name='lista_usuarios'),
     path('usuario/<str:dni>/', detalle_usuario, name='detalle_usuario'),
+    path('usuario/<str:dni>/foto-rapida/', actualizar_foto_rapida, name='actualizar_foto_rapida'),
     path('api/registrar-asistencia/', RegistrarAsistencia.as_view(), name='registrar_asistencia'),
     path('api/login/', obtain_auth_token, name='api_token_auth'),
     path('api/eventos-activos/', ListEventosActivos.as_view(), name='api_eventos_activos'),

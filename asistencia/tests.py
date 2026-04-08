@@ -1,19 +1,29 @@
 import os
+import shutil
+import tempfile
 from datetime import date, datetime, time, timedelta
+from io import BytesIO
 
 from django.conf import settings
 from django.contrib.auth.models import Permission, User
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.utils import timezone
+from PIL import Image
 
 from .models import Asistencia, ConfiguracionSistema, Evento, LogAccion, Usuario
 from .services import AsistenciaService
+from .forms import FiltroAsistenciaForm
 from .utils.reports import generate_attendance_csv, get_filtered_attendance_data
 
 
 class AttendanceEnhancementsTests(TestCase):
     def setUp(self):
+        self.temp_media_root = tempfile.mkdtemp(prefix='test-media-')
+        self._original_media_root = settings.MEDIA_ROOT
+        settings.MEDIA_ROOT = self.temp_media_root
+
         self.user = User.objects.create_user(username='manager', password='password')
         self.user.user_permissions.add(
             Permission.objects.get(codename='can_manage_users'),
@@ -29,6 +39,10 @@ class AttendanceEnhancementsTests(TestCase):
             hora_ingreso=time(8, 0),
             activo=True,
         )
+
+    def tearDown(self):
+        settings.MEDIA_ROOT = self._original_media_root
+        shutil.rmtree(self.temp_media_root, ignore_errors=True)
 
     def test_registrar_ingreso_marca_puntualidad(self):
         socio_puntual = Usuario.objects.create(nombre='Ana', apellido='Perez', dni='12345670', estado=Usuario.ESTADO_ACTIVO)
@@ -165,3 +179,211 @@ class AttendanceEnhancementsTests(TestCase):
 
         audit_log = LogAccion.objects.filter(accion__icontains='Auditoria').order_by('-fecha').first()
         self.assertIsNotNone(audit_log)
+
+    def test_actualizar_foto_rapida_sube_imagen_y_devuelve_fragmento_htmx(self):
+        usuario = Usuario.objects.create(nombre='Elena', apellido='Quispe', dni='12345674', estado=Usuario.ESTADO_ACTIVO)
+        source = BytesIO()
+        Image.new('RGB', (1200, 900), color=(24, 120, 196)).save(source, format='PNG')
+        imagen = SimpleUploadedFile('avatar.png', source.getvalue(), content_type='image/png')
+
+        response = self.client.post(
+            reverse('actualizar_foto_rapida', args=[usuario.dni]),
+            {'foto': imagen},
+            HTTP_HX_REQUEST='true',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        usuario.refresh_from_db()
+        self.assertTrue(bool(usuario.foto_perfil))
+        self.assertTrue(usuario.foto_perfil.name.endswith('.jpg'))
+
+        with Image.open(usuario.foto_perfil.path) as stored_image:
+            self.assertEqual(stored_image.size, Usuario.FOTO_PERFIL_SIZE)
+            self.assertEqual(stored_image.format, 'JPEG')
+
+        content = response.content.decode()
+        self.assertIn(f'id="avatar-container-{usuario.dni}"', content)
+        self.assertIn('hx-trigger="change"', content)
+        self.assertIn('bi-camera-fill', content)
+        self.assertTrue(
+            LogAccion.objects.filter(
+                usuario=self.user,
+                accion='Actualización de foto rápida',
+            ).exists()
+        )
+
+    def test_actualizar_foto_rapida_requiere_permiso(self):
+        usuario = Usuario.objects.create(nombre='Mario', apellido='Lopez', dni='12345675', estado=Usuario.ESTADO_ACTIVO)
+        no_manager = User.objects.create_user(username='viewer', password='password')
+        self.client.force_login(no_manager)
+
+        response = self.client.post(reverse('actualizar_foto_rapida', args=[usuario.dni]))
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_filtro_asistencia_rechaza_rango_invalido(self):
+        form = FiltroAsistenciaForm(data={
+            'fecha_inicio': '2026-04-10',
+            'fecha_fin': '2026-04-01',
+        })
+
+        self.assertFalse(form.is_valid())
+        self.assertIn('La fecha inicio no puede ser mayor que la fecha fin.', form.errors['__all__'])
+
+    def test_exportar_excel_respeta_filtro_confirmada(self):
+        usuario_confirmado = Usuario.objects.create(nombre='Rosa', apellido='Diaz', dni='12345676', estado=Usuario.ESTADO_ACTIVO)
+        usuario_pendiente = Usuario.objects.create(nombre='Saul', apellido='Perez', dni='12345677', estado=Usuario.ESTADO_ACTIVO)
+
+        Asistencia.objects.create(
+            usuario=usuario_confirmado,
+            fecha=self.evento.fecha,
+            hora_ingreso=time(8, 5),
+            hora_salida=time(10, 0),
+            evento=self.evento,
+            confirmada=True,
+        )
+        Asistencia.objects.create(
+            usuario=usuario_pendiente,
+            fecha=self.evento.fecha,
+            hora_ingreso=time(8, 10),
+            evento=self.evento,
+            confirmada=False,
+        )
+
+        response = self.client.get(reverse('exportar_asistencias_excel'), {
+            'evento': self.evento.id,
+            'confirmada': 'true',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            response['Content-Type']
+        )
+
+    def test_historial_con_filtro_avanzado_por_fecha_muestra_resultados(self):
+        evento_marzo = Evento.objects.create(
+            nombre='Reunion Marzo',
+            fecha=date(2026, 3, 15),
+            hora_ingreso=time(8, 0),
+            activo=False,
+        )
+        evento_abril = Evento.objects.create(
+            nombre='Reunion Abril',
+            fecha=date(2026, 4, 2),
+            hora_ingreso=time(8, 0),
+            activo=False,
+        )
+        usuario = Usuario.objects.create(nombre='Julia', apellido='Soto', dni='12345679', estado=Usuario.ESTADO_ACTIVO)
+
+        Asistencia.objects.create(
+            usuario=usuario,
+            fecha=evento_marzo.fecha,
+            hora_ingreso=time(8, 5),
+            hora_salida=time(10, 0),
+            evento=evento_marzo,
+            confirmada=True,
+        )
+        Asistencia.objects.create(
+            usuario=usuario,
+            fecha=evento_abril.fecha,
+            hora_ingreso=time(8, 10),
+            hora_salida=time(10, 10),
+            evento=evento_abril,
+            confirmada=True,
+        )
+
+        response = self.client.get(reverse('historial_asistencias'), {
+            'fecha_inicio': '2026-03-01',
+            'fecha_fin': '2026-04-30',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertIn('Reunion Marzo', content)
+        self.assertIn('Reunion Abril', content)
+
+    def test_reporte_filtrado_pdf_indica_varios_eventos_en_rango(self):
+        evento_1 = Evento.objects.create(
+            nombre='Evento Febrero',
+            fecha=date(2026, 2, 10),
+            hora_ingreso=time(8, 0),
+            activo=False,
+        )
+        evento_2 = Evento.objects.create(
+            nombre='Evento Marzo',
+            fecha=date(2026, 3, 5),
+            hora_ingreso=time(8, 0),
+            activo=False,
+        )
+        usuario = Usuario.objects.create(nombre='Pablo', apellido='Rios', dni='12345680', estado=Usuario.ESTADO_ACTIVO)
+
+        Asistencia.objects.create(
+            usuario=usuario,
+            fecha=evento_1.fecha,
+            hora_ingreso=time(8, 0),
+            hora_salida=time(10, 0),
+            evento=evento_1,
+            confirmada=True,
+        )
+        Asistencia.objects.create(
+            usuario=usuario,
+            fecha=evento_2.fecha,
+            hora_ingreso=time(8, 15),
+            hora_salida=time(10, 15),
+            evento=evento_2,
+            confirmada=True,
+        )
+
+        response = self.client.get(reverse('descargar_reporte_filtrado_pdf'), {
+            'fecha_inicio': '2026-02-01',
+            'fecha_fin': '2026-03-31',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+
+    def test_filtro_todos_en_rango_incluye_asistencias_y_faltas(self):
+        evento_1 = Evento.objects.create(
+            nombre='Evento Uno',
+            fecha=date(2026, 3, 10),
+            hora_ingreso=time(8, 0),
+            activo=False,
+        )
+        evento_2 = Evento.objects.create(
+            nombre='Evento Dos',
+            fecha=date(2026, 4, 10),
+            hora_ingreso=time(8, 0),
+            activo=False,
+        )
+        usuario_asiste = Usuario.objects.create(nombre='Lucia', apellido='Torres', dni='12345681', estado=Usuario.ESTADO_ACTIVO)
+        usuario_falta = Usuario.objects.create(nombre='Marco', apellido='Vega', dni='12345682', estado=Usuario.ESTADO_ACTIVO)
+
+        Asistencia.objects.create(
+            usuario=usuario_asiste,
+            fecha=evento_1.fecha,
+            hora_ingreso=time(8, 0),
+            hora_salida=time(10, 0),
+            evento=evento_1,
+            confirmada=True,
+        )
+
+        data = get_filtered_attendance_data({
+            'fecha_inicio': date(2026, 3, 1),
+            'fecha_fin': date(2026, 4, 30),
+            'estado': '',
+        })
+
+        resumen = sorted(
+            (
+                item.usuario.dni if hasattr(item, 'usuario') else item.dni,
+                getattr(item.evento, 'nombre', None),
+                bool(getattr(item, 'is_absent', False)),
+            )
+            for item in data['unified_report']
+        )
+
+        self.assertIn((usuario_asiste.dni, 'Evento Uno', False), resumen)
+        self.assertIn((usuario_falta.dni, 'Evento Uno', True), resumen)
+        self.assertIn((usuario_asiste.dni, 'Evento Dos', True), resumen)
+        self.assertIn((usuario_falta.dni, 'Evento Dos', True), resumen)
