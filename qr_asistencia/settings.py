@@ -318,3 +318,6 @@ AXES_RESET_ON_SUCCESS = True
 AXES_LOCKOUT_TEMPLATE = None
 AXES_VERBOSE = True
 AXES_ENABLE_ADMIN = True
+# Axes 6.1.1 intenta escribir en AccessLog sin session_hash en este entorno.
+# Desactivamos solo ese access log para evitar el 500 en login y mantener el bloqueo por intentos fallidos.
+AXES_DISABLE_ACCESS_LOG = True

@@ -212,7 +212,11 @@
                         {% if item.es_justificada %}
                             <span class="badge badge-info">JUSTIFICADA</span>
                         {% elif item.is_absent %}
-                            -
+                            {% if item.is_late_absent %}
+                                <span class="present-text">{{ item.hora_ingreso|date:"H:i"|default:"--" }}</span>
+                            {% else %}
+                                -
+                            {% endif %}
                         {% else %}
                             <span class="present-text">{{ item.hora_ingreso|date:"H:i"|default:"--" }}</span>
                         {% endif %}
@@ -221,7 +225,11 @@
                         {% if item.es_justificada %}
                             <span class="badge badge-info">JUSTIFICADA</span>
                         {% elif item.is_absent %}
-                            -
+                            {% if item.is_late_absent %}
+                                <span style="color: #9a3412;">{{ item.hora_salida|date:"H:i"|default:"--" }}</span>
+                            {% else %}
+                                -
+                            {% endif %}
                         {% else %}
                             <span style="color: #9a3412;">{{ item.hora_salida|date:"H:i"|default:"--" }}</span>
                         {% endif %}
@@ -231,6 +239,9 @@
                             <span class="badge badge-info">JUSTIFICADA</span>
                         {% elif item.is_absent %}
                             <span class="badge badge-danger">FALTÓ</span>
+                            {% if item.is_late_absent %}
+                                <span class="badge badge-warning">TARDE</span>
+                            {% endif %}
                         {% elif not item.hora_salida and item.usuario.estado != 'EXONERADO' %}
                             <span class="badge" style="background-color: #fef3c7; color: #92400e;">PENDIENTE</span>
                         {% else %}

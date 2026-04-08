@@ -476,6 +476,9 @@
                                 <span class="badge badge-info">JUSTIFICADA</span>
                             {% else %}
                                 <span class="badge badge-danger">FALTÓ</span>
+                                {% if item.is_late_absent %}
+                                    <span class="badge badge-warning">TARDE</span>
+                                {% endif %}
                             {% endif %}
                         {% elif item.hora_salida or item.usuario.estado == 'EXONERADO' %}
                             <span class="badge badge-success">ASISTIÓ</span>
@@ -511,9 +514,14 @@
                                 <span style="color: #6366f1; font-weight: 800; font-size: 9px;">JUSTIFICADA</span>
                             </td>
                         {% elif item.is_absent %}
-                            <td colspan="2" style="text-align: center;">
-                                <span style="color: #dc2626; font-weight: 800; font-size: 9px;">AUSENTE</span>
-                            </td>
+                            {% if item.is_late_absent %}
+                                <td style="color: #10b981; font-weight: 700;">{{ item.hora_ingreso|date:"H:i"|default:"--" }}</td>
+                                <td style="color: #f59e0b; font-weight: 700;">{{ item.hora_salida|date:"H:i"|default:"--" }}</td>
+                            {% else %}
+                                <td colspan="2" style="text-align: center;">
+                                    <span style="color: #dc2626; font-weight: 800; font-size: 9px;">AUSENTE</span>
+                                </td>
+                            {% endif %}
                         {% else %}
                             <td style="color: #10b981; font-weight: 700;">{{ item.hora_ingreso|date:"H:i"|default:"--" }}</td>
                             <td style="color: #f59e0b; font-weight: 700;">{{ item.hora_salida|date:"H:i"|default:"--" }}</td>
@@ -524,6 +532,9 @@
                                 <span class="badge badge-info">JUSTIFICADA</span>
                             {% elif item.is_absent %}
                                 <span class="badge badge-danger">FALTÓ</span>
+                                {% if item.is_late_absent %}
+                                    <span class="badge badge-warning">TARDE</span>
+                                {% endif %}
                             {% elif item.hora_salida or item.usuario.estado == 'EXONERADO' %}
                                 <span class="badge badge-success">ASISTIÓ</span>
                             {% else %}
@@ -546,3 +557,5 @@
         </div>
     </body>
 </html>
+
+

@@ -55,7 +55,11 @@
                             </td>
                             <td class="px-6 py-6 text-center">
                                 {% if item.is_absent %}
-                                    {% if item.es_justificada %}
+                                    {% if item.is_late_absent %}
+                                        <p class="text-xs font-black text-slate-700">{{ item.hora_ingreso|date:"H:i"|default:"--" }}</p>
+                                        <p class="text-[9px] font-bold text-slate-400">Salida: {{ item.hora_salida|date:"H:i"|default:"--" }}</p>
+                                        <p class="text-[9px] font-black text-amber-600">TARDE</p>
+                                    {% elif item.es_justificada %}
                                          <span class="text-[10px] font-black text-indigo-400">JUSTIFICADA</span>
                                          {% if item.justificacion_obs %}
                                              <p class="mt-1 text-[9px] text-indigo-500 max-w-[220px] mx-auto truncate" title="{{ item.justificacion_obs }}">
@@ -75,7 +79,16 @@
                             </td>
                             <td class="px-6 py-6 text-center">
                                 {% if item.is_absent %}
-                                     {% if item.es_justificada %}
+                                     {% if item.is_late_absent %}
+                                        <div class="flex flex-col items-center gap-1">
+                                            <span class="px-4 py-1.5 rounded-xl bg-red-100 text-red-600 text-[9px] font-black uppercase tracking-widest border border-red-200">
+                                                FALTÓ
+                                            </span>
+                                            <span class="px-4 py-1.5 rounded-xl bg-amber-100 text-amber-600 text-[9px] font-black uppercase tracking-widest border border-amber-200">
+                                                TARDE
+                                            </span>
+                                        </div>
+                                     {% elif item.es_justificada %}
                                         <span class="px-4 py-1.5 rounded-xl bg-indigo-100 text-indigo-600 text-[9px] font-black uppercase tracking-widest border border-indigo-200">
                                             JUSTIFICADA
                                         </span>

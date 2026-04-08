@@ -282,6 +282,8 @@ def _build_event_report_context(evento, filters=None):
 
     data = get_filtered_attendance_data(filters)
     unified_list = data.get('unified_report', [])
+    sistema_config = ConfiguracionSistema.objects.first()
+    tardanza_activa = bool(sistema_config and sistema_config.tardanza_activa)
 
     total_padron = Usuario.objects.filter(
         estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_EXONERADO, Usuario.ESTADO_PASIVO]
@@ -300,10 +302,12 @@ def _build_event_report_context(evento, filters=None):
         1 for item in unified_list
         if not getattr(item, 'is_absent', False) and not getattr(item, 'hora_salida', None) and item.usuario.estado != 'EXONERADO'
     )
-    total_tardanzas = sum(
-        1 for item in unified_list
-        if not getattr(item, 'is_absent', False) and getattr(item, 'puntualidad', None) == Asistencia.PUNTUALIDAD_TARDE
-    )
+    total_tardanzas = 0
+    if tardanza_activa:
+        total_tardanzas = sum(
+            1 for item in unified_list
+            if getattr(item, 'puntualidad', None) == Asistencia.PUNTUALIDAD_TARDE
+        )
 
     total_asistentes_efectivos = asistencias_fisicas + justificadas
     porcentaje_asistencia = (total_asistentes_efectivos / total_padron * 100) if total_padron > 0 else 0
@@ -320,7 +324,7 @@ def _build_event_report_context(evento, filters=None):
         'porcentaje_asistencia': porcentaje_asistencia,
         'current_date': timezone.localtime(timezone.now()).strftime('%d/%m/%Y %H:%M'),
         'logo_base64': get_logo_base64(),
-        'sistema_config': ConfiguracionSistema.objects.first(),
+        'sistema_config': sistema_config,
         'filtros': {
             'dni': filters.get('dni') or 'Todos',
             'fecha_inicio': filters.get('fecha_inicio').strftime('%d/%m/%Y') if filters.get('fecha_inicio') else None,
@@ -654,6 +658,9 @@ def descargar_reporte_global_pdf(request):
     """
     from .utils.reports import get_logo_base64
     
+    sistema_config = ConfiguracionSistema.objects.first()
+    tardanza_activa = bool(sistema_config and sistema_config.tardanza_activa)
+
     # Obtener todos los eventos ordenados por fecha ascendente
     eventos = Evento.objects.all().order_by('fecha')
     
@@ -669,14 +676,18 @@ def descargar_reporte_global_pdf(request):
         # Procesar rÃƒÂ©cords unificados para este evento
         records = []
         for a in asistencias:
+            is_late_absent = bool(
+                tardanza_activa and getattr(a, 'puntualidad', None) == Asistencia.PUNTUALIDAD_TARDE
+            )
             records.append({
                 'usuario': a.usuario,
                 'hora_ingreso': a.hora_ingreso,
                 'hora_salida': a.hora_salida,
-                'is_absent': False,
+                'is_absent': a.es_justificada or is_late_absent,
+                'is_late_absent': is_late_absent,
                 'es_justificada': a.es_justificada,
             })
-            if a.confirmada:
+            if a.confirmada and not a.es_justificada and not is_late_absent:
                 total_general_asistencias += 1
                 
         for u in no_asistentes:
@@ -713,7 +724,7 @@ def descargar_reporte_global_pdf(request):
         'report_data': report_data,
         'logo_base64': get_logo_base64(),
         'current_date': timezone.localtime(timezone.now()).strftime('%d/%m/%Y %H:%M'),
-        'sistema_config': ConfiguracionSistema.objects.first(),
+        'sistema_config': sistema_config,
         'total_eventos': len(eventos),
     }
     
@@ -956,6 +967,10 @@ def exportar_reporte_global_excel(request):
     """
     from .utils.reports import generate_global_attendance_excel, get_filtered_attendance_data
     
+    system_config = ConfiguracionSistema.objects.first()
+    tardanza_activa = bool(system_config and system_config.tardanza_activa)
+
+    
     eventos = Evento.objects.all().order_by('fecha')
     report_data = []
     
@@ -966,11 +981,15 @@ def exportar_reporte_global_excel(request):
         
         records = []
         for a in asistencias:
+            is_late_absent = bool(
+                tardanza_activa and getattr(a, 'puntualidad', None) == Asistencia.PUNTUALIDAD_TARDE
+            )
             records.append({
                 'usuario': a.usuario,
                 'hora_ingreso': a.hora_ingreso,
                 'hora_salida': a.hora_salida,
-                'is_absent': False,
+                'is_absent': a.es_justificada or is_late_absent,
+                'is_late_absent': is_late_absent,
                 'es_justificada': a.es_justificada,
             })
                 
@@ -1002,8 +1021,6 @@ def exportar_reporte_global_excel(request):
             }
         })
         
-    system_config = ConfiguracionSistema.objects.first()
-    
     LogAccion.objects.create(
         usuario=request.user,
         accion="Exportar Reporte Global Excel",
@@ -1073,6 +1090,8 @@ def descargar_reporte_pdf(request):
 @permission_required('asistencia.can_manage_users', raise_exception=True)
 def descargar_reporte_usuario_pdf(request, dni):
     usuario = get_object_or_404(Usuario, dni=dni)
+    sistema_config = ConfiguracionSistema.objects.first()
+    tardanza_activa = bool(sistema_config and sistema_config.tardanza_activa)
     
     # 1. Obtener TODOS los eventos histÃƒÂ³ricos ordenados por fecha descendente
     todos_eventos = Evento.objects.all().order_by('-fecha', '-hora_ingreso')
@@ -1095,7 +1114,10 @@ def descargar_reporte_usuario_pdf(request, dni):
             item = asistencia_map[evento.id]
             # Mantener el estado real de justificaciÃƒÂ³n guardado en el registro.
             item.es_justificada = bool(getattr(item, 'es_justificada', False))
-            item.is_absent = item.es_justificada
+            item.is_late_absent = bool(
+                tardanza_activa and getattr(item, 'puntualidad', None) == Asistencia.PUNTUALIDAD_TARDE
+            )
+            item.is_absent = item.es_justificada or item.is_late_absent
             unified_list.append(item)
             
         elif evento.id in justificacion_map:
@@ -1531,9 +1553,16 @@ def perfil_usuario(request):
     try:
         usuario = Usuario.objects.get(user=request.user)
         asistencias = Asistencia.objects.filter(usuario=usuario).order_by('-fecha', '-hora_ingreso')
+        sistema_config = ConfiguracionSistema.objects.first()
+        tardanza_activa = bool(sistema_config and sistema_config.tardanza_activa)
+        for asistencia in asistencias:
+            asistencia.is_late_absent = bool(
+                tardanza_activa and getattr(asistencia, 'puntualidad', None) == Asistencia.PUNTUALIDAD_TARDE
+            )
         context = {
             'usuario': usuario,
             'asistencias': asistencias,
+            'sistema_config': sistema_config,
             'can_scan_qr': request.user.has_perm('asistencia.can_scan_qr')
         }
         return render(request, 'asistencia/perfil_usuario.html', context)

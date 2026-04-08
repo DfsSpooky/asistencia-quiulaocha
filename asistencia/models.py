@@ -264,6 +264,10 @@ class ConfiguracionSistema(models.Model):
         default='QUIULACOCHA',
         help_text="Nombre de la institución (se mostrará en toda la aplicación)"
     )
+    tardanza_activa = models.BooleanField(
+        default=True,
+        help_text="Activa el control de tardanzas para marcar faltas cuando se supera el límite."
+    )
     tolerancia_minutos = models.PositiveIntegerField(
         default=15,
         help_text="Tiempo de tolerancia en minutos para el ingreso antes de considerarse tardanza (si aplica)"

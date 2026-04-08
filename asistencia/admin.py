@@ -104,8 +104,8 @@ class LogAccionAdmin(admin.ModelAdmin):
 
 @admin.register(ConfiguracionSistema)
 class ConfiguracionSistemaAdmin(admin.ModelAdmin):
-    list_display = ('id', 'nombre_institucion', 'tolerancia_minutos', 'logo')
-    fields = ('nombre_institucion', 'tolerancia_minutos', 'logo',)
+    list_display = ('id', 'nombre_institucion', 'tardanza_activa', 'tolerancia_minutos', 'logo')
+    fields = ('nombre_institucion', 'tardanza_activa', 'tolerancia_minutos', 'logo',)
 
     # Limitar a una sola instancia en la lista
     def has_add_permission(self, request):
