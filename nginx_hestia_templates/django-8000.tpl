@@ -21,14 +21,17 @@ server {
 		return 404;
 	}
 
-    # STATIC FILES served by Nginx directly (Faster)
+    # Only immutable static assets live in public_html.
     location /static/ {
-        alias %home%/%user%/web/%domain%/public_html/staticfiles/;
+        alias %home%/%user%/web/%domain%/public_html/static/;
         expires max;
+        add_header Cache-Control "public, max-age=31536000, immutable";
     }
 
+    # User-generated media stays outside public_html.
     location /media/ {
-        alias %home%/%user%/web/%domain%/public_html/media/;
+        alias %home%/%user%/web/%domain%/private/media/;
+        expires 1h;
     }
 
 	location / {

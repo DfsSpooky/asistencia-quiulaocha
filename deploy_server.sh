@@ -4,7 +4,12 @@ set -euo pipefail
 # Configuration
 USER_HESTIA="quiulacocha"
 DOMAIN="quiulacocha.theworkpc.com"
-APP_DIR="/home/$USER_HESTIA/web/$DOMAIN/public_html"
+SITE_ROOT="/home/$USER_HESTIA/web/$DOMAIN"
+APP_DIR="$SITE_ROOT/app"
+PUBLIC_DIR="$SITE_ROOT/public_html"
+PRIVATE_DIR="$SITE_ROOT/private"
+MEDIA_DIR="$PRIVATE_DIR/media"
+ENV_FILE="$PRIVATE_DIR/.env"
 REPO_URL="https://github.com/Start-Games/asistencia-quiulaocha.git"
 BRANCH="main"
 
@@ -32,46 +37,55 @@ if [ "$EUID" -ne 0 ]; then
   exit 1
 fi
 
-# 1. Prepare Directory & Permissions
-if [ ! -d "$APP_DIR" ]; then
-    echo "Creating directory $APP_DIR..."
-    mkdir -p "$APP_DIR"
-fi
-
-chown -R "$USER_HESTIA:$USER_HESTIA" "$APP_DIR"
-cd "$APP_DIR"
+# 1. Prepare Directory Layout
+echo "Preparing secure directory layout..."
+mkdir -p "$APP_DIR" "$PUBLIC_DIR/static" "$MEDIA_DIR"
+chown -R "$USER_HESTIA:$USER_HESTIA" "$SITE_ROOT"
 
 # 2. Pull Changes (as service user)
+cd "$SITE_ROOT"
 if [ -d ".git" ]; then
-    echo "Pulling latest changes..."
-    sudo -u "$USER_HESTIA" git pull origin "$BRANCH"
-else
-    echo "Cloning repository..."
-    sudo -u "$USER_HESTIA" git clone "$REPO_URL" .
+    echo "Unexpected git repository at $SITE_ROOT; this script expects the repo inside $APP_DIR."
+    exit 1
 fi
 
-# 3. Ensure .env
-if [ ! -f ".env" ]; then
+if [ -d "$APP_DIR/.git" ]; then
+    echo "Pulling latest changes into $APP_DIR..."
+    cd "$APP_DIR"
+    sudo -u "$USER_HESTIA" git pull origin "$BRANCH"
+else
+    echo "Cloning repository into $APP_DIR..."
+    rm -rf "$APP_DIR"
+    sudo -u "$USER_HESTIA" git clone --branch "$BRANCH" "$REPO_URL" "$APP_DIR"
+    cd "$APP_DIR"
+fi
+
+# 3. Ensure secure .env outside public_html
+if [ ! -f "$ENV_FILE" ]; then
     echo -e "${RED}WARNING: .env file not found!${NC}"
-    echo "Creating a default .env file..."
-    cp .env.example .env 2>/dev/null || touch .env
+    echo "Creating a default secure .env at $ENV_FILE..."
+    cp .env.example "$ENV_FILE" 2>/dev/null || touch "$ENV_FILE"
 
-    grep -q "POSTGRES_DB" .env || echo "POSTGRES_DB=asistencia_db" >> .env
-    grep -q "POSTGRES_USER" .env || echo "POSTGRES_USER=postgres" >> .env
-    grep -q "POSTGRES_PASSWORD" .env || echo "POSTGRES_PASSWORD=change_me_please" >> .env
-    grep -q "POSTGRES_HOST" .env || echo "POSTGRES_HOST=db" >> .env
-    grep -q "POSTGRES_PORT" .env || echo "POSTGRES_PORT=5432" >> .env
-    grep -q "ALLOWED_HOSTS" .env || echo "ALLOWED_HOSTS=$DOMAIN,localhost,127.0.0.1" >> .env
-    grep -q "CSRF_TRUSTED_ORIGINS" .env || echo "CSRF_TRUSTED_ORIGINS=https://$DOMAIN" >> .env
-    grep -q "SECURE_SSL_REDIRECT" .env || echo "SECURE_SSL_REDIRECT=False" >> .env
-    grep -q "DEBUG" .env || echo "DEBUG=False" >> .env
-    grep -q "SECRET_KEY" .env || echo "SECRET_KEY=$(generate_secret_key)" >> .env
+    grep -q "POSTGRES_DB" "$ENV_FILE" || echo "POSTGRES_DB=asistencia_db" >> "$ENV_FILE"
+    grep -q "POSTGRES_USER" "$ENV_FILE" || echo "POSTGRES_USER=postgres" >> "$ENV_FILE"
+    grep -q "POSTGRES_PASSWORD" "$ENV_FILE" || echo "POSTGRES_PASSWORD=change_me_please" >> "$ENV_FILE"
+    grep -q "POSTGRES_HOST" "$ENV_FILE" || echo "POSTGRES_HOST=db" >> "$ENV_FILE"
+    grep -q "POSTGRES_PORT" "$ENV_FILE" || echo "POSTGRES_PORT=5432" >> "$ENV_FILE"
+    grep -q "ALLOWED_HOSTS" "$ENV_FILE" || echo "ALLOWED_HOSTS=$DOMAIN,localhost,127.0.0.1" >> "$ENV_FILE"
+    grep -q "CSRF_TRUSTED_ORIGINS" "$ENV_FILE" || echo "CSRF_TRUSTED_ORIGINS=https://$DOMAIN" >> "$ENV_FILE"
+    grep -q "SECURE_SSL_REDIRECT" "$ENV_FILE" || echo "SECURE_SSL_REDIRECT=True" >> "$ENV_FILE"
+    grep -q "SESSION_COOKIE_SECURE" "$ENV_FILE" || echo "SESSION_COOKIE_SECURE=True" >> "$ENV_FILE"
+    grep -q "CSRF_COOKIE_SECURE" "$ENV_FILE" || echo "CSRF_COOKIE_SECURE=True" >> "$ENV_FILE"
+    grep -q "DEBUG" "$ENV_FILE" || echo "DEBUG=False" >> "$ENV_FILE"
+    grep -q "SECRET_KEY" "$ENV_FILE" || echo "SECRET_KEY=$(generate_secret_key)" >> "$ENV_FILE"
 
-    chown "$USER_HESTIA:$USER_HESTIA" .env
+    chown "$USER_HESTIA:$USER_HESTIA" "$ENV_FILE"
+    chmod 600 "$ENV_FILE"
 fi
 
 # 4. Build and Run Docker
 echo "Building and starting containers for production..."
+cd "$APP_DIR"
 docker compose -f docker-compose.yml up -d --build
 
 # 5. Sanity Check
@@ -83,7 +97,12 @@ docker compose -f docker-compose.yml ps
 
 # 6. Final Permission Fix
 echo "Fixing ownership for Hestia CP..."
-chown -R "$USER_HESTIA:$USER_HESTIA" "$APP_DIR"
+chown -R "$USER_HESTIA:$USER_HESTIA" "$SITE_ROOT"
+find "$PUBLIC_DIR" -type d -exec chmod 755 {} \;
+find "$PUBLIC_DIR" -type f -exec chmod 644 {} \;
+find "$PRIVATE_DIR" -type d -exec chmod 750 {} \;
+find "$PRIVATE_DIR" -type f -exec chmod 640 {} \;
+chmod 600 "$ENV_FILE"
 
 # 7. Install Nginx Templates (Automatic)
 if [ -d "nginx_hestia_templates" ]; then
@@ -99,4 +118,5 @@ fi
 
 echo -e "${GREEN}Deployment Finished Successfully!${NC}"
 echo "App reachable at http://127.0.0.1:8000 locally."
-echo "Ensure your Hestia Proxy Template is set to 'django-8000' or points to port 8000."
+echo "Hestia public_html now contains only static assets in $PUBLIC_DIR/static."
+echo "Ensure your Hestia Proxy Template is set to 'django-8000' and points to port 8000."

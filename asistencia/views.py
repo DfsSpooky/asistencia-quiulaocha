@@ -6,6 +6,7 @@ from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.views import LoginView, LogoutView
 from django.contrib import messages
 from django.core.exceptions import ValidationError
+from django.core.signing import BadSignature, Signer
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_POST
 from django.utils.decorators import method_decorator
@@ -450,8 +451,9 @@ class RegistrarAsistencia(APIView):
             )
         
         try:
-            # Decodificar DNI y obtener usuario
-            dni = base64.b64decode(encoded_dni).decode()
+            # Decodificamos y verificamos la firma para asegurar que el QR fue emitido por el servidor.
+            signed_dni = base64.b64decode(encoded_dni).decode()
+            dni = Signer().unsign(signed_dni)
             usuario = Usuario.objects.get(dni=dni)
             
             # Obtener evento si fue especificado
@@ -497,6 +499,12 @@ class RegistrarAsistencia(APIView):
             # Errores de validaciÃƒÂ³n de negocio
             return Response({'error': str(e.message)}, status=status.HTTP_400_BAD_REQUEST)
         
+        except BadSignature:
+            return Response(
+                {'error': 'Alerta de Seguridad: C?digo QR falsificado o inv?lido.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
         except Usuario.DoesNotExist:
             return Response(
                 {'error': 'El DNI escaneado no corresponde a ningÃƒÂºn usuario registrado.'}, 

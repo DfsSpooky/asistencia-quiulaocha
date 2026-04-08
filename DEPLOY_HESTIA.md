@@ -1,49 +1,47 @@
-# Guia de Despliegue en Hestia CP
+# Guia de Despliegue Seguro en Hestia CP
 
-Esta guia resume el flujo recomendado para desplegar la aplicacion en `quiulacocha.theworkpc.com` usando Docker y Hestia.
+Esta guia reemplaza el plan anterior. En Hestia, `public_html` debe contener solo archivos estaticos. El codigo de Django, `.env`, media y runtime quedan fuera del docroot.
 
-## Archivos clave
+## Layout recomendado
 
-Debes tener en el servidor:
+```text
+/home/quiulacocha/web/quiulacocha.theworkpc.com/
+  app/                 <- repositorio git y docker-compose
+  private/
+    .env               <- secretos
+    media/             <- uploads, QR, logos, reportes
+  public_html/
+    static/            <- salida de collectstatic
+```
 
-- `deploy_server.sh`
-- `docker-compose.yml`
-- `Dockerfile`
-- `scripts/start-web.sh`
-- `nginx_hestia_templates/`
-- `requirements.txt`
-- el codigo fuente del proyecto
+## Principios de seguridad
+
+1. `public_html` no debe contener codigo fuente, `.git`, `.env`, base de datos ni backups.
+2. Gunicorn escucha solo en `127.0.0.1:8000`.
+3. Nginx de Hestia publica `/static/` desde `public_html/static/` y enruta `/` al backend.
+4. `media/` vive fuera de `public_html`, en `private/media/`.
+5. Django no debe servir `static` ni `media` con `DEBUG=False`.
 
 ## Despliegue
 
 Ejecuta como `root`:
 
 ```bash
-cd /home/quiulacocha/web/quiulacocha.theworkpc.com/public_html
+mkdir -p /home/quiulacocha/web/quiulacocha.theworkpc.com/app
+cd /home/quiulacocha/web/quiulacocha.theworkpc.com/app
 chmod +x deploy_server.sh
 ./deploy_server.sh
 ```
 
 ## Que hace el script
 
-1. Verifica permisos de root.
-2. Actualiza el repositorio.
-3. Asegura la existencia de `.env`.
-4. Levanta los contenedores con `docker-compose.yml`.
-5. Ejecuta `python manage.py check` dentro del contenedor `web`.
-6. Instala las plantillas Nginx de Hestia.
-7. Corrige ownership final.
-
-## Arranque del contenedor web
-
-El servicio `web` usa `scripts/start-web.sh`, que hace esto automaticamente:
-
-1. Espera PostgreSQL si el entorno usa Postgres.
-2. Ejecuta `python manage.py migrate --noinput`.
-3. Ejecuta `python manage.py collectstatic --noinput`.
-4. Inicia Gunicorn.
-
-Con eso, reinicios y despliegues manuales son mucho mas robustos.
+1. Crea `app/`, `private/media/` y `public_html/static/`.
+2. Clona o actualiza el repo en `app/`.
+3. Crea `private/.env` con permisos `600`.
+4. Levanta Docker usando ese `.env` fuera del docroot.
+5. Ejecuta migraciones y `collectstatic`; los estaticos terminan en `public_html/static/`.
+6. Instala la plantilla `django-8000` actualizada para Hestia.
+7. Ajusta permisos para que lo publico y lo privado queden separados.
 
 ## Configuracion en Hestia
 
@@ -51,11 +49,21 @@ En Hestia:
 
 1. Ve a `WEB`.
 2. Edita `quiulacocha.theworkpc.com`.
-3. En Proxy Template selecciona `django-8000`.
-4. Guarda.
+3. Mantén el docroot en `public_html`.
+4. En Proxy Template selecciona `django-8000`.
+5. Guarda y reconstruye la configuracion del dominio si hace falta.
+
+## Validaciones previas al go-live
+
+1. Confirma que `DEBUG=False`.
+2. Confirma que `SECRET_KEY` sea larga y aleatoria.
+3. Confirma que `ALLOWED_HOSTS` y `CSRF_TRUSTED_ORIGINS` contengan solo dominios reales.
+4. Verifica que `public_html/` no tenga `.env`, `.git`, `db.sqlite3`, backups ni codigo Python.
+5. Verifica que `https://dominio/static/...` responda por Nginx y que `https://dominio/` responda por proxy a Gunicorn.
 
 ## Problemas comunes
 
 - `403 / Access Denied`: Hestia no esta usando la plantilla `django-8000`.
 - `DisallowedHost`: el dominio no esta incluido en `ALLOWED_HOSTS`.
-- `PostgreSQL password authentication failed`: el `.env` no coincide con las credenciales con las que fue creado el volumen de Postgres. No recrees el volumen sin backup previo.
+- `502 Bad Gateway`: Gunicorn no esta arriba o Docker no pudo iniciar el servicio `web`.
+- `media` no carga: revisa que `private/media/` exista y que la plantilla Nginx apunte a esa ruta.

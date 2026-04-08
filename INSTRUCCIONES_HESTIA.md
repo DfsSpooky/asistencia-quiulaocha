@@ -1,42 +1,61 @@
+# Despliegue en Hestia CP - Flujo Seguro
 
-# 🚀 Despliegue en Hestia CP - Guía Corregida
+La instruccion anterior de subir todo dentro de `public_html` ya no aplica. Desde ahora:
 
-El problema de permisos ocurre porque estás logueado como un usuario (`debian`) pero los archivos pertenecen a otro (`quiulacocha` o `root`).
-Para arreglar esto definitivamente, **debes usar `sudo` o ser `root`** para ejecutar el script. El script se encargará automáticamente de corregir los permisos para el usuario `quiulacocha`.
+- `public_html` solo para estaticos.
+- `app/` para el codigo fuente.
+- `private/` para `.env` y `media/`.
 
-## 1. Subir Archivos al Servidor
-Sube todo el contenido de tu proyecto **dentro de `public_html`**:
-`/home/quiulacocha/web/quiulacocha.theworkpc.com/public_html`
-
-## 2. Ejecutar el Script como Root
-Conéctate por SSH y conviértete en superusuario (root) o usa sudo.
+## 1. Estructura esperada
 
 ```bash
-# Opción A: Convertirse en root (Recomendado)
+/home/quiulacocha/web/quiulacocha.theworkpc.com/
+├── app/
+├── private/
+│   ├── .env
+│   └── media/
+└── public_html/
+    └── static/
+```
+
+## 2. Ejecutar el script como root
+
+```bash
 sudo su -
-
-# Navegar a la carpeta
-cd /home/quiulacocha/web/quiulacocha.theworkpc.com/public_html
-
-# Dar permisos al script (ahora eres root, así que funcionará)
+mkdir -p /home/quiulacocha/web/quiulacocha.theworkpc.com/app
+cd /home/quiulacocha/web/quiulacocha.theworkpc.com/app
 chmod +x deploy_server.sh
-
-# Ejecutar el despliegue
 ./deploy_server.sh
 ```
 
-El script actualizado ahora hace esto automáticamente:
-1.  Verifica que seas root (para poder usar Docker).
-2.  Ejecuta `git pull` como usuario `quiulacocha` (para no romper permisos de git).
-3.  Levanta los contenedores Docker.
-4.  **IMPORTANTE:** Al final, ejecuta `chown -R quiulacocha:quiulacocha .` para asegurar que Hestia pueda leer todos los archivos.
+## 3. Que cambia respecto al plan viejo
 
-## 3. Configurar Nginx (Hestia CP)
-*(Igual que antes)*
+1. El repo ya no vive dentro de `public_html`.
+2. El `.env` queda en `private/.env`.
+3. Los uploads quedan en `private/media/`.
+4. Solo `collectstatic` escribe en `public_html/static/`.
+5. Hestia publica estaticos y proxya el backend en `127.0.0.1:8000`.
 
-Copia las plantillas como **root**:
+## 4. Configurar Nginx en Hestia
+
+Como `root`:
+
 ```bash
-cp nginx_hestia_templates/django-8000.tpl /usr/local/hestia/data/templates/web/nginx/proxy/
-cp nginx_hestia_templates/django-8000.stpl /usr/local/hestia/data/templates/web/nginx/proxy/
+cp /home/quiulacocha/web/quiulacocha.theworkpc.com/app/nginx_hestia_templates/django-8000.tpl /usr/local/hestia/data/templates/web/nginx/proxy/
+cp /home/quiulacocha/web/quiulacocha.theworkpc.com/app/nginx_hestia_templates/django-8000.stpl /usr/local/hestia/data/templates/web/nginx/proxy/
 ```
-En Hestia Panel -> Web -> quiulacocha.theworkpc.com -> Proxy Template -> Selecciona **django-8000**.
+
+Luego en Hestia Panel:
+
+1. `Web`
+2. `quiulacocha.theworkpc.com`
+3. `Proxy Template`
+4. Seleccionar `django-8000`
+
+## 5. Checklist rapido
+
+- `public_html` no contiene codigo ni secretos.
+- `private/.env` tiene permisos `600`.
+- `DEBUG=False`.
+- Gunicorn escucha solo en `127.0.0.1:8000`.
+- `/static/` sale por Nginx.

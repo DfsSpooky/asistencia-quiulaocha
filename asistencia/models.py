@@ -1,5 +1,6 @@
 from django.db import models
 from django.core.files.base import ContentFile
+from django.core.signing import Signer
 from django.core.exceptions import ValidationError
 from django.core.validators import FileExtensionValidator
 from django.templatetags.static import static
@@ -122,7 +123,9 @@ class Usuario(models.Model):
             self.foto_perfil = None
 
         qr = qrcode.QRCode(version=1, box_size=5, border=2)
-        encoded_dni = base64.b64encode(self.dni.encode()).decode()
+        # Firmamos el DNI con la SECRET_KEY para que el QR no pueda ser falsificado fácilmente.
+        signed_dni = Signer().sign(self.dni)
+        encoded_dni = base64.b64encode(signed_dni.encode()).decode()
         qr.add_data(encoded_dni)
         qr.make(fit=True)
         img = qr.make_image(fill='black', back_color='white')
