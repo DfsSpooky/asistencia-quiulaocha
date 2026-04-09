@@ -28,14 +28,14 @@ load_environment()
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = get_bool("DEBUG", True)
+DEBUG = get_bool("DEBUG", False)
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.environ.get("SECRET_KEY")
 if not SECRET_KEY and not DEBUG:
-    raise Exception("SECRET_KEY must be set in production environment.")
+    raise Exception("SECRET_KEY must be set explicitly in the environment.")
 elif not SECRET_KEY:
-    SECRET_KEY = "django-insecure-fallback-only-for-dev"
+    SECRET_KEY = "django-insecure-dev-only-change-me"
 
 default_allowed_hosts = "*" if DEBUG else "localhost,127.0.0.1"
 ALLOWED_HOSTS = get_csv("ALLOWED_HOSTS", default_allowed_hosts)
@@ -188,6 +188,7 @@ SECURE_SSL_REDIRECT = get_bool("SECURE_SSL_REDIRECT", not DEBUG)
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"
 SESSION_EXPIRE_AT_BROWSER_CLOSE = False
+CSRF_COOKIE_HTTPONLY = True
 
 # Seguridad adicional para produccion
 if not DEBUG:
@@ -225,6 +226,9 @@ REST_FRAMEWORK = {
         "user": "1000/hour",
     },
 }
+
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
 
 LOGIN_URL = "/login/"
 LOGIN_REDIRECT_URL = "/perfil/"

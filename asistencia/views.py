@@ -47,6 +47,10 @@ import shutil
 import tarfile
 from django.db.migrations.executor import MigrationExecutor
 from .audit import log_critical_change
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 def landing_page(request):
     """
@@ -529,10 +533,10 @@ class RegistrarAsistencia(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        except Exception as e:
-            # Manejar cualquier error inesperado
+        except Exception:
+            logger.exception("Error inesperado al registrar asistencia")
             return Response(
-                {'error': f'Error inesperado: {str(e)}'}, 
+                {'error': 'Error interno del servidor.'}, 
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
@@ -1613,6 +1617,7 @@ def actualizar_foto_rapida(request, dni):
 
     if request.FILES.get('foto'):
         usuario.foto_perfil = request.FILES['foto']
+        usuario.full_clean()
         usuario.save()  # El modelo ya procesa y normaliza la imagen
 
         LogAccion.objects.create(

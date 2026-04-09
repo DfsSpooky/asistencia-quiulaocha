@@ -13,6 +13,48 @@ from django.utils import timezone
 from PIL import Image, ImageOps
 from datetime import date, datetime
 
+
+def validate_file_size(value):
+    max_size = 5 * 1024 * 1024
+    if value and getattr(value, 'size', 0) > max_size:
+        raise ValidationError(f'El archivo no puede superar los {max_size // (1024 * 1024)} MB.')
+
+
+def validate_image_content(value):
+    if not value:
+        return
+    try:
+        value.seek(0)
+        with Image.open(value) as img:
+            img.verify()
+        value.seek(0)
+    except Exception as exc:
+        raise ValidationError('La imagen subida es inválida o está dañada.') from exc
+
+
+def validate_supporting_document_content(value):
+    if not value:
+        return
+
+    name = (getattr(value, 'name', '') or '').lower()
+    try:
+        value.seek(0)
+        header = value.read(16)
+        value.seek(0)
+    except Exception as exc:
+        raise ValidationError('No se pudo validar el archivo adjunto.') from exc
+
+    if name.endswith('.pdf'):
+        if not header.startswith(b'%PDF'):
+            raise ValidationError('El PDF adjunto no es válido.')
+        return
+
+    if name.endswith(('.jpg', '.jpeg', '.png')):
+        validate_image_content(value)
+        return
+
+    raise ValidationError('Tipo de archivo no permitido.')
+
 class Ubicacion(models.Model):
     nombre = models.CharField(max_length=100)
     descripcion = models.TextField(blank=True)
@@ -73,7 +115,12 @@ class Usuario(models.Model):
     fecha_nacimiento = models.DateField(null=True, blank=True)
     estado = models.CharField(max_length=10, choices=ESTADOS, default=ESTADO_ACTIVO)
     qr_code = models.ImageField(upload_to='qr_codes/', blank=True)
-    foto_perfil = models.ImageField(upload_to='perfil_fotos/', blank=True, null=True)
+    foto_perfil = models.ImageField(
+        upload_to='perfil_fotos/',
+        blank=True,
+        null=True,
+        validators=[validate_file_size, validate_image_content],
+    )
 
     @property
     def foto_perfil_url(self):
@@ -209,7 +256,11 @@ class Justificacion(models.Model):
         blank=True, 
         null=True, 
         verbose_name="Evidencia (Foto/Documento)",
-        validators=[FileExtensionValidator(allowed_extensions=['pdf', 'jpg', 'jpeg', 'png'])]
+        validators=[
+            FileExtensionValidator(allowed_extensions=['pdf', 'jpg', 'jpeg', 'png']),
+            validate_file_size,
+            validate_supporting_document_content,
+        ]
     )
     estado = models.CharField(max_length=10, choices=ESTADOS, default=ESTADO_PENDIENTE)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
@@ -270,7 +321,13 @@ class LogAccion(models.Model):
         ]
 
 class ConfiguracionSistema(models.Model):
-    logo = models.ImageField(upload_to='logos/', blank=True, null=True, help_text="Logo del sistema (se mostrará en la barra de navegación, login y reportes)")
+    logo = models.ImageField(
+        upload_to='logos/',
+        blank=True,
+        null=True,
+        help_text="Logo del sistema (se mostrará en la barra de navegación, login y reportes)",
+        validators=[validate_file_size, validate_image_content],
+    )
     nombre_institucion = models.CharField(
         max_length=100,
         default='QUIULACOCHA',

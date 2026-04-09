@@ -1,4 +1,5 @@
 from django import forms
+from django.contrib.auth.password_validation import validate_password
 from .models import Evento, Ubicacion, Usuario, Justificacion
 
 class JustificacionForm(forms.ModelForm):
@@ -118,6 +119,8 @@ class UsuarioRegistroForm(forms.ModelForm):
 
         if password and password_confirm and password != password_confirm:
             raise forms.ValidationError("Las contraseñas no coinciden.")
+        if password:
+            validate_password(password)
         return cleaned_data
 
     def save(self, commit=True):
