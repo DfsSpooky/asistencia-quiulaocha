@@ -194,6 +194,17 @@
             });
         }
 
+        document.body.addEventListener('photoUploadError', function(event) {
+            const errorMsg = event.detail?.message || 'No se pudo subir la fotografía.';
+            Swal.fire({
+                title: 'No se pudo subir',
+                text: errorMsg,
+                icon: 'error',
+                confirmButtonText: 'Entendido',
+                confirmButtonColor: '#eab308'
+            });
+        });
+
         // Select2 initialization handled globally in base.html
     </script>
 {% endblock %}

@@ -33,15 +33,21 @@
                                                 </div>
                                             {% endif %}
 
-                                            <label class="absolute inset-0 bg-slate-900/60 rounded-2xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer ring-2 ring-primary-500 ring-offset-1 ring-offset-white z-10" title="Actualizar foto">
-                                                <i class="bi bi-camera-fill text-white text-lg drop-shadow-md"></i>
-                                                <input type="file" name="foto" accept="image/*" class="hidden"
-                                                       hx-post="{% url 'actualizar_foto_rapida' usuario.dni %}"
-                                                       hx-trigger="change"
-                                                       hx-encoding="multipart/form-data"
-                                                       hx-target="#avatar-container-{{ usuario.dni }}"
-                                                       hx-swap="outerHTML">
-                                            </label>
+                                            <form hx-post="{% url 'actualizar_foto_rapida' usuario.dni %}"
+                                                  hx-encoding="multipart/form-data"
+                                                  hx-target="#avatar-container-{{ usuario.dni }}"
+                                                  hx-swap="outerHTML"
+                                                  class="absolute inset-0 z-10">
+                                                <label class="absolute inset-0 bg-slate-900/60 rounded-2xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer ring-2 ring-primary-500 ring-offset-1 ring-offset-white"
+                                                       title="Actualizar foto">
+                                                    <i class="bi bi-camera-fill text-white text-lg drop-shadow-md"></i>
+                                                    <input type="file"
+                                                           name="foto"
+                                                           accept="image/*"
+                                                           class="hidden"
+                                                           onchange="if (this.files && this.files.length) this.form.requestSubmit();">
+                                                </label>
+                                            </form>
                                         </div>
                                         <div>
                                             <p class="text-base font-bold text-slate-900 leading-tight">{{ usuario.nombre }} {{ usuario.apellido }}</p>

@@ -1,8 +1,12 @@
 import os
 import shutil
+import sys
 import tempfile
+import types
+import zipfile
 from datetime import date, datetime, time, timedelta
 from io import BytesIO
+from unittest import mock
 
 from django.conf import settings
 from django.contrib.auth.models import Permission, User
@@ -387,3 +391,120 @@ class AttendanceEnhancementsTests(TestCase):
         self.assertIn((usuario_falta.dni, 'Evento Uno', True), resumen)
         self.assertIn((usuario_asiste.dni, 'Evento Dos', True), resumen)
         self.assertIn((usuario_falta.dni, 'Evento Dos', True), resumen)
+
+
+class CarnetsZipDownloadTests(TestCase):
+    def setUp(self):
+        self.temp_media_root = tempfile.mkdtemp(prefix='test-media-')
+        self._original_media_root = settings.MEDIA_ROOT
+        settings.MEDIA_ROOT = self.temp_media_root
+
+        self.user = User.objects.create_user(username='manager_zip', password='password')
+        self.user.user_permissions.add(Permission.objects.get(codename='can_manage_users'))
+        self.client = Client()
+        self.client.force_login(self.user)
+
+        ConfiguracionSistema.objects.create(nombre_institucion='QUIULACOCHA', tolerancia_minutos=15)
+
+    def tearDown(self):
+        settings.MEDIA_ROOT = self._original_media_root
+        shutil.rmtree(self.temp_media_root, ignore_errors=True)
+
+    def _create_photo_file(self, color=(24, 120, 196)):
+        source = BytesIO()
+        Image.new('RGB', (500, 500), color=color).save(source, format='PNG')
+        return SimpleUploadedFile('avatar.png', source.getvalue(), content_type='image/png')
+
+    def _build_fake_pdf_modules(self):
+        class FakeHTML:
+            def __init__(self, string):
+                self.string = string
+
+            def write_pdf(self):
+                if 'incidencias' in self.string.lower():
+                    return b'INCIDENTES_PDF'
+                return b'CARNETS_PDF'
+
+        class FakePdfReader:
+            def __init__(self, buffer):
+                self.pages = [buffer.getvalue()]
+
+        class FakePdfWriter:
+            def __init__(self):
+                self.pages = []
+
+            def add_page(self, page):
+                self.pages.append(page)
+
+            def write(self, buffer):
+                buffer.write(b''.join(self.pages) or b'PDF_VACIO')
+
+        return (
+            types.SimpleNamespace(HTML=FakeHTML),
+            types.SimpleNamespace(PdfReader=FakePdfReader, PdfWriter=FakePdfWriter),
+        )
+
+    def test_descarga_zip_mixta_incluye_carnets_y_reporte_de_incidencias(self):
+        Usuario.objects.create(
+            nombre='Ana',
+            apellido='ConFoto',
+            dni='12345690',
+            estado=Usuario.ESTADO_ACTIVO,
+            foto_perfil=self._create_photo_file(),
+        )
+        Usuario.objects.create(
+            nombre='Luis',
+            apellido='SinFoto',
+            dni='12345691',
+            estado=Usuario.ESTADO_PASIVO,
+        )
+
+        fake_weasyprint, fake_pypdf = self._build_fake_pdf_modules()
+        with mock.patch.dict(sys.modules, {'weasyprint': fake_weasyprint, 'pypdf': fake_pypdf}):
+            response = self.client.get(reverse('descargar_todos_carnets_pdf'))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/zip')
+        self.assertIn('attachment;', response['Content-Disposition'])
+        self.assertIn('carnets_y_pendientes_', response['Content-Disposition'])
+
+        with zipfile.ZipFile(BytesIO(response.content)) as zip_file:
+            self.assertEqual(
+                sorted(zip_file.namelist()),
+                ['carnets_generados.pdf', 'usuarios_sin_foto_notificar.pdf'],
+            )
+            self.assertEqual(zip_file.read('carnets_generados.pdf'), b'CARNETS_PDF')
+            self.assertEqual(zip_file.read('usuarios_sin_foto_notificar.pdf'), b'INCIDENTES_PDF')
+
+    def test_descarga_zip_solo_con_foto_genera_unico_pdf(self):
+        Usuario.objects.create(
+            nombre='Rosa',
+            apellido='Valida',
+            dni='12345692',
+            estado=Usuario.ESTADO_ACTIVO,
+            foto_perfil=self._create_photo_file(color=(0, 180, 90)),
+        )
+
+        fake_weasyprint, fake_pypdf = self._build_fake_pdf_modules()
+        with mock.patch.dict(sys.modules, {'weasyprint': fake_weasyprint, 'pypdf': fake_pypdf}):
+            response = self.client.get(reverse('descargar_todos_carnets_pdf'))
+
+        with zipfile.ZipFile(BytesIO(response.content)) as zip_file:
+            self.assertEqual(zip_file.namelist(), ['carnets_generados.pdf'])
+
+    def test_descarga_zip_reporta_archivo_foto_faltante_como_incidencia(self):
+        usuario = Usuario.objects.create(
+            nombre='Mario',
+            apellido='ArchivoPerdido',
+            dni='12345693',
+            estado=Usuario.ESTADO_ACTIVO,
+            foto_perfil=self._create_photo_file(color=(180, 60, 60)),
+        )
+        os.remove(usuario.foto_perfil.path)
+
+        fake_weasyprint, fake_pypdf = self._build_fake_pdf_modules()
+        with mock.patch.dict(sys.modules, {'weasyprint': fake_weasyprint, 'pypdf': fake_pypdf}):
+            response = self.client.get(reverse('descargar_todos_carnets_pdf'))
+
+        with zipfile.ZipFile(BytesIO(response.content)) as zip_file:
+            self.assertEqual(zip_file.namelist(), ['usuarios_sin_foto_notificar.pdf'])

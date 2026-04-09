@@ -37,20 +37,80 @@ from io import TextIOWrapper
 from django.conf import settings
 from django.template.loader import render_to_string
 from django.urls import reverse
+from urllib.parse import quote
 from .utils.reports import (
     generate_attendance_csv, generate_attendance_excel, 
     generate_pdf_report, get_logo_base64, get_filtered_attendance_data
 )
+import io
+import json
 import os
 import subprocess
 import shutil
 import tarfile
+import zipfile
 from django.db.migrations.executor import MigrationExecutor
 from .audit import log_critical_change
 import logging
 
 
 logger = logging.getLogger(__name__)
+
+
+def _iter_queryset_in_chunks(queryset, chunk_size):
+    total = queryset.count()
+    for start in range(0, total, chunk_size):
+        yield list(queryset[start:start + chunk_size])
+
+
+def _read_image_field_base64(image_field, field_label):
+    if not image_field or not getattr(image_field, 'name', ''):
+        return None, f'Falta {field_label}.'
+
+    try:
+        storage = image_field.storage
+        if not storage.exists(image_field.name):
+            return None, f'Archivo de {field_label} no encontrado.'
+
+        with storage.open(image_field.name, 'rb') as image_file:
+            return base64.b64encode(image_file.read()).decode('utf-8'), None
+    except Exception:
+        logger.exception(
+            "No se pudo leer %s para el archivo %s",
+            field_label,
+            getattr(image_field, 'name', ''),
+        )
+        return None, f'Archivo de {field_label} inválido o inaccesible.'
+
+
+def _crear_incidencia_carnet(usuario, motivo):
+    return {
+        'dni': usuario.dni,
+        'apellido': usuario.apellido,
+        'nombre': usuario.nombre,
+        'estado_actual': usuario.get_estado_display(),
+        'motivo': motivo,
+    }
+
+
+def _build_carnet_payload(usuario):
+    foto_base64, foto_error = _read_image_field_base64(usuario.foto_perfil, 'fotografía')
+    if foto_error:
+        return None, _crear_incidencia_carnet(usuario, foto_error)
+
+    qr_base64, qr_error = _read_image_field_base64(usuario.qr_code, 'código QR')
+    if qr_error:
+        return None, _crear_incidencia_carnet(usuario, qr_error)
+
+    return {
+        'nombre': usuario.nombre,
+        'apellido': usuario.apellido,
+        'dni': usuario.dni,
+        'estado': usuario.get_estado_display(),
+        'id': usuario.id,
+        'foto_base64': foto_base64,
+        'qr_base64': qr_base64,
+    }, None
 
 def landing_page(request):
     """
@@ -1614,17 +1674,32 @@ def perfil_usuario(request):
 @require_POST
 def actualizar_foto_rapida(request, dni):
     usuario = get_object_or_404(Usuario, dni=dni)
+    error_message = None
 
     if request.FILES.get('foto'):
-        usuario.foto_perfil = request.FILES['foto']
-        usuario.full_clean()
-        usuario.save()  # El modelo ya procesa y normaliza la imagen
+        try:
+            usuario.foto_perfil = request.FILES['foto']
+            usuario.full_clean()
+            usuario.save()  # El modelo ya procesa y normaliza la imagen
 
-        LogAccion.objects.create(
-            usuario=request.user,
-            accion="Actualización de foto rápida",
-            descripcion=f"{request.user.username} actualizó la foto de {usuario.nombre} {usuario.apellido} desde la lista."
-        )
+            LogAccion.objects.create(
+                usuario=request.user,
+                accion="Actualización de foto rápida",
+                descripcion=f"{request.user.username} actualizó la foto de {usuario.nombre} {usuario.apellido} desde la lista."
+            )
+        except ValidationError as exc:
+            mensajes = []
+            if hasattr(exc, 'message_dict'):
+                for field_errors in exc.message_dict.values():
+                    mensajes.extend(field_errors)
+            elif hasattr(exc, 'messages'):
+                mensajes.extend(exc.messages)
+            error_message = " ".join(mensajes) or "No se pudo validar la imagen."
+        except Exception:
+            logger.exception("Error al actualizar foto rápida del usuario %s", usuario.dni)
+            error_message = "No se pudo guardar la fotografía en este momento."
+    else:
+        error_message = "No se recibió ninguna fotografía."
 
     avatar_html = (
         f'<img src="{escape(usuario.foto_perfil_url)}" alt="Foto" '
@@ -1641,33 +1716,41 @@ def actualizar_foto_rapida(request, dni):
     html = f"""
     <div class="relative group h-12 w-12 shrink-0" id="avatar-container-{usuario.dni}">
         {avatar_html}
-        <label class="absolute inset-0 bg-slate-900/60 rounded-2xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer ring-2 ring-primary-500 ring-offset-1 ring-offset-white z-10" title="Actualizar foto">
-            <i class="bi bi-camera-fill text-white text-lg drop-shadow-md"></i>
-            <input type="file" name="foto" accept="image/*" class="hidden"
-                   hx-post="{reverse('actualizar_foto_rapida', args=[usuario.dni])}"
-                   hx-trigger="change"
-                   hx-encoding="multipart/form-data"
-                   hx-target="#avatar-container-{usuario.dni}"
-                   hx-swap="outerHTML">
-        </label>
+        <form hx-post="{reverse('actualizar_foto_rapida', args=[usuario.dni])}"
+              hx-encoding="multipart/form-data"
+              hx-target="#avatar-container-{usuario.dni}"
+              hx-swap="outerHTML"
+              class="absolute inset-0 z-10">
+            <label class="absolute inset-0 bg-slate-900/60 rounded-2xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer ring-2 ring-primary-500 ring-offset-1 ring-offset-white" title="Actualizar foto">
+                <i class="bi bi-camera-fill text-white text-lg drop-shadow-md"></i>
+                <input type="file" name="foto" accept="image/*" class="hidden"
+                       onchange="if (this.files && this.files.length) this.form.requestSubmit();">
+            </label>
+        </form>
     </div>
     """
-    return HttpResponse(html)
+    response = HttpResponse(html)
+    if error_message:
+        response["HX-Trigger"] = json.dumps({
+            "photoUploadError": {"message": error_message}
+        })
+    return response
 
 
 @login_required
 @permission_required('asistencia.can_manage_users', raise_exception=True)
 def descargar_todos_carnets_pdf(request):
     """
-    Genera un PDF con todos los carnets usando el template HTML original.
-    Para evitar Out Of Memory (OOM), procesa los usuarios en lotes pequeÃƒÂ±os
-    y combina los PDFs parciales con pypdf.
+    Genera un archivo ZIP con:
+    - Un PDF de carnets para usuarios con foto.
+    - Un PDF de notificaciÃƒÂ³n para usuarios sin foto.
+
+    Para evitar Out Of Memory (OOM), los carnets se procesan en lotes pequeÃƒÂ±os
+    y los PDFs parciales se combinan con pypdf.
     """
-    import io
     import gc
-    from .utils.reports import get_image_base64, get_logo_base64
-    from django.template.loader import render_to_string
-    from django.http import HttpResponse
+    import time
+    from .utils.reports import get_logo_base64
 
     try:
         from weasyprint import HTML
@@ -1679,82 +1762,157 @@ def descargar_todos_carnets_pdf(request):
     except ImportError:
         return HttpResponse("pypdf no estÃƒÂ¡ instalado. AÃƒÂ±ade 'pypdf' a requirements.txt", status=500)
 
-    # Obtener todos los usuarios ordenados
-    usuarios = list(Usuario.objects.all().order_by('apellido', 'nombre'))
+    started_at = timezone.localtime()
+    started_perf = time.perf_counter()
+    current_date = started_at.strftime('%d/%m/%Y %H:%M')
+    timestamp = started_at.strftime('%Y%m%d_%H%M%S')
+    zip_filename = f'carnets_y_pendientes_{timestamp}.zip'
+
+    filtro_sin_foto = Q(foto_perfil__isnull=True) | Q(foto_perfil='')
+    base_queryset = Usuario.objects.order_by('apellido', 'nombre').only(
+        'id', 'nombre', 'apellido', 'dni', 'estado', 'foto_perfil', 'qr_code'
+    )
+    usuarios_con_foto_qs = base_queryset.exclude(filtro_sin_foto)
+    usuarios_sin_foto_qs = base_queryset.filter(filtro_sin_foto)
+
+    total_con_foto = usuarios_con_foto_qs.count()
+    total_sin_foto = usuarios_sin_foto_qs.count()
+    total_usuarios = total_con_foto + total_sin_foto
+    incidencias = [
+        _crear_incidencia_carnet(usuario, 'Falta fotografía.')
+        for usuario in usuarios_sin_foto_qs
+    ]
 
     LogAccion.objects.create(
         usuario=request.user,
-        accion="Descargar todos los carnets PDF",
-        descripcion=f"{request.user.username} iniciÃƒÂ³ la descarga de {len(usuarios)} carnets en PDF."
+        accion="Descargar carnets ZIP",
+        descripcion=(
+            f"{request.user.username} iniciÃƒÂ³ la descarga de {total_usuarios} usuarios "
+            f"en ZIP: {total_con_foto} con foto y {total_sin_foto} sin foto."
+        )
     )
 
     logo = get_logo_base64()
     sys_config = ConfiguracionSistema.objects.first()
+    zip_buffer = io.BytesIO()
+    zip_members = []
+    total_carnets_generados = 0
 
-    # Procesar en lotes pequeÃƒÂ±os para evitar OOM
-    # Cada lote se renderiza con WeasyPrint y se libera de memoria inmediatamente
-    CHUNK_SIZE = 10
-    writer = PdfWriter()
+    with zipfile.ZipFile(zip_buffer, mode='w', compression=zipfile.ZIP_DEFLATED) as zip_file:
+        if total_con_foto:
+            # Procesar en lotes pequeÃƒÂ±os para evitar OOM.
+            # Cada lote se renderiza con WeasyPrint y se libera de memoria inmediatamente.
+            CHUNK_SIZE = 10
+            writer = PdfWriter()
 
-    for i in range(0, len(usuarios), CHUNK_SIZE):
-        chunk_users = usuarios[i:i + CHUNK_SIZE]
-        usuarios_data = []
-        for u in chunk_users:
-            usuarios_data.append({
-                'nombre': u.nombre,
-                'apellido': u.apellido,
-                'dni': u.dni,
-                'estado': u.get_estado_display(),
-                'id': u.id,
-                'foto_base64': get_image_base64(u.foto_perfil),
-                'qr_base64': get_image_base64(u.qr_code)
-            })
+            for batch_number, chunk_users in enumerate(
+                _iter_queryset_in_chunks(usuarios_con_foto_qs, CHUNK_SIZE),
+                start=1,
+            ):
+                usuarios_data = []
+                usuarios_validos_chunk = []
+                for u in chunk_users:
+                    carnet_payload, incidencia = _build_carnet_payload(u)
+                    if incidencia:
+                        incidencias.append(incidencia)
+                        continue
+                    usuarios_data.append(carnet_payload)
+                    usuarios_validos_chunk.append(u)
 
-        context = {
-            'usuarios': usuarios_data,
-            'logo_base64': logo,
-            'current_date': datetime.now().strftime('%d/%m/%Y %H:%M'),
-            'total_usuarios': len(usuarios_data),
-            'sistema_config': sys_config
-        }
+                if not usuarios_data:
+                    gc.collect()
+                    continue
 
-        # Renderizar el HTML con el template original (diseÃƒÂ±o bonito)
-        html_string = render_to_string('asistencia/reporte_todos_carnets.html', context)
+                context = {
+                    'usuarios': usuarios_data,
+                    'logo_base64': logo,
+                    'current_date': current_date,
+                    'total_usuarios': len(usuarios_data),
+                    'sistema_config': sys_config
+                }
 
-        # Generar PDF del lote con WeasyPrint
-        pdf_bytes = HTML(string=html_string).write_pdf()
+                try:
+                    html_string = render_to_string('asistencia/reporte_todos_carnets.html', context)
+                    pdf_bytes = HTML(string=html_string).write_pdf()
 
-        # Agregar pÃƒÂ¡ginas al escritor final usando pypdf
-        reader = PdfReader(io.BytesIO(pdf_bytes))
-        for page in reader.pages:
-            writer.add_page(page)
+                    reader = PdfReader(io.BytesIO(pdf_bytes))
+                    for page in reader.pages:
+                        writer.add_page(page)
+                    total_carnets_generados += len(usuarios_data)
+                except Exception as exc:
+                    logger.exception("Error al generar el lote %s de carnets", batch_number)
+                    for u in usuarios_validos_chunk:
+                        incidencias.append(
+                            _crear_incidencia_carnet(
+                                u,
+                                f'Error al generar carnet: {exc.__class__.__name__}.'
+                            )
+                        )
+                    html_string = None
+                    pdf_bytes = None
+                    reader = None
 
-        # Liberar memoria inmediatamente
-        del pdf_bytes, reader, html_string, usuarios_data, context
-        gc.collect()
+                del pdf_bytes, reader, html_string, usuarios_data, usuarios_validos_chunk, context
+                gc.collect()
 
-        # Log de progreso
-        processed = min(i + CHUNK_SIZE, len(usuarios))
-        print(f"Carnets progreso: {processed}/{len(usuarios)} procesados...")
+                processed = min(batch_number * CHUNK_SIZE, total_con_foto)
+                logger.info(
+                    "Carnets progreso: %s/%s candidatos con foto procesados",
+                    processed,
+                    total_con_foto,
+                )
 
-    # Escribir el PDF final combinado
-    output_buffer = io.BytesIO()
-    writer.write(output_buffer)
-    final_pdf = output_buffer.getvalue()
-    output_buffer.close()
+            if total_carnets_generados:
+                output_buffer = io.BytesIO()
+                writer.write(output_buffer)
+                final_pdf = output_buffer.getvalue()
+                output_buffer.close()
+
+                zip_file.writestr('carnets_generados.pdf', final_pdf)
+                zip_members.append('carnets_generados.pdf')
+
+                del final_pdf
+
+            del writer
+            gc.collect()
+
+        if incidencias:
+            context_sin_foto = {
+                'usuarios': incidencias,
+                'logo_base64': logo,
+                'current_date': current_date,
+                'sistema_config': sys_config,
+            }
+            html_sin_foto = render_to_string(
+                'asistencia/reporte_sin_foto.html',
+                context_sin_foto
+            )
+            pdf_sin_foto = HTML(string=html_sin_foto).write_pdf()
+            zip_file.writestr('usuarios_sin_foto_notificar.pdf', pdf_sin_foto)
+            zip_members.append('usuarios_sin_foto_notificar.pdf')
+
+            del html_sin_foto, pdf_sin_foto, context_sin_foto
+            gc.collect()
+
+    zip_bytes = zip_buffer.getvalue()
+    zip_buffer.close()
+    duration_seconds = time.perf_counter() - started_perf
 
     LogAccion.objects.create(
         usuario=request.user,
-        accion="Descarga todos los carnets exitosa",
-        descripcion=f"{request.user.username} finalizÃƒÂ³ la descarga de {len(usuarios)} carnets en PDF."
+        accion="Descarga carnets ZIP exitosa",
+        descripcion=(
+            f"{request.user.username} finalizÃƒÂ³ la descarga ZIP con "
+            f"{total_carnets_generados} carnets generados, "
+            f"{len(incidencias)} incidencias, archivos {', '.join(zip_members) or 'ninguno'} "
+            f"en {duration_seconds:.2f}s."
+        )
     )
 
-    response = HttpResponse(final_pdf, content_type='application/pdf')
-    response['Content-Disposition'] = 'inline; filename="todos_los_carnets.pdf"'
-    response['Content-Length'] = len(final_pdf)
+    response = HttpResponse(zip_bytes, content_type='application/zip')
+    response['Content-Disposition'] = (
+        f'attachment; filename="{zip_filename}"; '
+        f"filename*=UTF-8''{quote(zip_filename)}"
+    )
+    response['Content-Length'] = len(zip_bytes)
     return response
-
-
-
-
-

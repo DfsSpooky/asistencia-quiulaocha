@@ -173,6 +173,7 @@ STATIC_ROOT = resolve_path(get_first("STATIC_ROOT", default="staticfiles"), base
 
 MEDIA_URL = os.environ.get("MEDIA_URL", "/media/")
 MEDIA_ROOT = resolve_path(get_first("MEDIA_ROOT", default="media"), base_dir=BASE_DIR)
+SERVE_MEDIA_FILES = get_bool("SERVE_MEDIA_FILES", True)
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

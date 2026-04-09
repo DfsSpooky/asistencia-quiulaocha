@@ -2,21 +2,7 @@ services:
   web:
     # Para desarrollo local usamos runserver + bind mount para hot-reload.
     command: python manage.py runserver 0.0.0.0:8000
-    environment:
-      - DEBUG=True
-      - POSTGRES_DB=
-      - POSTGRES_USER=
-      - POSTGRES_PASSWORD=
-      - POSTGRES_HOST=
-      - POSTGRES_PORT=
-      - DB_NAME=
-      - DB_USER=
-      - DB_PASSWORD=
-      - DB_HOST=
-      - DB_PORT=
-      - SQLITE_NAME=/app/db.sqlite3
     volumes:
       - .:/app
-      - ./db.sqlite3:/app/db.sqlite3
     ports:
       - "8001:8000"
