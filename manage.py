@@ -3,9 +3,12 @@
 import os
 import sys
 
+from qr_asistencia.env import load_environment
+
 
 def main():
     """Run administrative tasks."""
+    load_environment()
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'qr_asistencia.settings')
     try:
         from django.core.management import execute_from_command_line

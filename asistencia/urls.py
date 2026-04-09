@@ -6,7 +6,10 @@ from .views import (
     registrar_usuario, confirmar_asistencia, exportar_asistencias_csv,
     exportar_asistencias_excel, keep_alive, descargar_reporte_usuario_pdf, 
     solicitar_justificacion, admin_solicitar_justificacion,
-    ListEventosActivos, ListUbicaciones, ListDentroEvento, buscar_usuario_dni
+    ListEventosActivos, ListUbicaciones, ListDentroEvento, buscar_usuario_dni, SystemConfigView,
+    descargar_todos_carnets_pdf, descargar_reporte_global_pdf, descargar_reporte_filtrado_pdf,
+    exportar_reporte_global_excel, descargar_backup, restaurar_backup, cerrar_evento, panel_salud,
+    actualizar_foto_rapida
 )
 from rest_framework.authtoken.views import obtain_auth_token
 
@@ -15,11 +18,13 @@ urlpatterns = [
     path('dashboard/', dashboard, name='dashboard'),
     path('lista_usuarios/', lista_usuarios, name='lista_usuarios'),
     path('usuario/<str:dni>/', detalle_usuario, name='detalle_usuario'),
+    path('usuario/<str:dni>/foto-rapida/', actualizar_foto_rapida, name='actualizar_foto_rapida'),
     path('api/registrar-asistencia/', RegistrarAsistencia.as_view(), name='registrar_asistencia'),
     path('api/login/', obtain_auth_token, name='api_token_auth'),
     path('api/eventos-activos/', ListEventosActivos.as_view(), name='api_eventos_activos'),
     path('api/ubicaciones/', ListUbicaciones.as_view(), name='api_ubicaciones'),
     path('api/dentro-evento/<int:evento_id>/', ListDentroEvento.as_view(), name='api_dentro_evento'),
+    path('api/config-sistema/', SystemConfigView.as_view(), name='api_config_sistema'),
     path('escanear/', escanear_qr, name='escanear_qr'),
     path('escanear/<int:evento_id>/', escanear_qr, name='escanear_qr_evento'),
     path('keep-alive/', keep_alive, name='keep_alive'),
@@ -34,6 +39,14 @@ urlpatterns = [
     path('descargar-reporte-evento/<int:evento_id>/', descargar_reporte_evento_pdf, name='descargar_reporte_evento_pdf'),
     path('registrar-usuario/', registrar_usuario, name='registrar_usuario'),
     path('confirmar-asistencia/<int:asistencia_id>/', confirmar_asistencia, name='confirmar_asistencia'),
-    path('descargar-reporte-usuario/<str:dni>/', descargar_reporte_usuario_pdf, name='descargar_reporte_usuario_pdf'),  # Nueva ruta
+    path('descargar-reporte-usuario/<str:dni>/', descargar_reporte_usuario_pdf, name='descargar_reporte_usuario_pdf'),
+    path('descargar-todos-carnets/', descargar_todos_carnets_pdf, name='descargar_todos_carnets_pdf'),
+    path('descargar-reporte-global/', descargar_reporte_global_pdf, name='descargar_reporte_global_pdf'),
+    path('exportar-reporte-global-excel/', exportar_reporte_global_excel, name='exportar_reporte_global_excel'),
+    path('descargar-reporte-filtrado/', descargar_reporte_filtrado_pdf, name='descargar_reporte_filtrado_pdf'),
+    path('sistema/backup/descargar/', descargar_backup, name='descargar_backup'),
+    path('sistema/backup/restaurar/', restaurar_backup, name='restaurar_backup'),
+    path('sistema/panel-salud/', panel_salud, name='panel_salud'),
+    path('evento/cerrar/<int:evento_id>/', cerrar_evento, name='cerrar_evento'),
     path('api/buscar-usuario-dni/', buscar_usuario_dni, name='buscar_usuario_dni'),
 ]

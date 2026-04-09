@@ -1,0 +1,8 @@
+services:
+  web:
+    # Para desarrollo local usamos runserver + bind mount para hot-reload.
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - .:/app
+    ports:
+      - "8001:8000"

@@ -1,0 +1,258 @@
+{% load tz %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Reporte Global Anual - {{ sistema_config.nombre_institucion }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 1cm;
+        }
+
+        body {
+            font-family: 'Inter', 'Helvetica', 'Arial', sans-serif;
+            color: #0f172a;
+            line-height: 1.4;
+            margin: 0;
+            padding: 0;
+        }
+
+        .event-page {
+            page-break-after: always;
+        }
+
+        .event-page:last-child {
+            page-break-after: auto;
+        }
+
+        .header {
+            border-bottom: 3px solid #eab308; /* Yellow/Amber Branding */
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            display: block;
+            width: 100%;
+        }
+
+        .logo-box {
+            float: right;
+            text-align: right;
+        }
+
+        .logo-box img {
+            max-height: 50px;
+        }
+
+        .company-name {
+            font-size: 20px;
+            font-weight: bold;
+            color: #1e1b4b;
+            margin: 0;
+        }
+
+        .report-title {
+            font-size: 14px;
+            font-weight: bold;
+            color: #d97706;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-top: 4px;
+        }
+
+        .event-header {
+            background: #1e293b;
+            color: white;
+            padding: 20px 30px;
+            border-radius: 16px;
+            margin-bottom: 20px;
+        }
+
+        .stats-row {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 15px;
+        }
+
+        .stat-card {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 8px 15px;
+            border-radius: 8px;
+            margin-left: 10px;
+            text-align: center;
+        }
+
+        .stat-val { font-size: 16px; font-weight: 800; color: white; }
+        .stat-lab { font-size: 8px; font-weight: bold; color: #94a3b8; text-transform: uppercase; }
+
+        .event-title { font-size: 20px; font-weight: 800; margin: 0; }
+        .event-meta { font-size: 10px; color: #94a3b8; margin-top: 5px; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 10px;
+            margin-bottom: 20px;
+        }
+
+        th {
+            background-color: #f8fafc;
+            color: #64748b;
+            font-weight: 800;
+            text-transform: uppercase;
+            text-align: left;
+            padding: 10px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        td {
+            padding: 8px 10px;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .absent-row { background-color: #fef2f2; }
+        .absent-text { color: #dc2626; font-weight: bold; }
+        .present-text { color: #166534; font-weight: bold; }
+
+        .badge {
+            font-size: 8px;
+            font-weight: bold;
+            padding: 2px 6px;
+            border-radius: 4px;
+            text-transform: uppercase;
+        }
+
+        .badge-success { background: #dcfce7; color: #166534; }
+        .badge-danger { background: #fee2e2; color: #991b1b; }
+        .badge-info { background: #e0e7ff; color: #3730a3; }
+
+        .footer {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            text-align: center;
+            font-size: 8px;
+            color: #cbd5e1;
+            padding-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="footer">
+        {{ sistema_config.nombre_institucion }} - Reporte Global Anual de Asistencias - Página <span class="pagenumber"></span>
+    </div>
+
+    {% for data in report_data %}
+    <div class="event-page">
+        <div class="header">
+            <div class="logo-box">
+                {% if logo_base64 %}<img src="data:image/png;base64,{{ logo_base64 }}" alt="Logo">{% endif %}
+            </div>
+            <h1 class="company-name">{{ sistema_config.nombre_institucion }}</h1>
+            <p class="report-title">Reporte de Evento: {{ data.evento.fecha|date:"M Y" }}</p>
+        </div>
+
+        <div class="event-header">
+            <div style="float: right; margin-top: -5px;">
+                <div class="stat-card">
+                    <div class="stat-val">{{ data.stats.asistencias_fisicas }}</div>
+                    <div class="stat-lab">Presentes*</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-val" style="color: #6366f1">{{ data.stats.justificadas }}</div>
+                    <div class="stat-lab">Justificadas</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-val" style="color: #fca5a5">{{ data.stats.inasistencias }}</div>
+                    <div class="stat-lab">Faltantes</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-val" style="color: #fbbf24">{{ data.stats.porcentaje|floatformat:1 }}%</div>
+                    <div class="stat-lab">Asistencia</div>
+                </div>
+            </div>
+            <h2 class="event-title">{{ data.evento.nombre }}</h2>
+            <div class="event-meta">
+                Fecha: {{ data.evento.fecha|date:"d/m/Y" }} | 
+                Lugar: {{ data.evento.ubicacion.nombre|default:"General" }} |
+                Total de Padrón: {{ data.stats.total_usuarios }}
+            </div>
+            <div style="clear: both;"></div>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th width="40%">Socio</th>
+                    <th width="15%">DNI</th>
+                    <th width="15%">Ingreso</th>
+                    <th width="15%">Salida</th>
+                    <th width="15%">Estado</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in data.records %}
+                <tr {% if item.is_absent and not item.es_justificada %}class="absent-row"{% endif %}>
+                    <td>
+                        <span {% if item.is_absent and not item.es_justificada %}class="absent-text"{% endif %}>
+                            {{ item.usuario.nombre }} {{ item.usuario.apellido }}
+                        </span>
+                        {% if item.es_justificada %}
+                        <div style="font-size: 8px; color: #6366f1; font-weight: bold;">
+                            MOTIVO: {{ item.justificacion_obs|default:"(Documento aprobado)" }}
+                        </div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <code>
+                            {{ item.usuario.dni }}
+                        </code>
+                    </td>
+                    <td>
+                        {% if item.es_justificada %}
+                            <span class="badge badge-info">JUSTIFICADA</span>
+                        {% elif item.is_absent %}
+                            {% if item.is_late_absent %}
+                                <span class="present-text">{{ item.hora_ingreso|date:"H:i"|default:"--" }}</span>
+                            {% else %}
+                                -
+                            {% endif %}
+                        {% else %}
+                            <span class="present-text">{{ item.hora_ingreso|date:"H:i"|default:"--" }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if item.es_justificada %}
+                            <span class="badge badge-info">JUSTIFICADA</span>
+                        {% elif item.is_absent %}
+                            {% if item.is_late_absent %}
+                                <span style="color: #9a3412;">{{ item.hora_salida|date:"H:i"|default:"--" }}</span>
+                            {% else %}
+                                -
+                            {% endif %}
+                        {% else %}
+                            <span style="color: #9a3412;">{{ item.hora_salida|date:"H:i"|default:"--" }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if item.es_justificada %}
+                            <span class="badge badge-info">JUSTIFICADA</span>
+                        {% elif item.is_absent %}
+                            <span class="badge badge-danger">FALTÓ</span>
+                            {% if item.is_late_absent %}
+                                <span class="badge badge-warning">TARDE</span>
+                            {% endif %}
+                        {% elif not item.hora_salida and item.usuario.estado != 'EXONERADO' %}
+                            <span class="badge" style="background-color: #fef3c7; color: #92400e;">PENDIENTE</span>
+                        {% else %}
+                            <span class="badge badge-success">ASISTIÓ</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endfor %}
+</body>
+</html>

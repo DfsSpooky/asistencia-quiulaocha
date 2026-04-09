@@ -1,14 +1,59 @@
 from django.db import models
 from django.core.files.base import ContentFile
+from django.core.signing import Signer
 from django.core.exceptions import ValidationError
 from django.core.validators import FileExtensionValidator
+from django.templatetags.static import static
 import qrcode
 from io import BytesIO
 import base64
 import re
 from django.contrib.auth.models import User
-from PIL import Image
+from django.utils import timezone
+from PIL import Image, ImageOps
 from datetime import date, datetime
+
+
+def validate_file_size(value):
+    max_size = 5 * 1024 * 1024
+    if value and getattr(value, 'size', 0) > max_size:
+        raise ValidationError(f'El archivo no puede superar los {max_size // (1024 * 1024)} MB.')
+
+
+def validate_image_content(value):
+    if not value:
+        return
+    try:
+        value.seek(0)
+        with Image.open(value) as img:
+            img.verify()
+        value.seek(0)
+    except Exception as exc:
+        raise ValidationError('La imagen subida es inválida o está dañada.') from exc
+
+
+def validate_supporting_document_content(value):
+    if not value:
+        return
+
+    name = (getattr(value, 'name', '') or '').lower()
+    try:
+        value.seek(0)
+        header = value.read(16)
+        value.seek(0)
+    except Exception as exc:
+        raise ValidationError('No se pudo validar el archivo adjunto.') from exc
+
+    if name.endswith('.pdf'):
+        if not header.startswith(b'%PDF'):
+            raise ValidationError('El PDF adjunto no es válido.')
+        return
+
+    if name.endswith(('.jpg', '.jpeg', '.png')):
+        validate_image_content(value)
+        return
+
+    raise ValidationError('Tipo de archivo no permitido.')
 
 class Ubicacion(models.Model):
     nombre = models.CharField(max_length=100)
@@ -21,6 +66,7 @@ class Evento(models.Model):
     nombre = models.CharField(max_length=100)
     fecha = models.DateField()
     descripcion = models.TextField(blank=True)
+    hora_ingreso = models.TimeField(default='08:00', help_text="Hora de ingreso programada")
     activo = models.BooleanField(default=True)
 
     def save(self, *args, **kwargs):
@@ -51,6 +97,8 @@ class Evento(models.Model):
         return f"{self.nombre} ({self.fecha})"
 
 class Usuario(models.Model):
+    FOTO_PERFIL_SIZE = (320, 320)
+    FOTO_PERFIL_QUALITY = 72
     ESTADO_ACTIVO = 'ACTIVO'
     ESTADO_PASIVO = 'PASIVO'
     ESTADO_EXONERADO = 'EXONERADO'
@@ -67,7 +115,22 @@ class Usuario(models.Model):
     fecha_nacimiento = models.DateField(null=True, blank=True)
     estado = models.CharField(max_length=10, choices=ESTADOS, default=ESTADO_ACTIVO)
     qr_code = models.ImageField(upload_to='qr_codes/', blank=True)
-    foto_perfil = models.ImageField(upload_to='perfil_fotos/', blank=True, null=True)
+    foto_perfil = models.ImageField(
+        upload_to='perfil_fotos/',
+        blank=True,
+        null=True,
+        validators=[validate_file_size, validate_image_content],
+    )
+
+    @property
+    def foto_perfil_url(self):
+        if self.foto_perfil:
+            try:
+                if self.foto_perfil.storage.exists(self.foto_perfil.name):
+                    return self.foto_perfil.url
+            except (OSError, ValueError):
+                pass
+        return static('images/default_avatar.svg')
 
     def clean(self):
         if not self.dni.isdigit() or len(self.dni) != 8:
@@ -83,10 +146,17 @@ class Usuario(models.Model):
         if self.foto_perfil:
             try:
                 img = Image.open(self.foto_perfil)
-                img = img.convert('RGB')
-                img = img.resize((200, 200), Image.Resampling.LANCZOS)
+                img = ImageOps.exif_transpose(img).convert('RGB')
+                # Genera un recorte centrado optimizado para avatar y reduce el peso final.
+                img = ImageOps.fit(img, self.FOTO_PERFIL_SIZE, Image.Resampling.LANCZOS)
                 buffer = BytesIO()
-                img.save(buffer, format='JPEG', quality=70)
+                img.save(
+                    buffer,
+                    format='JPEG',
+                    quality=self.FOTO_PERFIL_QUALITY,
+                    optimize=True,
+                    progressive=True,
+                )
                 buffer.seek(0)
                 self.foto_perfil.save(
                     f'perfil_{self.dni}.jpg',
@@ -94,13 +164,15 @@ class Usuario(models.Model):
                     save=False
                 )
             except Exception as e:
-                self.foto_perfil = 'images/default_avatar.png'
+                self.foto_perfil = None
 
         if not self.foto_perfil:
-            self.foto_perfil = 'images/default_avatar.png'
+            self.foto_perfil = None
 
         qr = qrcode.QRCode(version=1, box_size=5, border=2)
-        encoded_dni = base64.b64encode(self.dni.encode()).decode()
+        # Firmamos el DNI con la SECRET_KEY para que el QR no pueda ser falsificado fácilmente.
+        signed_dni = Signer().sign(self.dni)
+        encoded_dni = base64.b64encode(signed_dni.encode()).decode()
         qr.add_data(encoded_dni)
         qr.make(fit=True)
         img = qr.make_image(fill='black', back_color='white')
@@ -123,14 +195,29 @@ class Usuario(models.Model):
         ]
 
 class Asistencia(models.Model):
+    PUNTUALIDAD_PUNTUAL = 'PUNTUAL'
+    PUNTUALIDAD_TARDE = 'TARDE'
+    PUNTUALIDAD_NO_APLICA = 'NO_APLICA'
+    PUNTUALIDAD_CHOICES = [
+        (PUNTUALIDAD_PUNTUAL, 'Puntual'),
+        (PUNTUALIDAD_TARDE, 'Tardanza'),
+        (PUNTUALIDAD_NO_APLICA, 'No aplica'),
+    ]
+
     usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE)
-    fecha = models.DateField(auto_now_add=True)
+    fecha = models.DateField(default=timezone.localdate)
     hora_ingreso = models.TimeField(null=True, blank=True)
     hora_salida = models.TimeField(null=True, blank=True)
     ubicacion = models.ForeignKey(Ubicacion, on_delete=models.SET_NULL, null=True, blank=True)
     evento = models.ForeignKey(Evento, on_delete=models.SET_NULL, null=True, blank=True)
     confirmada = models.BooleanField(default=False)
     es_justificada = models.BooleanField(default=False, help_text="Indica si la inasistencia fue justificada")
+    puntualidad = models.CharField(
+        max_length=12,
+        choices=PUNTUALIDAD_CHOICES,
+        default=PUNTUALIDAD_NO_APLICA,
+        help_text="Clasifica si el ingreso fue puntual o con tardanza.",
+    )
 
     def __str__(self):
         ingreso = self.hora_ingreso.strftime('%H:%M:%S') if self.hora_ingreso else 'No registrado'
@@ -142,6 +229,13 @@ class Asistencia(models.Model):
             models.Index(fields=['fecha']),
             models.Index(fields=['usuario']),
             models.Index(fields=['evento']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['usuario', 'evento', 'fecha'],
+                condition=models.Q(evento__isnull=False),
+                name='uniq_asistencia_usuario_evento_fecha',
+            ),
         ]
 
 class Justificacion(models.Model):
@@ -157,12 +251,16 @@ class Justificacion(models.Model):
     usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name='justificaciones')
     evento = models.ForeignKey(Evento, on_delete=models.CASCADE, related_name='justificaciones')
     motivo = models.TextField(verbose_name="Motivo de la inasistencia")
-    evidencia = models.ImageField(
+    evidencia = models.FileField(
         upload_to='justificaciones/', 
         blank=True, 
         null=True, 
         verbose_name="Evidencia (Foto/Documento)",
-        validators=[FileExtensionValidator(allowed_extensions=['pdf', 'jpg', 'jpeg', 'png'])]
+        validators=[
+            FileExtensionValidator(allowed_extensions=['pdf', 'jpg', 'jpeg', 'png']),
+            validate_file_size,
+            validate_supporting_document_content,
+        ]
     )
     estado = models.CharField(max_length=10, choices=ESTADOS, default=ESTADO_PENDIENTE)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
@@ -199,6 +297,14 @@ class Justificacion(models.Model):
                 asistencia.es_justificada = False
                 asistencia.save()
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['usuario', 'evento'],
+                name='uniq_justificacion_usuario_evento',
+            ),
+        ]
+
 class LogAccion(models.Model):
     usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     accion = models.CharField(max_length=100)
@@ -215,11 +321,25 @@ class LogAccion(models.Model):
         ]
 
 class ConfiguracionSistema(models.Model):
-    logo = models.ImageField(upload_to='logos/', blank=True, null=True, help_text="Logo del sistema (se mostrará en la barra de navegación, login y reportes)")
+    logo = models.ImageField(
+        upload_to='logos/',
+        blank=True,
+        null=True,
+        help_text="Logo del sistema (se mostrará en la barra de navegación, login y reportes)",
+        validators=[validate_file_size, validate_image_content],
+    )
     nombre_institucion = models.CharField(
         max_length=100,
         default='QUIULACOCHA',
         help_text="Nombre de la institución (se mostrará en toda la aplicación)"
+    )
+    tardanza_activa = models.BooleanField(
+        default=True,
+        help_text="Activa el control de tardanzas para marcar faltas cuando se supera el límite."
+    )
+    tolerancia_minutos = models.PositiveIntegerField(
+        default=15,
+        help_text="Tiempo de tolerancia en minutos para el ingreso antes de considerarse tardanza (si aplica)"
     )
 
     def save(self, *args, **kwargs):
