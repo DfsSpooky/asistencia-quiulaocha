@@ -1,6 +1,6 @@
 from django import forms
 from django.contrib.auth.password_validation import validate_password
-from .models import Evento, Ubicacion, Usuario, Justificacion
+from .models import Evento, Ubicacion, Usuario, Justificacion, HistorialCarnet
 
 class JustificacionForm(forms.ModelForm):
     class Meta:
@@ -143,3 +143,24 @@ class UsuarioRegistroForm(forms.ModelForm):
         if commit:
             usuario.save()
         return usuario
+
+class CarnetForm(forms.ModelForm):
+    class Meta:
+        model = HistorialCarnet
+        fields = ['motivo', 'fecha_vencimiento', 'observaciones']
+        widgets = {
+            'motivo': forms.Select(attrs={'class': 'form-control w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white'}),
+            'fecha_vencimiento': forms.DateInput(attrs={'type': 'date', 'class': 'form-control w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white'}),
+            'observaciones': forms.Textarea(attrs={'class': 'form-control w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white', 'rows': 3}),
+        }
+
+class AdminCarnetForm(CarnetForm):
+    usuario = forms.ModelChoiceField(
+        queryset=Usuario.objects.only('id', 'nombre', 'apellido', 'dni').order_by('apellido', 'nombre'),
+        label='Socio',
+        widget=forms.Select(attrs={'class': 'select2-searchable w-full'})
+    )
+
+    class Meta(CarnetForm.Meta):
+        fields = ['usuario', 'motivo', 'fecha_vencimiento', 'observaciones']
+

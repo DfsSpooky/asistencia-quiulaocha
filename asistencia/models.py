@@ -369,3 +369,32 @@ class ConfiguracionSistema(models.Model):
     class Meta:
         verbose_name = "Configuración del Sistema"
         verbose_name_plural = "Configuración del Sistema"
+
+class HistorialCarnet(models.Model):
+    MOTIVO_CHOICES = [
+        ('Primer Carnet', 'Primer Carnet'),
+        ('Renovación por Vencimiento', 'Renovación por Vencimiento'),
+        ('Reposición por Pérdida/Robo', 'Reposición por Pérdida/Robo'),
+        ('Reposición por Deterioro', 'Reposición por Deterioro'),
+    ]
+    ESTADO_CHOICES = [
+        ('Activo', 'Activo'),
+        ('Inactivo/Anulado', 'Inactivo/Anulado'),
+    ]
+
+    usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name='historial_carnets')
+    fecha_emision = models.DateTimeField(default=timezone.now)
+    fecha_vencimiento = models.DateField(null=True, blank=True)
+    motivo = models.CharField(max_length=50, choices=MOTIVO_CHOICES)
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='Activo')
+    observaciones = models.TextField(blank=True, null=True)
+    entregado_por = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        if self.estado == 'Activo':
+            HistorialCarnet.objects.filter(usuario=self.usuario, estado='Activo').exclude(pk=self.pk).update(estado='Inactivo/Anulado')
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Carnet {self.motivo} - {self.usuario} ({self.estado})"
+

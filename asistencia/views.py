@@ -22,8 +22,8 @@ import openpyxl # Changed from `from openpyxl import Workbook` to `import openpy
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from io import BytesIO
-from .models import Usuario, Asistencia, Ubicacion, Evento, LogAccion, ConfiguracionSistema, Justificacion
-from .forms import FiltroAsistenciaForm, ImportarUsuariosForm, BuscarUsuarioForm, UsuarioRegistroForm, JustificacionForm, AdminJustificacionForm
+from .models import Usuario, Asistencia, Ubicacion, Evento, LogAccion, ConfiguracionSistema, Justificacion, HistorialCarnet
+from .forms import FiltroAsistenciaForm, ImportarUsuariosForm, BuscarUsuarioForm, UsuarioRegistroForm, JustificacionForm, AdminJustificacionForm, CarnetForm, AdminCarnetForm
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -1916,3 +1916,77 @@ def descargar_todos_carnets_pdf(request):
     )
     response['Content-Length'] = len(zip_bytes)
     return response
+
+@login_required
+@permission_required('asistencia.can_manage_users', raise_exception=True)
+def entregar_carnet(request, usuario_id):
+    usuario = get_object_or_404(Usuario, id=usuario_id)
+    if request.method == 'POST':
+        form = CarnetForm(request.POST)
+        if form.is_valid():
+            nuevo_carnet = form.save(commit=False)
+            nuevo_carnet.usuario = usuario
+            nuevo_carnet.entregado_por = request.user
+            nuevo_carnet.save()
+            messages.success(request, f"Carnet '{nuevo_carnet.motivo}' registrado exitosamente para {usuario.nombre} {usuario.apellido}.")
+            return redirect('detalle_usuario', dni=usuario.dni)
+    else:
+        form = CarnetForm()
+    
+    context = {
+        'form': form,
+        'usuario': usuario,
+    }
+    return render(request, 'asistencia/registrar_carnet.html', context)
+
+@login_required
+@permission_required('asistencia.can_manage_users', raise_exception=True)
+def modulo_gestion_carnets(request):
+    usuario_seleccionado = None
+    carnet_activo = None
+
+    if request.method == 'POST':
+        usuario_id = request.POST.get('usuario_id')
+        accion = request.POST.get('accion')
+        
+        if usuario_id and accion:
+            usuario = get_object_or_404(Usuario, id=usuario_id)
+            motivo_map = {
+                'primer_carnet': 'Primer Carnet',
+                'reposicion_perdida': 'Reposición por Pérdida',
+                'reposicion_deterioro': 'Reposición por Deterioro',
+                'renovacion': 'Renovación por Vencimiento'
+            }
+            if accion in motivo_map:
+                motivo = motivo_map[accion]
+                nuevo_carnet = HistorialCarnet(
+                    usuario=usuario,
+                    motivo=motivo,
+                    estado='Activo'
+                )
+                nuevo_carnet.save()
+                messages.success(request, f"¡Éxito! Se ha emitido físicamente un '{motivo}' para {usuario.nombre} {usuario.apellido}.")
+                return redirect(f"{reverse('modulo_gestion_carnets')}?usuario_id={usuario.id}")
+
+    usuario_id = request.GET.get('usuario_id')
+    form = AdminCarnetForm()
+
+    if usuario_id:
+        try:
+            usuario_seleccionado = Usuario.objects.get(id=usuario_id)
+            carnet_activo = usuario_seleccionado.historial_carnets.filter(estado='Activo').first()
+            form = AdminCarnetForm(initial={'usuario': usuario_seleccionado})
+        except Usuario.DoesNotExist:
+            pass
+
+    ultimos_carnets = HistorialCarnet.objects.all().order_by('-fecha_emision', '-id')[:10]
+    
+    context = {
+        'form': form,
+        'ultimos_carnets': ultimos_carnets,
+        'usuario_seleccionado': usuario_seleccionado,
+        'carnet_activo': carnet_activo,
+    }
+    return render(request, 'asistencia/gestion_carnets.html', context)
+
+

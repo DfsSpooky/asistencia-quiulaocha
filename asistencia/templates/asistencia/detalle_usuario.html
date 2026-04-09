@@ -89,11 +89,69 @@
                 <i class="bi bi-printer-fill text-lg"></i>
                 <span>Imprimir Credencial</span>
             </button>
+            <a href="{% url 'entregar_carnet' usuario.id %}"
+               class="flex-1 max-w-xs py-4 bg-primary-600 text-white rounded-xl font-bold uppercase text-xs tracking-widest hover:bg-primary-700 transition-all shadow-xl shadow-primary-600/20 flex items-center justify-center gap-3 hover:-translate-y-1">
+                <i class="bi bi-plus-circle-fill text-lg"></i>
+                <span>Registrar Carnet</span>
+            </a>
             <a href="{% url 'lista_usuarios' %}"
-               class="flex-1 max-w-xs py-4 bg-slate-100 text-slate-500 rounded-xl font-bold uppercase text-xs tracking-widest hover:bg-slate-200 transition-all text-center hover:-translate-y-1">
-                Volver
+               class="flex-1 max-w-xs py-4 bg-slate-100 text-slate-500 rounded-xl font-bold uppercase text-xs tracking-widest hover:bg-slate-200 transition-all text-center hover:-translate-y-1 flex items-center justify-center gap-3">
+                <i class="bi bi-arrow-left text-lg"></i>
+                <span>Volver</span>
             </a>
         </div>
+
+        {% if usuario.historial_carnets.exists %}
+        <div class="mt-16 print:hidden">
+            <h3 class="text-2xl font-bold mb-6 text-slate-800">Historial de Carnets Registrados</h3>
+            <div class="overflow-x-auto bg-white rounded-2xl border border-slate-200 shadow-sm">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="bg-slate-50 border-b border-slate-200">
+                            <th class="py-4 px-6 font-semibold text-sm text-slate-500 uppercase tracking-wider">Fecha Emisión</th>
+                            <th class="py-4 px-6 font-semibold text-sm text-slate-500 uppercase tracking-wider">Motivo</th>
+                            <th class="py-4 px-6 font-semibold text-sm text-slate-500 uppercase tracking-wider">Vencimiento</th>
+                            <th class="py-4 px-6 font-semibold text-sm text-slate-500 uppercase tracking-wider">Estado</th>
+                            <th class="py-4 px-6 font-semibold text-sm text-slate-500 uppercase tracking-wider">Registrado por</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        {% for carnet in usuario.historial_carnets.all|dictsortreversed:"fecha_emision" %}
+                        <tr class="hover:bg-slate-50/50 transition-colors duration-150">
+                            <td class="py-4 px-6 text-slate-700 font-medium">{{ carnet.fecha_emision|date:"d M Y" }}</td>
+                            <td class="py-4 px-6 text-slate-600">{{ carnet.motivo }}</td>
+                            <td class="py-4 px-6 text-slate-600">
+                                {% if carnet.fecha_vencimiento %}
+                                    {{ carnet.fecha_vencimiento|date:"d M Y" }}
+                                {% else %}
+                                    <span class="text-slate-400 italic">No expira</span>
+                                {% endif %}
+                            </td>
+                            <td class="py-4 px-6">
+                                {% if carnet.estado == 'Activo' %}
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                        {{ carnet.estado }}
+                                    </span>
+                                {% else %}
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                        {{ carnet.estado }}
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td class="py-4 px-6 text-slate-500 text-sm">
+                                {% if carnet.entregado_por %}
+                                    {{ carnet.entregado_por.get_full_name|default:carnet.entregado_por.username }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endif %}
     </div>
     <style>
         .carnet-pattern {

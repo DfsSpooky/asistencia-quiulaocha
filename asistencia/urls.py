@@ -9,7 +9,7 @@ from .views import (
     ListEventosActivos, ListUbicaciones, ListDentroEvento, buscar_usuario_dni, SystemConfigView,
     descargar_todos_carnets_pdf, descargar_reporte_global_pdf, descargar_reporte_filtrado_pdf,
     exportar_reporte_global_excel, descargar_backup, restaurar_backup, cerrar_evento, panel_salud,
-    actualizar_foto_rapida
+    actualizar_foto_rapida, entregar_carnet, modulo_gestion_carnets
 )
 from rest_framework.authtoken.views import obtain_auth_token
 
@@ -19,6 +19,7 @@ urlpatterns = [
     path('lista_usuarios/', lista_usuarios, name='lista_usuarios'),
     path('usuario/<str:dni>/', detalle_usuario, name='detalle_usuario'),
     path('usuario/<str:dni>/foto-rapida/', actualizar_foto_rapida, name='actualizar_foto_rapida'),
+    path('usuarios/<int:usuario_id>/entregar-carnet/', entregar_carnet, name='entregar_carnet'),
     path('api/registrar-asistencia/', RegistrarAsistencia.as_view(), name='registrar_asistencia'),
     path('api/login/', obtain_auth_token, name='api_token_auth'),
     path('api/eventos-activos/', ListEventosActivos.as_view(), name='api_eventos_activos'),
@@ -48,5 +49,6 @@ urlpatterns = [
     path('sistema/backup/restaurar/', restaurar_backup, name='restaurar_backup'),
     path('sistema/panel-salud/', panel_salud, name='panel_salud'),
     path('evento/cerrar/<int:evento_id>/', cerrar_evento, name='cerrar_evento'),
+    path('sistema/gestion-carnets/', modulo_gestion_carnets, name='modulo_gestion_carnets'),
     path('api/buscar-usuario-dni/', buscar_usuario_dni, name='buscar_usuario_dni'),
 ]

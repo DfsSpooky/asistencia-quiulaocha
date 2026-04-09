@@ -1,0 +1,213 @@
+{% extends "asistencia/base.html" %}
+
+{% block title %}Emisión de Credenciales - Quiulacocha{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto space-y-8 animate-fade-in py-10">
+    <div class="text-center mb-8 space-y-2">
+        <h2 class="text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight">Emisión de Credenciales</h2>
+        <p class="text-slate-500 font-medium">Búsqueda inteligente y acciones rápidas</p>
+    </div>
+
+    <!-- Messages -->
+    {% if messages %}
+        <div class="space-y-4 mb-8">
+            {% for message in messages %}
+                <div class="bg-primary-50 border border-primary-200 text-primary-800 px-6 py-4 rounded-2xl flex items-center gap-3">
+                    <i class="bi bi-check-circle-fill text-xl"></i>
+                    <p class="font-bold">{{ message }}</p>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <!-- Top Bar: Search -->
+    <div class="bg-white rounded-3xl p-6 shadow-premium border border-slate-100 flex items-center gap-4">
+        <div class="flex-grow">
+            <form method="get" id="searchForm" class="relative">
+                <label for="id_usuario" class="block text-xs font-black text-slate-400 tracking-widest uppercase mb-2">
+                    Buscar Socio por DNI o Nombres
+                </label>
+                {{ form.usuario }}
+            </form>
+        </div>
+    </div>
+
+    <!-- Content Area -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        <!-- Left Column: User Context & Actions -->
+        <div class="lg:col-span-1">
+            {% if usuario_seleccionado %}
+                <div class="bg-white rounded-3xl p-8 shadow-premium border border-slate-100 h-full flex flex-col">
+                    
+                    <!-- User Info Card -->
+                    <div class="text-center mb-6">
+                        {% if usuario_seleccionado.foto_perfil %}
+                            <img src="{{ usuario_seleccionado.foto_perfil.url }}" class="w-24 h-24 mx-auto rounded-3xl object-cover shadow-lg border-2 border-white" alt="Foto">
+                        {% else %}
+                            <div class="w-24 h-24 mx-auto rounded-3xl bg-slate-100 flex items-center justify-center text-3xl font-black text-slate-400 shadow-inner">
+                                {{ usuario_seleccionado.nombre|first }}{{ usuario_seleccionado.apellido|first }}
+                            </div>
+                        {% endif %}
+                        <h3 class="mt-4 text-xl font-bold text-slate-900">{{ usuario_seleccionado.nombre }}<br>{{ usuario_seleccionado.apellido }}</h3>
+                        <p class="text-sm font-mono text-slate-500 mt-1">{{ usuario_seleccionado.dni }}</p>
+                        
+                        <div class="mt-4 inline-flex items-center px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider 
+                            {% if usuario_seleccionado.estado == 'ACTIVO' %}bg-emerald-50 text-emerald-600
+                            {% elif usuario_seleccionado.estado == 'PASIVO' %}bg-amber-50 text-amber-600
+                            {% else %}bg-slate-100 text-slate-600{% endif %}">
+                            {{ usuario_seleccionado.get_estado_display }}
+                        </div>
+                    </div>
+
+                    <div class="h-px bg-slate-100 w-full mb-6"></div>
+
+                    <!-- Current Status Panel -->
+                    <div class="mb-8 flex-grow">
+                        <h4 class="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Estado Actual del Carnet</h4>
+                        {% if carnet_activo %}
+                            <div class="bg-emerald-50 border border-emerald-100 rounded-2xl p-4">
+                                <div class="flex items-center gap-2 mb-2">
+                                    <i class="bi bi-person-vcard text-emerald-600 text-lg"></i>
+                                    <span class="font-bold text-emerald-800">Tiene Carnet Activo</span>
+                                </div>
+                                <p class="text-xs text-emerald-700">Entregado el:</p>
+                                <p class="text-sm font-bold text-emerald-900">{{ carnet_activo.fecha_emision|date:"d M Y, H:i" }}</p>
+                                <p class="text-xs text-emerald-600 mt-2 italic">Motivo: {{ carnet_activo.motivo }}</p>
+                            </div>
+                        {% else %}
+                            <div class="bg-rose-50 border border-rose-100 rounded-2xl p-4">
+                                <div class="flex items-center gap-2">
+                                    <i class="bi bi-x-circle-fill text-rose-500 text-lg"></i>
+                                    <span class="font-bold text-rose-800">No tiene carnet activo</span>
+                                </div>
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Action Buttons Form -->
+                    <form method="post" action="{% url 'modulo_gestion_carnets' %}" class="space-y-3" id="actionForm">
+                        {% csrf_token %}
+                        <input type="hidden" name="usuario_id" value="{{ usuario_seleccionado.id }}">
+                        <input type="hidden" name="accion" id="accionInput" value="">
+                        
+                        <h4 class="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Acciones Rápidas</h4>
+
+                        {% if not carnet_activo %}
+                            <button type="button" onclick="submitAction('primer_carnet')" class="w-full py-4 bg-emerald-500 text-white rounded-xl font-bold uppercase text-[11px] tracking-widest hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/20 active:scale-95 flex justify-center items-center gap-2">
+                                <i class="bi bi-plus-circle-fill text-lg"></i>
+                                Emitir Primer Carnet
+                            </button>
+                        {% else %}
+                            <button type="button" onclick="submitAction('reposicion_perdida')" class="w-full py-3 bg-amber-500 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest hover:bg-amber-600 transition-all shadow-md active:scale-95 flex justify-center items-center gap-2">
+                                <i class="bi bi-exclamation-triangle-fill"></i>
+                                Reposición p/ Pérdida o Robo
+                            </button>
+                            <button type="button" onclick="submitAction('reposicion_deterioro')" class="w-full py-3 bg-orange-500 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest hover:bg-orange-600 transition-all shadow-md active:scale-95 flex justify-center items-center gap-2">
+                                <i class="bi bi-credit-card-2-back-fill"></i>
+                                Reposición p/ Deterioro
+                            </button>
+                            <button type="button" onclick="submitAction('renovacion')" class="w-full py-3 bg-blue-500 text-white rounded-xl font-bold uppercase text-[10px] tracking-widest hover:bg-blue-600 transition-all shadow-md active:scale-95 flex justify-center items-center gap-2">
+                                <i class="bi bi-arrow-repeat"></i>
+                                Renovación
+                            </button>
+                        {% endif %}
+                    </form>
+                </div>
+            {% else %}
+                <!-- Empty State -->
+                <div class="bg-white rounded-3xl p-8 shadow-premium border border-slate-100 h-full flex flex-col items-center justify-center text-center">
+                    <div class="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4">
+                        <i class="bi bi-search text-3xl text-slate-300"></i>
+                    </div>
+                    <h3 class="font-bold text-slate-700">Selecciona un Socio</h3>
+                    <p class="text-sm text-slate-400 mt-2">Busca a un usuario en la barra superior para ver su estado actual y habilitar las opciones de entrega rápida.</p>
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Right Column: Recent Activity Log -->
+        <div class="lg:col-span-2">
+            <div class="bg-white rounded-3xl shadow-premium border border-slate-100 p-8 h-full">
+                <div class="flex items-center justify-between mb-6">
+                    <div>
+                        <h3 class="text-xl font-bold text-slate-900 tracking-tight">Registro General de Emisiones</h3>
+                        <p class="text-xs font-medium text-slate-500 italic">Últimos carnets generados en la plataforma</p>
+                    </div>
+                    <div class="h-10 w-10 bg-slate-50 rounded-full flex items-center justify-center">
+                        <i class="bi bi-clock-history text-slate-400"></i>
+                    </div>
+                </div>
+
+                {% if ultimos_carnets %}
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead>
+                                <tr class="bg-slate-50 border-b border-slate-100">
+                                    <th class="py-3 px-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Fecha y Hora</th>
+                                    <th class="py-3 px-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Socio</th>
+                                    <th class="py-3 px-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Motivo</th>
+                                    <th class="py-3 px-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-50">
+                                {% for carnet in ultimos_carnets %}
+                                <tr class="hover:bg-slate-50/50 transition-colors">
+                                    <td class="py-3 px-4 text-xs font-bold text-slate-600">
+                                        {{ carnet.fecha_emision|date:"d M Y" }}<br>
+                                        <span class="text-slate-400 font-mono font-normal">{{ carnet.fecha_emision|date:"H:i" }}</span>
+                                    </td>
+                                    <td class="py-3 px-4">
+                                        <p class="font-bold text-slate-900 text-xs whitespace-nowrap">{{ carnet.usuario.nombre }} {{ carnet.usuario.apellido }}</p>
+                                    </td>
+                                    <td class="py-3 px-4 text-[11px] font-medium text-slate-500">
+                                        {{ carnet.motivo }}
+                                    </td>
+                                    <td class="py-3 px-4 text-right">
+                                        {% if carnet.estado == 'Activo' %}
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-600 border border-emerald-100 shadow-sm">
+                                                Activo
+                                            </span>
+                                        {% else %}
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider bg-slate-50 text-slate-500 border border-slate-200">
+                                                Inactivo
+                                            </span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="h-40 flex flex-col items-center justify-center text-center p-6 border-2 border-dashed border-slate-100 rounded-2xl">
+                        <i class="bi bi-inbox text-3xl text-slate-300 mb-2"></i>
+                        <p class="text-sm font-bold text-slate-500">No hay emisiones registradas todavía.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+<script>
+    // Configurar Select2 para que al seleccionar se haga GET automáticamente a la misma URL para recargar panel
+    $(document).ready(function() {
+        $('#id_usuario').on('change', function() {
+            var userId = $(this).val();
+            if(userId) {
+                // Show a small loader or just redirect
+                window.location.href = "?usuario_id=" + userId;
+            }
+        });
+    });
+
+    function submitAction(accion) {
+        document.getElementById('accionInput').value = accion;
+        document.getElementById('actionForm').submit();
+    }
+</script>
+{% endblock %}
