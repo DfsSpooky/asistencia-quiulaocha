@@ -83,20 +83,8 @@
 {% endblock %}
 {% block extra_js %}
     <script>
-        $(document).ready(function() {
-            $('.select2-searchable').select2({
-                placeholder: 'Seleccionar...',
-                allowClear: true,
-                width: '100%',
-                language: {
-                    noResults: function() {
-                        return "No se encontraron resultados";
-                    },
-                    searching: function() {
-                        return "Buscando...";
-                    }
-                }
-            });
-        });
+        if (typeof initSelect2 === 'function') {
+            initSelect2();
+        }
     </script>
 {% endblock %}

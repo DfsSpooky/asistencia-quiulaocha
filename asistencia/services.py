@@ -8,7 +8,7 @@ de negocio relacionada con el registro de asistencias, separándola de las vista
 from django.core.exceptions import ValidationError
 from django.contrib.auth.models import User
 from datetime import date, datetime, timedelta
-from .models import Usuario, Evento, Asistencia, Ubicacion, LogAccion
+from .models import Usuario, Evento, Asistencia, Ubicacion, LogAccion, ConfiguracionSistema
 
 
 class AsistenciaService:
@@ -55,7 +55,7 @@ class AsistenciaService:
         else:
             # Escaneo en tiempo real
             from django.utils import timezone
-            now = timezone.now()
+            now = timezone.localtime(timezone.now())
             today = now.date()
             current_time = now.time()
         
@@ -72,6 +72,7 @@ class AsistenciaService:
         # Registrar ingreso
         if existing_asistencia:
             existing_asistencia.hora_ingreso = current_time
+            existing_asistencia.puntualidad = AsistenciaService._calcular_puntualidad(evento, current_time)
             existing_asistencia.save()
             asistencia = existing_asistencia
         else:
@@ -79,7 +80,8 @@ class AsistenciaService:
                 usuario=usuario,
                 hora_ingreso=current_time,
                 ubicacion=ubicacion,
-                evento=evento
+                evento=evento,
+                puntualidad=AsistenciaService._calcular_puntualidad(evento, current_time),
             )
         
         # Registrar log si se proporciona el usuario que realiza la acción
@@ -128,7 +130,7 @@ class AsistenciaService:
         else:
             # Escaneo en tiempo real
             from django.utils import timezone
-            now = timezone.now()
+            now = timezone.localtime(timezone.now())
             today = now.date()
             current_time = now.time()
         
@@ -155,8 +157,9 @@ class AsistenciaService:
             usuario
         )
         
-        # Registrar salida
+        # Registrar salida y validar automáticamente
         existing_asistencia.hora_salida = current_time
+        existing_asistencia.confirmada = True  # Auto-validación al salida
         existing_asistencia.save()
         
         # Registrar log si se proporciona el usuario que realiza la acción
@@ -200,11 +203,29 @@ class AsistenciaService:
         Raises:
             ValidationError: Si el evento no es para hoy
         """
-        if evento and evento.fecha != date.today():
+        if not evento:
+            raise ValidationError(
+                'Debes seleccionar un evento activo antes de registrar asistencias.'
+            )
+
+        if evento.fecha != date.today():
             raise ValidationError(
                 f'El evento {evento.nombre} no está programado para hoy.'
             )
     
+    @staticmethod
+    def _calcular_puntualidad(evento, hora_ingreso):
+        if not evento or not hora_ingreso:
+            return Asistencia.PUNTUALIDAD_NO_APLICA
+
+        config = ConfiguracionSistema.objects.first()
+        tolerancia = config.tolerancia_minutos if config else 15
+
+        fecha_ref = date.today()
+        hora_limite = datetime.combine(fecha_ref, evento.hora_ingreso) + timedelta(minutes=tolerancia)
+        ingreso = datetime.combine(fecha_ref, hora_ingreso)
+        return Asistencia.PUNTUALIDAD_PUNTUAL if ingreso <= hora_limite else Asistencia.PUNTUALIDAD_TARDE
+
     @staticmethod
     def _validar_ingreso_duplicado(asistencia, usuario, evento):
         """

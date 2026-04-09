@@ -94,7 +94,16 @@
                                             </div>
                                         </td>
                                         <td class="px-10 py-6 text-right">
-                                            {% if asistencia.es_justificada %}
+                                            {% if asistencia.is_late_absent %}
+                                                <div class="inline-flex flex-col items-end gap-1">
+                                                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-red-50 text-red-600 border border-red-100">
+                                                        FALTO
+                                                    </span>
+                                                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-600 border border-amber-100">
+                                                        TARDE
+                                                    </span>
+                                                </div>
+                                            {% elif asistencia.es_justificada %}
                                                 <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-primary-50 text-primary-600 border border-primary-100">
                                                     <i class="bi bi-info-circle-fill"></i> JUSTIFICADA
                                                 </span>
