@@ -1979,13 +1979,55 @@ def modulo_gestion_carnets(request):
         except Usuario.DoesNotExist:
             pass
 
-    ultimos_carnets = HistorialCarnet.objects.all().order_by('-fecha_emision', '-id')[:10]
+    from django.db.models import Q
+    from django.core.paginator import Paginator
+    
+    # 0. Últimas Emisiones (HistorialCarnet)
+    ultimos_carnets_qs = HistorialCarnet.objects.all().order_by('-fecha_emision', '-id')
+    page_emisiones_number = request.GET.get('page_emisiones')
+    paginator_emisiones = Paginator(ultimos_carnets_qs, 16)
+    ultimos_carnets = paginator_emisiones.get_page(page_emisiones_number)
+    
+    # 1. Pendientes de Foto (No tienen foto)
+    filtro_sin_foto = Q(foto_perfil__isnull=True) | Q(foto_perfil='')
+    usuarios_sin_foto_qs = Usuario.objects.filter(filtro_sin_foto).order_by('apellido', 'nombre')
+    count_sin_foto = usuarios_sin_foto_qs.count()
+    
+    page_number = request.GET.get('page')
+    paginator = Paginator(usuarios_sin_foto_qs, 16)
+    usuarios_sin_foto = paginator.get_page(page_number)
+    
+    # 2. Pendientes de Recoger/Entregar (Tienen foto pero NO tienen carnet activo)
+    filtro_con_foto = ~Q(foto_perfil__isnull=True) & ~Q(foto_perfil='')
+    usuarios_sin_recoger_qs = Usuario.objects.filter(filtro_con_foto).exclude(historial_carnets__estado='Activo').order_by('apellido', 'nombre')
+    count_sin_recoger = usuarios_sin_recoger_qs.count()
+    
+    page_recoger_number = request.GET.get('page_recoger')
+    paginator_recoger = Paginator(usuarios_sin_recoger_qs, 16)
+    usuarios_sin_recoger = paginator_recoger.get_page(page_recoger_number)
+    
+    carnets_activos_count = HistorialCarnet.objects.filter(estado='Activo').count()
+    
+    if page_number:
+        active_tab = 'pendientes'
+    elif page_recoger_number:
+        active_tab = 'recoger'
+    elif page_emisiones_number:
+        active_tab = 'emisiones'
+    else:
+        active_tab = 'emisiones'
     
     context = {
         'form': form,
         'ultimos_carnets': ultimos_carnets,
         'usuario_seleccionado': usuario_seleccionado,
         'carnet_activo': carnet_activo,
+        'count_sin_foto': count_sin_foto,
+        'usuarios_sin_foto': usuarios_sin_foto,
+        'count_sin_recoger': count_sin_recoger,
+        'usuarios_sin_recoger': usuarios_sin_recoger,
+        'carnets_activos_count': carnets_activos_count,
+        'active_tab': active_tab,
     }
     return render(request, 'asistencia/gestion_carnets.html', context)
 

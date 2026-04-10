@@ -259,7 +259,7 @@
                                     class="h-11 px-6 py-3 bg-primary-600 text-white rounded-xl font-bold text-xs hover:bg-primary-700 transition-all">
                                 Aplicar Filtros Avanzados
                             </button>
-                            <button type="button" onclick="window.location.href='{% url 'historial_asistencias' %}'"
+                            <button type="button" data-url="{% url 'historial_asistencias' %}" onclick="window.location.href=this.getAttribute('data-url')"
                                     class="h-11 px-6 py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-xs hover:bg-slate-200 transition-all">
                                 Limpiar Filtros
                             </button>
