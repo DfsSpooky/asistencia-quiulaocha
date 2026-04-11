@@ -217,6 +217,8 @@
                             {% else %}
                                 -
                             {% endif %}
+                        {% elif item.usuario.estado == 'EXONERADO' %}
+                            <span class="badge" style="background-color: #dbeafe; color: #1d4ed8;">EXONERADO</span>
                         {% else %}
                             <span class="present-text">{{ item.hora_ingreso|date:"H:i"|default:"--" }}</span>
                         {% endif %}
@@ -230,6 +232,8 @@
                             {% else %}
                                 -
                             {% endif %}
+                        {% elif item.usuario.estado == 'EXONERADO' %}
+                            <span class="badge" style="background-color: #dbeafe; color: #1d4ed8;">EXONERADO</span>
                         {% else %}
                             <span style="color: #9a3412;">{{ item.hora_salida|date:"H:i"|default:"--" }}</span>
                         {% endif %}

@@ -522,6 +522,10 @@
                                     <span style="color: #dc2626; font-weight: 800; font-size: 9px;">AUSENTE</span>
                                 </td>
                             {% endif %}
+                        {% elif item.usuario.estado == 'EXONERADO' %}
+                            <td colspan="2" style="text-align: center;">
+                                <span style="color: #1d4ed8; font-weight: 800; font-size: 9px;">EXONERADO</span>
+                            </td>
                         {% else %}
                             <td style="color: #10b981; font-weight: 700;">{{ item.hora_ingreso|date:"H:i"|default:"--" }}</td>
                             <td style="color: #f59e0b; font-weight: 700;">{{ item.hora_salida|date:"H:i"|default:"--" }}</td>
@@ -557,5 +561,4 @@
         </div>
     </body>
 </html>
-
 

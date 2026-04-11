@@ -152,16 +152,18 @@
                 <span class="text-[10px] font-black text-slate-400 uppercase">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
                 <div class="flex gap-2">
                     {% if page_obj.has_previous %}
-                        <a hx-get="?page={{ page_obj.previous_page_number }}&dni={{ form.dni.value|default:'' }}&fecha_inicio={{ form.fecha_inicio.value|default:'' }}&fecha_fin={{ form.fecha_fin.value|default:'' }}&evento={{ form.evento.value|default:'' }}&ubicacion={{ form.ubicacion.value|default:'' }}&confirmada={{ form.confirmada.value|default:'' }}&estado={{ form.estado.value|default:'' }}&ordenar_por={{ form.ordenar_por.value|default:'' }}" 
+                        <a href="?page={{ page_obj.previous_page_number }}&dni={{ form.dni.value|default:'' }}&fecha_inicio={{ form.fecha_inicio.value|default:'' }}&fecha_fin={{ form.fecha_fin.value|default:'' }}&evento={{ form.evento.value|default:'' }}&ubicacion={{ form.ubicacion.value|default:'' }}&confirmada={{ form.confirmada.value|default:'' }}&estado={{ form.estado.value|default:'' }}&ordenar_por={{ form.ordenar_por.value|default:'' }}"
+                           hx-get="?page={{ page_obj.previous_page_number }}&dni={{ form.dni.value|default:'' }}&fecha_inicio={{ form.fecha_inicio.value|default:'' }}&fecha_fin={{ form.fecha_fin.value|default:'' }}&evento={{ form.evento.value|default:'' }}&ubicacion={{ form.ubicacion.value|default:'' }}&confirmada={{ form.confirmada.value|default:'' }}&estado={{ form.estado.value|default:'' }}&ordenar_por={{ form.ordenar_por.value|default:'' }}"
                            hx-target="#attendance-content-area"
-                           hx-select="#attendance-content-area"
+                           hx-swap="outerHTML"
                            hx-push-url="true"
                            class="px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-50 cursor-pointer">Anterior</a>
                     {% endif %}
                     {% if page_obj.has_next %}
-                        <a hx-get="?page={{ page_obj.next_page_number }}&dni={{ form.dni.value|default:'' }}&fecha_inicio={{ form.fecha_inicio.value|default:'' }}&fecha_fin={{ form.fecha_fin.value|default:'' }}&evento={{ form.evento.value|default:'' }}&ubicacion={{ form.ubicacion.value|default:'' }}&confirmada={{ form.confirmada.value|default:'' }}&estado={{ form.estado.value|default:'' }}&ordenar_por={{ form.ordenar_por.value|default:'' }}" 
+                        <a href="?page={{ page_obj.next_page_number }}&dni={{ form.dni.value|default:'' }}&fecha_inicio={{ form.fecha_inicio.value|default:'' }}&fecha_fin={{ form.fecha_fin.value|default:'' }}&evento={{ form.evento.value|default:'' }}&ubicacion={{ form.ubicacion.value|default:'' }}&confirmada={{ form.confirmada.value|default:'' }}&estado={{ form.estado.value|default:'' }}&ordenar_por={{ form.ordenar_por.value|default:'' }}"
+                           hx-get="?page={{ page_obj.next_page_number }}&dni={{ form.dni.value|default:'' }}&fecha_inicio={{ form.fecha_inicio.value|default:'' }}&fecha_fin={{ form.fecha_fin.value|default:'' }}&evento={{ form.evento.value|default:'' }}&ubicacion={{ form.ubicacion.value|default:'' }}&confirmada={{ form.confirmada.value|default:'' }}&estado={{ form.estado.value|default:'' }}&ordenar_por={{ form.ordenar_por.value|default:'' }}"
                            hx-target="#attendance-content-area"
-                           hx-select="#attendance-content-area"
+                           hx-swap="outerHTML"
                            hx-push-url="true"
                            class="px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-50 cursor-pointer">Siguiente</a>
                     {% endif %}

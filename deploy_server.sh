@@ -78,6 +78,9 @@ if [ ! -f "$ENV_FILE" ]; then
     grep -q "CSRF_COOKIE_SECURE" "$ENV_FILE" || echo "CSRF_COOKIE_SECURE=True" >> "$ENV_FILE"
     grep -q "DEBUG" "$ENV_FILE" || echo "DEBUG=False" >> "$ENV_FILE"
     grep -q "SECRET_KEY" "$ENV_FILE" || echo "SECRET_KEY=$(generate_secret_key)" >> "$ENV_FILE"
+    # Clave dedicada para firma de QR. Debe mantenerse estable entre migraciones de servidor.
+    grep -q "QR_SIGNING_KEY" "$ENV_FILE" || echo "QR_SIGNING_KEY=$(generate_secret_key)" >> "$ENV_FILE"
+    grep -q "QR_SIGNING_FALLBACK_KEYS" "$ENV_FILE" || echo "QR_SIGNING_FALLBACK_KEYS=" >> "$ENV_FILE"
 
     chown "$USER_HESTIA:$USER_HESTIA" "$ENV_FILE"
     chmod 600 "$ENV_FILE"

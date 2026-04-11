@@ -26,6 +26,14 @@ class AdminJustificacionForm(JustificacionForm):
     class Meta(JustificacionForm.Meta):
         fields = ['usuario', 'evento', 'motivo', 'evidencia']
 
+    def clean_usuario(self):
+        usuario = self.cleaned_data.get('usuario')
+        if usuario and usuario.estado == Usuario.ESTADO_EXONERADO:
+            raise forms.ValidationError(
+                'Este usuario es exonerado y no se puede proceder con una justificación.'
+            )
+        return usuario
+
 class FiltroAsistenciaForm(forms.Form):
     dni = forms.CharField(required=False, label='DNI')
     fecha_inicio = forms.DateField(required=False, label='Fecha Inicio', widget=forms.DateInput(attrs={'type': 'date'}))
@@ -164,3 +172,48 @@ class AdminCarnetForm(CarnetForm):
     class Meta(CarnetForm.Meta):
         fields = ['usuario', 'motivo', 'fecha_vencimiento', 'observaciones']
 
+class MultipleFileInput(forms.ClearableFileInput):
+    allow_multiple_selected = True
+
+class CargaMasivaFotosForm(forms.Form):
+    fotos = forms.FileField(
+        widget=MultipleFileInput(attrs={'multiple': True, 'accept': '.jpg,.jpeg,.png,.webp,image/*'}),
+        label='Seleccione las fotos a cargar',
+        help_text='Los nombres de los archivos deben ser el DNI del usuario (ej: 12345678.jpg).',
+        required=True
+    )
+
+    ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.webp'}
+    MAX_FILE_SIZE = 5 * 1024 * 1024
+
+    def clean(self):
+        cleaned_data = super().clean()
+        fotos = self.files.getlist('fotos')
+
+        if not fotos:
+            raise forms.ValidationError('Debe seleccionar al menos una foto.')
+
+        for foto in fotos:
+            nombre = (foto.name or '').strip()
+            if '.' not in nombre:
+                raise forms.ValidationError(f'El archivo "{nombre}" no tiene extension valida.')
+
+            dni = nombre.rsplit('.', 1)[0].strip()
+            extension = f".{nombre.rsplit('.', 1)[1].lower()}"
+
+            if not (dni.isdigit() and len(dni) == 8):
+                raise forms.ValidationError(
+                    f'El archivo "{nombre}" no cumple el formato de DNI (8 digitos).'
+                )
+
+            if extension not in self.ALLOWED_EXTENSIONS:
+                raise forms.ValidationError(
+                    f'El archivo "{nombre}" no tiene una extension permitida (jpg, jpeg, png, webp).'
+                )
+
+            if foto.size > self.MAX_FILE_SIZE:
+                raise forms.ValidationError(
+                    f'El archivo "{nombre}" supera el tamano maximo de 5 MB.'
+                )
+
+        return cleaned_data

@@ -44,6 +44,7 @@
                 </div>
             </div>
         </div>
+        {{ report_years|json_script:"report-years-data" }}
 
         <!-- RE-INTEGRATED Report Tools (Moved to Top) -->
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -97,7 +98,7 @@
                   hx-get="{% url 'historial_asistencias' %}"
                   hx-trigger="submit, change from:#evento-select, change from:#estado-select, input from:#dni-input delay:500ms"
                   hx-target="#attendance-content-area"
-                  hx-swap="innerHTML"
+                  hx-swap="outerHTML"
                   hx-push-url="true"
                   class="space-y-8">
                 
@@ -216,7 +217,7 @@
 
                         <div class="lg:col-span-3 space-y-2">
                             <label class="text-[10px] font-bold text-slate-400 uppercase">Estado de Asistencia</label>
-                            <select name="estado" class="select2-searchable advanced-select">
+                            <select id="estado-advanced-select" class="select2-searchable advanced-select">
                                 <option value="" {% if not form.estado.value %}selected{% endif %}>Todos (Asistencias + Faltas)</option>
                                 <option value="asistieron" {% if form.estado.value == 'asistieron' %}selected{% endif %}>Solo Asistieron</option>
                                 <option value="pendientes" {% if form.estado.value == 'pendientes' %}selected{% endif %}>Pendientes (Sin salida)</option>
@@ -334,7 +335,7 @@
                 const start = startInput.value;
                 const end = endInput.value;
                 if (start && end && start > end) {
-                    Swal.fire('Rango invÃ¡lido', 'La fecha inicio no puede ser mayor que la fecha fin.', 'warning');
+                    Swal.fire('Rango inválido', 'La fecha inicio no puede ser mayor que la fecha fin.', 'warning');
                     return false;
                 }
                 return true;
@@ -368,17 +369,38 @@
                 const trigger = document.querySelector('[data-global-report-url]');
                 if (!trigger) return;
 
+                const yearsDataElement = document.getElementById('report-years-data');
+                const availableYears = yearsDataElement ? JSON.parse(yearsDataElement.textContent || '[]') : [];
+                if (!availableYears.length) {
+                    Swal.fire('Sin eventos', 'No hay eventos registrados para generar el reporte global anual.', 'warning');
+                    return;
+                }
+
+                const options = {};
+                availableYears.forEach((year) => {
+                    options[String(year)] = String(year);
+                });
+
                 Swal.fire({
-                    title: 'Generar Reporte Global',
-                    text: "¿Deseas descargar el consolidado anual de todos los eventos? Este proceso puede tardar unos segundos.",
+                    title: 'Generar Reporte Global Anual',
+                    text: 'Selecciona el año que deseas exportar (enero a diciembre).',
+                    input: 'select',
+                    inputOptions: options,
+                    inputValue: String(availableYears[0]),
                     icon: 'info',
                     showCancelButton: true,
                     confirmButtonColor: '#eab308',
-                    confirmButtonText: 'Sí, descargar',
-                    cancelButtonText: 'Cancelar'
+                    confirmButtonText: 'Generar',
+                    cancelButtonText: 'Cancelar',
+                    inputValidator: (value) => {
+                        if (!value) return 'Debes seleccionar un año.';
+                        return null;
+                    }
                 }).then((result) => {
                     if (result.isConfirmed) {
-                        window.open(trigger.dataset.globalReportUrl, '_blank');
+                        const selectedYear = encodeURIComponent(result.value);
+                        const reportUrl = `${trigger.dataset.globalReportUrl}?year=${selectedYear}`;
+                        window.open(reportUrl, '_blank');
                     }
                 });
             };
@@ -443,6 +465,15 @@
 
 window.applyAdvancedFilters = function() {
                 if (!validateAdvancedFilters()) return;
+
+                const advancedEstado = document.getElementById('estado-advanced-select');
+                const mainEstado = document.getElementById('estado-select');
+                if (advancedEstado && mainEstado) {
+                    mainEstado.value = advancedEstado.value;
+                    if (window.jQuery && window.jQuery.fn && window.jQuery.fn.select2) {
+                        window.jQuery(mainEstado).trigger('change.select2');
+                    }
+                }
 
                 historialState.showFiltersAppliedToast = true;
                 triggerFilterForm('submit');

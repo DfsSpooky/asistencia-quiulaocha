@@ -1,8 +1,13 @@
 services:
   web:
-    # Para desarrollo local usamos runserver + bind mount para hot-reload.
-    command: python manage.py runserver 0.0.0.0:8000
+    # En local mantenemos el mismo flujo que despliegue (espera DB + migrate + collectstatic + gunicorn).
+    command: /bin/sh /app/scripts/start-web.sh
+    env_file:
+      - ./.env
     volumes:
       - .:/app
-    ports:
-      - "8001:8000"
+      - ./staticfiles:/app/staticfiles
+      - ./media:/app/media
+  db:
+    env_file:
+      - ./.env

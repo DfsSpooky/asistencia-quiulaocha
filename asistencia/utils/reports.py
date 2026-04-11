@@ -20,6 +20,7 @@ except ImportError:
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 from ..models import Usuario, Asistencia, ConfiguracionSistema, Justificacion, Evento
+from .attendance_rules import classify_attendance_item
 
 from django.db.models import Q
 
@@ -71,19 +72,28 @@ def get_filtered_attendance_data(filters):
     asistencias_regulares = asistencias_base.filter(es_justificada=False)
     tardy_asistencias = None
     if tardanza_activa:
-        tardy_asistencias = asistencias_regulares.filter(puntualidad=Asistencia.PUNTUALIDAD_TARDE)
+        # Los exonerados no deben penalizarse por tardanza.
+        tardy_asistencias = asistencias_regulares.filter(
+            puntualidad=Asistencia.PUNTUALIDAD_TARDE
+        ).exclude(usuario__estado=Usuario.ESTADO_EXONERADO)
 
     if estado == 'asistieron':
         asistencias = asistencias_confirmadas.filter(es_justificada=False)
         if tardanza_activa:
-            asistencias = asistencias.exclude(puntualidad=Asistencia.PUNTUALIDAD_TARDE)
+            asistencias = asistencias.exclude(
+                puntualidad=Asistencia.PUNTUALIDAD_TARDE,
+                usuario__estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_PASIVO],
+            )
         usuarios_no_asistentes = None
     elif estado == 'pendientes':
         # Pendientes: Tienen ingreso pero NO tiene salida
         # Pendientes: Tienen ingreso pero NO tiene salida (y NO son exonerados)
         asistencias = asistencias_confirmadas.filter(hora_salida__isnull=True).exclude(usuario__estado='EXONERADO')
         if tardanza_activa:
-            asistencias = asistencias.exclude(puntualidad=Asistencia.PUNTUALIDAD_TARDE)
+            asistencias = asistencias.exclude(
+                puntualidad=Asistencia.PUNTUALIDAD_TARDE,
+                usuario__estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_PASIVO],
+            )
         usuarios_no_asistentes = None
     elif estado in ['faltaron', 'faltas_justificadas', 'faltas_injustificadas']:
         if estado == 'faltaron':
@@ -96,7 +106,7 @@ def get_filtered_attendance_data(filters):
             asistencias = asistencias_justificadas
         elif estado == 'faltas_injustificadas':
             # Faltas injustificadas = Sin registro y sin justificacion
-            asistencias = asistencias.none()
+            asistencias = asistencias_base.none()
             if tardanza_activa and tardy_asistencias is not None:
                 asistencias = tardy_asistencias
 
@@ -258,11 +268,10 @@ def get_filtered_attendance_data(filters):
     
     # Agregar asistentes (y faltas justificadas con registro)
     for a in asistencias:
-        a.is_late_absent = bool(
-            tardanza_activa and getattr(a, 'puntualidad', None) == Asistencia.PUNTUALIDAD_TARDE
-        )
+        flags = classify_attendance_item(a, tardanza_activa)
+        a.is_late_absent = flags.is_late_absent
         # Si es justificada o tardÃ­a fuera de lÃ­mite, la tratamos como ausencia.
-        a.is_absent = a.es_justificada or a.is_late_absent
+        a.is_absent = flags.is_absent
         if a.es_justificada:
             a.justificacion_obs = justificacion_map.get((a.usuario_id, a.evento_id), "")
         unified_report.append(a)
@@ -322,14 +331,18 @@ def generate_attendance_csv(unified_list):
             # Exonerados siempre ASISTIÃ“ si tienen registro, otros dependen de salida
             if item.usuario.estado == 'EXONERADO':
                 estado = 'ASISTIÃ“'
+                ingreso_valor = 'EXONERADO'
+                salida_valor = 'EXONERADO'
             else:
                 estado = 'ASISTIÃ“' if item.hora_salida else 'PENDIENTE'
+                ingreso_valor = item.hora_ingreso.strftime('%H:%M') if item.hora_ingreso else 'No registrado'
+                salida_valor = item.hora_salida.strftime('%H:%M') if item.hora_salida else 'No registrado'
             writer.writerow([
                 f"{item.usuario.nombre} {item.usuario.apellido}",
                 item.usuario.dni,
                 item.fecha.strftime('%d/%m/%Y') if item.fecha else '',
-                item.hora_ingreso.strftime('%H:%M') if item.hora_ingreso else 'No registrado',
-                item.hora_salida.strftime('%H:%M') if item.hora_salida else 'No registrado',
+                ingreso_valor,
+                salida_valor,
                 item.ubicacion.nombre if item.ubicacion else 'Sin ubicaciÃ³n',
                 item.evento.nombre if item.evento else 'Sin evento',
                 estado,
@@ -413,14 +426,18 @@ def generate_attendance_excel(unified_list, filename="asistencias.xlsx"):
             # Registro de asistencia
             if item.usuario.estado == 'EXONERADO':
                 estado = 'ASISTIÃ“'
+                ingreso_valor = 'EXONERADO'
+                salida_valor = 'EXONERADO'
             else:
                 estado = 'ASISTIÃ“' if item.hora_salida else 'PENDIENTE'
+                ingreso_valor = item.hora_ingreso.strftime('%H:%M') if item.hora_ingreso else '--'
+                salida_valor = item.hora_salida.strftime('%H:%M') if item.hora_salida else '--'
             data = [
                 f"{item.usuario.nombre} {item.usuario.apellido}",
                 item.usuario.dni,
                 item.fecha.strftime('%d/%m/%Y') if item.fecha else '',
-                item.hora_ingreso.strftime('%H:%M') if item.hora_ingreso else '--',
-                item.hora_salida.strftime('%H:%M') if item.hora_salida else '--',
+                ingreso_valor,
+                salida_valor,
                 item.ubicacion.nombre if item.ubicacion else 'General',
                 item.evento.nombre if item.evento else 'Sin evento',
                 estado,
@@ -662,8 +679,12 @@ def generate_global_attendance_excel(report_data, system_config):
             else:
                 cell_status.font = Font(color="059669", bold=True)
                 
-            ws_detail.cell(row=curr_row, column=5, value=rec.get('hora_ingreso').strftime('%H:%M:%S') if rec.get('hora_ingreso') else "--")
-            ws_detail.cell(row=curr_row, column=6, value=rec.get('hora_salida').strftime('%H:%M:%S') if rec.get('hora_salida') else "--")
+            if rec['usuario'].estado == 'EXONERADO' and not rec.get('is_absent'):
+                ws_detail.cell(row=curr_row, column=5, value="EXONERADO")
+                ws_detail.cell(row=curr_row, column=6, value="EXONERADO")
+            else:
+                ws_detail.cell(row=curr_row, column=5, value=rec.get('hora_ingreso').strftime('%H:%M:%S') if rec.get('hora_ingreso') else "--")
+                ws_detail.cell(row=curr_row, column=6, value=rec.get('hora_salida').strftime('%H:%M:%S') if rec.get('hora_salida') else "--")
             observacion = rec.get('justificacion_obs', "")
             if rec.get('is_late_absent'):
                 observacion = "TARDE" if not observacion else f"{observacion} | TARDE"
@@ -696,4 +717,3 @@ def generate_global_attendance_excel(report_data, system_config):
     )
     response['Content-Disposition'] = f'attachment; filename="reporte_global_{datetime.now().year}.xlsx"'
     return response
-

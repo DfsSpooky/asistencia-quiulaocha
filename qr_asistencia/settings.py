@@ -37,6 +37,11 @@ if not SECRET_KEY and not DEBUG:
 elif not SECRET_KEY:
     SECRET_KEY = "django-insecure-dev-only-change-me"
 
+# Clave dedicada para firma de QR.
+# Mantener estable entre servidores para no invalidar carnets por migraciones.
+QR_SIGNING_KEY = os.environ.get("QR_SIGNING_KEY", SECRET_KEY)
+QR_SIGNING_FALLBACK_KEYS = [k.strip() for k in os.environ.get("QR_SIGNING_FALLBACK_KEYS", "").split(",") if k.strip()]
+
 default_allowed_hosts = "*" if DEBUG else "localhost,127.0.0.1"
 ALLOWED_HOSTS = get_csv("ALLOWED_HOSTS", default_allowed_hosts)
 ALLOWED_HOSTS.extend(get_csv("EXTRA_ALLOWED_HOSTS", ""))
@@ -173,7 +178,7 @@ STATIC_ROOT = resolve_path(get_first("STATIC_ROOT", default="staticfiles"), base
 
 MEDIA_URL = os.environ.get("MEDIA_URL", "/media/")
 MEDIA_ROOT = resolve_path(get_first("MEDIA_ROOT", default="media"), base_dir=BASE_DIR)
-SERVE_MEDIA_FILES = get_bool("SERVE_MEDIA_FILES", True)
+SERVE_MEDIA_FILES = get_bool("SERVE_MEDIA_FILES", DEBUG)
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

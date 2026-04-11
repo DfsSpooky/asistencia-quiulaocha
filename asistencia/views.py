@@ -6,7 +6,7 @@ from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.views import LoginView, LogoutView
 from django.contrib import messages
 from django.core.exceptions import ValidationError
-from django.core.signing import BadSignature, Signer
+from django.core.signing import BadSignature
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_POST
 from django.utils.decorators import method_decorator
@@ -42,6 +42,8 @@ from .utils.reports import (
     generate_attendance_csv, generate_attendance_excel, 
     generate_pdf_report, get_logo_base64, get_filtered_attendance_data
 )
+from .utils.attendance_rules import classify_attendance_item
+from .qr_security import decode_qr_encoded_payload
 import io
 import json
 import os
@@ -250,6 +252,15 @@ def lista_usuarios(request):
             usuarios = usuarios.order_by(ordenar_por)
         else:
             usuarios = usuarios.order_by('dni')
+
+    usuarios = usuarios.annotate(
+        tiene_carnet_activo=models.Exists(
+            HistorialCarnet.objects.filter(
+                usuario=models.OuterRef('pk'),
+                estado='Activo',
+            )
+        )
+    )
     
     # Calcular estadÃƒÂ­sticas basadas en los resultados filtrados
     total_usuarios = usuarios.count()
@@ -342,6 +353,56 @@ def _absolute_media_url(request, relative_or_absolute_url):
     return request.build_absolute_uri(relative_or_absolute_url)
 
 
+def _compute_unified_stats(unified_list, total_padron, tardanza_activa):
+    for item in unified_list:
+        flags = classify_attendance_item(item, tardanza_activa)
+        item.is_late_absent = flags.is_late_absent
+        item.is_absent = flags.is_absent
+
+    asistencias_fisicas = sum(
+        1 for item in unified_list if not getattr(item, 'is_absent', False) and (
+            getattr(item, 'hora_salida', None) or item.usuario.estado == Usuario.ESTADO_EXONERADO
+        )
+    )
+    justificadas = sum(1 for item in unified_list if getattr(item, 'es_justificada', False))
+    inasistencias_reales = sum(
+        1 for item in unified_list if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False)
+    )
+    pendientes = sum(
+        1 for item in unified_list if not getattr(item, 'is_absent', False) and not getattr(item, 'hora_salida', None)
+        and item.usuario.estado != Usuario.ESTADO_EXONERADO
+    )
+    total_tardanzas = sum(1 for item in unified_list if getattr(item, 'is_late_absent', False))
+    total_asistentes_efectivos = asistencias_fisicas + justificadas
+    porcentaje_asistencia = (total_asistentes_efectivos / total_padron * 100) if total_padron > 0 else 0
+
+    return {
+        'asistencias_fisicas': asistencias_fisicas,
+        'justificadas': justificadas,
+        'inasistencias_reales': inasistencias_reales,
+        'pendientes': pendientes,
+        'total_tardanzas': total_tardanzas,
+        'total_asistentes_efectivos': total_asistentes_efectivos,
+        'porcentaje_asistencia': porcentaje_asistencia,
+    }
+
+
+def _build_exonerado_consistency_alert(unified_list):
+    total_exonerados_padron = Usuario.objects.filter(estado=Usuario.ESTADO_EXONERADO).count()
+    exonerados_presentes = sum(
+        1 for item in unified_list
+        if getattr(getattr(item, 'usuario', None), 'estado', None) == Usuario.ESTADO_EXONERADO
+        and not getattr(item, 'is_absent', False)
+    )
+    mismatch = total_exonerados_padron - exonerados_presentes
+    return {
+        'total_exonerados_padron': total_exonerados_padron,
+        'exonerados_presentes': exonerados_presentes,
+        'mismatch': mismatch,
+        'has_mismatch': mismatch != 0,
+    }
+
+
 def _build_event_report_context(evento, filters=None):
     filters = filters or {}
     filters = {**filters, 'evento': evento}
@@ -355,39 +416,20 @@ def _build_event_report_context(evento, filters=None):
         estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_EXONERADO, Usuario.ESTADO_PASIVO]
     ).count()
 
-    asistencias_fisicas = sum(
-        1 for item in unified_list
-        if not getattr(item, 'is_absent', False) and (getattr(item, 'hora_salida', None) or item.usuario.estado == 'EXONERADO')
-    )
-    justificadas = sum(1 for item in unified_list if getattr(item, 'es_justificada', False))
-    inasistencias_reales = sum(
-        1 for item in unified_list
-        if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False)
-    )
-    pendientes = sum(
-        1 for item in unified_list
-        if not getattr(item, 'is_absent', False) and not getattr(item, 'hora_salida', None) and item.usuario.estado != 'EXONERADO'
-    )
-    total_tardanzas = 0
-    if tardanza_activa:
-        total_tardanzas = sum(
-            1 for item in unified_list
-            if getattr(item, 'puntualidad', None) == Asistencia.PUNTUALIDAD_TARDE
-        )
-
-    total_asistentes_efectivos = asistencias_fisicas + justificadas
-    porcentaje_asistencia = (total_asistentes_efectivos / total_padron * 100) if total_padron > 0 else 0
+    stats = _compute_unified_stats(unified_list, total_padron, tardanza_activa)
+    exonerado_alert = _build_exonerado_consistency_alert(unified_list)
 
     context = {
         'evento': evento,
         'unified_list': unified_list,
         'total_usuarios': total_padron,
-        'total_asistentes': asistencias_fisicas,
-        'justificadas': justificadas,
-        'total_inasistentes': inasistencias_reales,
-        'pendientes': pendientes,
-        'total_tardanzas': total_tardanzas,
-        'porcentaje_asistencia': porcentaje_asistencia,
+        'total_asistentes': stats['total_asistentes_efectivos'],
+        'justificadas': stats['justificadas'],
+        'total_inasistentes': stats['inasistencias_reales'],
+        'pendientes': stats['pendientes'],
+        'total_tardanzas': stats['total_tardanzas'],
+        'porcentaje_asistencia': stats['porcentaje_asistencia'],
+        'exonerado_alert': exonerado_alert,
         'current_date': timezone.localtime(timezone.now()).strftime('%d/%m/%Y %H:%M'),
         'logo_base64': get_logo_base64(),
         'sistema_config': sistema_config,
@@ -515,10 +557,17 @@ class RegistrarAsistencia(APIView):
             )
         
         try:
-            # Decodificamos y verificamos la firma para asegurar que el QR fue emitido por el servidor.
-            signed_dni = base64.b64decode(encoded_dni).decode()
-            dni = Signer().unsign(signed_dni)
-            usuario = Usuario.objects.get(dni=dni)
+            # Verificamos firma y resolvemos el usuario por esquema actual (uid) o legado (dni).
+            decoded_qr = decode_qr_encoded_payload(encoded_dni)
+            if decoded_qr["kind"] == "uid_v1":
+                usuario = Usuario.objects.get(qr_uid=decoded_qr["qr_uid"])
+                if usuario.qr_version != decoded_qr["qr_version"]:
+                    return Response(
+                        {'error': 'Este código QR fue reemplazado por renovación/reposición. Solicite su carnet vigente.'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
+            else:
+                usuario = Usuario.objects.get(dni=decoded_qr["dni"])
             
             # Obtener evento si fue especificado
             evento = None
@@ -556,6 +605,11 @@ class RegistrarAsistencia(APIView):
                 'nombre': f"{usuario.nombre} {usuario.apellido}",
                 'dni': usuario.dni,
                 'estado': usuario.get_estado_display(),
+                'is_exonerado': usuario.estado == Usuario.ESTADO_EXONERADO,
+                'policy_note': (
+                    'USUARIO EXONERADO: ADELANTE (sin penalización).'
+                    if usuario.estado == Usuario.ESTADO_EXONERADO else ''
+                ),
                 'foto_perfil': _absolute_media_url(request, usuario.foto_perfil_url)
             }, status=status.HTTP_201_CREATED)
             
@@ -707,9 +761,16 @@ def historial_asistencias(request):
     page_number = request.GET.get('page')
     page_obj = paginator.get_page(page_number)
     
+    report_years = list(
+        Evento.objects.order_by('-fecha')
+        .values_list('fecha__year', flat=True)
+        .distinct()
+    )
+
     context = {
         'page_obj': page_obj,
         'form': form,
+        'report_years': report_years,
         'can_scan_qr': request.user.has_perm('asistencia.can_scan_qr'),
         'stats': {
             'total': total_registros,
@@ -742,8 +803,19 @@ def descargar_reporte_global_pdf(request):
     sistema_config = ConfiguracionSistema.objects.first()
     tardanza_activa = bool(sistema_config and sistema_config.tardanza_activa)
 
-    # Obtener todos los eventos ordenados por fecha ascendente
-    eventos = Evento.objects.all().order_by('fecha')
+    selected_year_raw = request.GET.get('year')
+    try:
+        selected_year = int(selected_year_raw) if selected_year_raw else timezone.localdate().year
+    except (TypeError, ValueError):
+        return HttpResponse("El parámetro 'year' no es válido.", status=400)
+
+    # Obtener eventos del año seleccionado ordenados por fecha ascendente (enero a diciembre)
+    eventos = Evento.objects.filter(fecha__year=selected_year).order_by('fecha')
+    if not eventos.exists():
+        return HttpResponse(
+            f"No hay eventos registrados para el año {selected_year}.",
+            status=404
+        )
     
     report_data = []
     total_general_asistencias = 0
@@ -758,7 +830,9 @@ def descargar_reporte_global_pdf(request):
         records = []
         for a in asistencias:
             is_late_absent = bool(
-                tardanza_activa and getattr(a, 'puntualidad', None) == Asistencia.PUNTUALIDAD_TARDE
+                tardanza_activa
+                and getattr(a, 'puntualidad', None) == Asistencia.PUNTUALIDAD_TARDE
+                and a.usuario.estado != Usuario.ESTADO_EXONERADO
             )
             records.append({
                 'usuario': a.usuario,
@@ -806,16 +880,17 @@ def descargar_reporte_global_pdf(request):
         'logo_base64': get_logo_base64(),
         'current_date': timezone.localtime(timezone.now()).strftime('%d/%m/%Y %H:%M'),
         'sistema_config': sistema_config,
+        'selected_year': selected_year,
         'total_eventos': len(eventos),
     }
     
     LogAccion.objects.create(
         usuario=request.user,
         accion="Descargar Reporte Global PDF",
-        descripcion=f"{request.user.username} generÃƒÂ³ el reporte anual consolidado de {len(eventos)} eventos."
+        descripcion=f"{request.user.username} generó el reporte anual consolidado {selected_year} de {len(eventos)} eventos."
     )
     
-    return generate_pdf_report('asistencia/reporte_global_anual.html', context, f"reporte_global_{datetime.now().year}.pdf")
+    return generate_pdf_report('asistencia/reporte_global_anual.html', context, f"reporte_global_{selected_year}.pdf")
 
 @login_required
 @permission_required('asistencia.can_manage_users', raise_exception=True)
@@ -1063,7 +1138,9 @@ def exportar_reporte_global_excel(request):
         records = []
         for a in asistencias:
             is_late_absent = bool(
-                tardanza_activa and getattr(a, 'puntualidad', None) == Asistencia.PUNTUALIDAD_TARDE
+                tardanza_activa
+                and getattr(a, 'puntualidad', None) == Asistencia.PUNTUALIDAD_TARDE
+                and a.usuario.estado != Usuario.ESTADO_EXONERADO
             )
             records.append({
                 'usuario': a.usuario,
@@ -1196,7 +1273,9 @@ def descargar_reporte_usuario_pdf(request, dni):
             # Mantener el estado real de justificaciÃƒÂ³n guardado en el registro.
             item.es_justificada = bool(getattr(item, 'es_justificada', False))
             item.is_late_absent = bool(
-                tardanza_activa and getattr(item, 'puntualidad', None) == Asistencia.PUNTUALIDAD_TARDE
+                tardanza_activa
+                and getattr(item, 'puntualidad', None) == Asistencia.PUNTUALIDAD_TARDE
+                and item.usuario.estado != Usuario.ESTADO_EXONERADO
             )
             item.is_absent = item.es_justificada or item.is_late_absent
             unified_list.append(item)
@@ -1325,45 +1404,7 @@ def descargar_reporte_evento_pdf(request, evento_id):
     form = FiltroAsistenciaForm(request.GET or None)
     
     filters = form.cleaned_data if form.is_valid() else {}
-    filters['evento'] = evento  # Forzar el evento
-    
-    data = get_filtered_attendance_data(filters)
-    unified_list = data.get('unified_report', [])
-    
-    # Calcular estadÃƒÂ­sticas: Consideramos Justificadas como "Asistencia Efectiva"
-    total_padron = Usuario.objects.filter(estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_EXONERADO, Usuario.ESTADO_PASIVO]).count()
-    
-    # Asistieron fÃƒÂ­sicamente y confirmados (tienen salida O son exonerados)
-    asistencias_fisicas = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and (getattr(item, 'hora_salida', None) or item.usuario.estado == 'EXONERADO'))
-    # Justificaron (con permiso aprobado)
-    justificadas = sum(1 for item in unified_list if getattr(item, 'es_justificada', False))
-    # Inasistencias reales (ni fueron ni justificaron)
-    inasistencias_reales = sum(1 for item in unified_list if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False))
-    # Pendientes de confirmaciÃƒÂ³n fÃƒÂ­sica
-    pendientes = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and not getattr(item, 'hora_salida', None) and item.usuario.estado != 'EXONERADO')
-    
-    total_asistentes_efectivos = asistencias_fisicas + justificadas
-    porcentaje_asistencia = (total_asistentes_efectivos / total_padron * 100) if total_padron > 0 else 0
-    
-    context = {
-        'evento': evento,
-        'unified_list': unified_list,
-        'total_usuarios': total_padron,
-        'total_asistentes': asistencias_fisicas, # Solo fÃƒÂ¬sicos confirmados
-        'justificadas': justificadas,
-        'total_inasistentes': inasistencias_reales,
-        'pendientes': pendientes,
-        'porcentaje_asistencia': porcentaje_asistencia,
-        'current_date': timezone.localtime(timezone.now()).strftime('%d/%m/%Y %H:%M'),
-        'logo_base64': get_logo_base64(),
-        'sistema_config': ConfiguracionSistema.objects.first(),
-        'filtros': {
-            'dni': filters.get('dni') or 'Todos',
-            'fecha_inicio': filters.get('fecha_inicio').strftime('%d/%m/%Y') if filters.get('fecha_inicio') else None,
-            'fecha_fin': filters.get('fecha_fin').strftime('%d/%m/%Y') if filters.get('fecha_fin') else None,
-            'evento': evento.nombre
-        }
-    }
+    context, _ = _build_event_report_context(evento, filters=filters)
     
     LogAccion.objects.create(
         usuario=request.user,
@@ -1386,6 +1427,20 @@ def cerrar_evento(request, evento_id):
     evento.save(update_fields=['activo'])
 
     context, unified_list = _build_event_report_context(evento)
+    exonerado_alert = context.get('exonerado_alert', {})
+    if exonerado_alert.get('has_mismatch'):
+        evento.activo = True
+        evento.save(update_fields=['activo'])
+        return JsonResponse({
+            'error': (
+                "Inconsistencia detectada en exonerados. "
+                f"Padrón: {exonerado_alert.get('total_exonerados_padron', 0)} vs "
+                f"presentes: {exonerado_alert.get('exonerados_presentes', 0)}. "
+                "Revise antes de cerrar el evento."
+            ),
+            'code': 'EXONERADO_MISMATCH',
+            'alert': exonerado_alert,
+        }, status=409)
     timestamp = timezone.localtime(timezone.now()).strftime('%Y%m%d_%H%M%S')
     closure_dir = os.path.join(settings.MEDIA_ROOT, 'cierres_evento')
     os.makedirs(closure_dir, exist_ok=True)
@@ -1653,7 +1708,9 @@ def perfil_usuario(request):
         tardanza_activa = bool(sistema_config and sistema_config.tardanza_activa)
         for asistencia in asistencias:
             asistencia.is_late_absent = bool(
-                tardanza_activa and getattr(asistencia, 'puntualidad', None) == Asistencia.PUNTUALIDAD_TARDE
+                tardanza_activa
+                and getattr(asistencia, 'puntualidad', None) == Asistencia.PUNTUALIDAD_TARDE
+                and asistencia.usuario.estado != Usuario.ESTADO_EXONERADO
             )
         context = {
             'usuario': usuario,
@@ -1723,7 +1780,7 @@ def actualizar_foto_rapida(request, dni):
               class="absolute inset-0 z-10">
             <label class="absolute inset-0 bg-slate-900/60 rounded-2xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer ring-2 ring-primary-500 ring-offset-1 ring-offset-white" title="Actualizar foto">
                 <i class="bi bi-camera-fill text-white text-lg drop-shadow-md"></i>
-                <input type="file" name="foto" accept="image/*" class="hidden"
+                <input type="file" name="foto" accept="image/*" hx-trigger="change" class="hidden"
                        onchange="if (this.files && this.files.length) this.form.requestSubmit();">
             </label>
         </form>
@@ -1948,25 +2005,80 @@ def modulo_gestion_carnets(request):
     if request.method == 'POST':
         usuario_id = request.POST.get('usuario_id')
         accion = request.POST.get('accion')
-        
-        if usuario_id and accion:
-            usuario = get_object_or_404(Usuario, id=usuario_id)
-            motivo_map = {
-                'primer_carnet': 'Primer Carnet',
-                'reposicion_perdida': 'Reposición por Pérdida',
-                'reposicion_deterioro': 'Reposición por Deterioro',
-                'renovacion': 'Renovación por Vencimiento'
-            }
-            if accion in motivo_map:
+
+        if not (usuario_id and accion):
+            messages.error(request, "Solicitud incompleta: faltan datos para registrar la emisión.")
+            return redirect(reverse('modulo_gestion_carnets'))
+
+        motivo_map = {
+            'primer_carnet': 'Primer Carnet',
+            'reposicion_perdida': 'Reposición por Pérdida/Robo',
+            'reposicion_deterioro': 'Reposición por Deterioro',
+            'renovacion': 'Renovación por Vencimiento'
+        }
+        if accion not in motivo_map:
+            messages.error(request, "Acción de emisión no válida.")
+            return redirect(reverse('modulo_gestion_carnets'))
+
+        try:
+            with transaction.atomic():
+                usuario = Usuario.objects.select_for_update().get(id=usuario_id)
+                carnet_activo_usuario = (
+                    HistorialCarnet.objects.select_for_update()
+                    .filter(usuario=usuario, estado='Activo')
+                    .first()
+                )
+
+                if not usuario.foto_perfil:
+                    messages.error(
+                        request,
+                        f"No se puede emitir carnet para {usuario.nombre} {usuario.apellido} sin fotografía de perfil."
+                    )
+                    return redirect(f"{reverse('modulo_gestion_carnets')}?usuario_id={usuario.id}")
+
+                if accion == 'primer_carnet' and carnet_activo_usuario:
+                    messages.error(
+                        request,
+                        f"{usuario.nombre} {usuario.apellido} ya cuenta con un carnet activo."
+                    )
+                    return redirect(f"{reverse('modulo_gestion_carnets')}?usuario_id={usuario.id}")
+
+                if accion in {'reposicion_perdida', 'reposicion_deterioro', 'renovacion'} and not carnet_activo_usuario:
+                    messages.error(
+                        request,
+                        f"No se puede registrar {motivo_map[accion].lower()} porque el socio no tiene carnet activo."
+                    )
+                    return redirect(f"{reverse('modulo_gestion_carnets')}?usuario_id={usuario.id}")
+
                 motivo = motivo_map[accion]
                 nuevo_carnet = HistorialCarnet(
                     usuario=usuario,
                     motivo=motivo,
-                    estado='Activo'
+                    estado='Activo',
+                    entregado_por=request.user,
                 )
                 nuevo_carnet.save()
-                messages.success(request, f"¡Éxito! Se ha emitido físicamente un '{motivo}' para {usuario.nombre} {usuario.apellido}.")
+
+                LogAccion.objects.create(
+                    usuario=request.user,
+                    accion="Emisión de carnet físico",
+                    descripcion=(
+                        f"{request.user.username} registró '{motivo}' para "
+                        f"{usuario.nombre} {usuario.apellido} (DNI: {usuario.dni})."
+                    ),
+                )
+                messages.success(
+                    request,
+                    f"¡Éxito! Se ha emitido físicamente un '{motivo}' para {usuario.nombre} {usuario.apellido}."
+                )
+
+                if accion in {'reposicion_perdida', 'reposicion_deterioro', 'renovacion'}:
+                    usuario.rotate_qr()
+
                 return redirect(f"{reverse('modulo_gestion_carnets')}?usuario_id={usuario.id}")
+        except Usuario.DoesNotExist:
+            messages.error(request, "No se encontró el socio seleccionado.")
+            return redirect(reverse('modulo_gestion_carnets'))
 
     usuario_id = request.GET.get('usuario_id')
     form = AdminCarnetForm()
@@ -2030,5 +2142,3 @@ def modulo_gestion_carnets(request):
         'active_tab': active_tab,
     }
     return render(request, 'asistencia/gestion_carnets.html', context)
-
-

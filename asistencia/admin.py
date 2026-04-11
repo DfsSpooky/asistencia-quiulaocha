@@ -1,9 +1,15 @@
+import os
 from django import forms
-from django.contrib import admin
+from django.contrib import admin, messages
+from django.core.exceptions import ValidationError
 from django.utils.html import format_html
-from django.urls import reverse
+from django.urls import reverse, path
+from django.template.response import TemplateResponse
+from django.shortcuts import redirect
+from django.http import JsonResponse
 from .models import Usuario, Asistencia, Ubicacion, Evento, LogAccion, ConfiguracionSistema, Justificacion
 from .audit import log_critical_change
+from .forms import CargaMasivaFotosForm
 
 
 class UsuarioAdminForm(forms.ModelForm):
@@ -74,6 +80,109 @@ class UsuarioAdmin(admin.ModelAdmin):
             'description': 'El codigo QR se genera automaticamente al guardar el usuario.'
         }),
     )
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path('carga-masiva-fotos/', self.admin_site.admin_view(self.carga_masiva_fotos), name='asistencia_usuario_carga_masiva_fotos'),
+        ]
+        return custom_urls + urls
+
+    def carga_masiva_fotos(self, request):
+        is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
+        if request.method == 'POST':
+            form = CargaMasivaFotosForm(request.POST, request.FILES)
+            if form.is_valid():
+                fotos = request.FILES.getlist('fotos')
+                usuarios_por_dni = {}
+                dnis_detectados = set()
+                nombres_invalidos = []
+
+                for foto in fotos:
+                    nombre_archivo, _ = os.path.splitext((foto.name or '').strip())
+                    dni = nombre_archivo.strip()
+                    if dni.isdigit() and len(dni) == 8:
+                        dnis_detectados.add(dni)
+                    else:
+                        nombres_invalidos.append(foto.name)
+
+                if dnis_detectados:
+                    usuarios_por_dni = Usuario.objects.in_bulk(dnis_detectados, field_name='dni')
+
+                actualizados = 0
+                no_encontrados = []
+                archivos_invalidos = []
+
+                for foto in fotos:
+                    nombre_archivo, _ = os.path.splitext((foto.name or '').strip())
+                    dni = nombre_archivo.strip()
+
+                    if dni in usuarios_por_dni:
+                        usuario = usuarios_por_dni[dni]
+                        try:
+                            usuario.foto_perfil = foto
+                            usuario.save(update_fields=['foto_perfil'])
+                            actualizados += 1
+                        except ValidationError:
+                            archivos_invalidos.append(foto.name)
+                    elif dni.isdigit() and len(dni) == 8:
+                        no_encontrados.append(dni)
+                    else:
+                        nombres_invalidos.append(foto.name)
+
+                dnis_no_encontrados = sorted(set(no_encontrados))
+                archivos_nombre_invalido = sorted(set(nombres_invalidos))
+                archivos_rechazados = sorted(set(archivos_invalidos))
+
+                if is_ajax:
+                    return JsonResponse({
+                        'ok': True,
+                        'actualizados': actualizados,
+                        'total_recibidos': len(fotos),
+                        'no_encontrados': dnis_no_encontrados,
+                        'nombres_invalidos': archivos_nombre_invalido,
+                        'archivos_invalidos': archivos_rechazados,
+                    })
+
+                if actualizados > 0:
+                    messages.success(request, f'Se actualizaron con éxito las fotos de {actualizados} usuarios.')
+                if dnis_no_encontrados:
+                    messages.warning(request, f'No se encontraron usuarios para los siguientes DNI: {", ".join(dnis_no_encontrados)}')
+                if archivos_nombre_invalido:
+                    messages.warning(
+                        request,
+                        f'Se omitieron archivos con nombre invalido (use 8 digitos de DNI): {", ".join(archivos_nombre_invalido)}'
+                    )
+                if archivos_rechazados:
+                    messages.error(
+                        request,
+                        f'Se rechazaron archivos por validacion de imagen: {", ".join(archivos_rechazados)}'
+                    )
+
+                if not actualizados and not dnis_no_encontrados and not archivos_nombre_invalido and not archivos_rechazados:
+                    messages.error(request, 'No se procesó ningún archivo.')
+
+                return redirect('admin:asistencia_usuario_changelist')
+            if is_ajax:
+                errores = []
+                if form.errors:
+                    for _, lista_errores in form.errors.items():
+                        errores.extend(str(error) for error in lista_errores)
+                return JsonResponse({
+                    'ok': False,
+                    'errors': errores or ['No se pudo procesar la solicitud.'],
+                }, status=400)
+        else:
+            form = CargaMasivaFotosForm()
+        
+        context = dict(
+            self.admin_site.each_context(request),
+            form=form,
+            title='Carga Masiva de Fotos de Perfil',
+            opts=self.model._meta,
+        )
+        return TemplateResponse(request, 'admin/asistencia/usuario/carga_masiva.html', context)
 
     def foto_perfil_preview(self, obj):
         if not obj or not obj.pk:

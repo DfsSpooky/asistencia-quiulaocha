@@ -42,7 +42,9 @@
                             nombre: '',
                             dni: '',
                             foto: '',
-                            hora: ''
+                            hora: '',
+                            is_exonerado: false,
+                            policy_note: ''
                         },
                         activityFeed: [],
                         showSuccess: false,
@@ -226,7 +228,9 @@
                                         nombre: data.nombre,
                                         dni: data.dni,
                                         foto: data.foto_perfil,
-                                        hora: data.hora
+                                        hora: data.hora,
+                                        is_exonerado: !!data.is_exonerado,
+                                        policy_note: data.policy_note || ''
                                     };
 
                                     this.activityFeed.unshift({
@@ -238,6 +242,16 @@
                                     if (this.config.tipo_escaneo === 'ingreso') this.stats.presentes++;
 
                                     this.showSuccess = true;
+                                    if (this.lastUser.is_exonerado && window.Swal) {
+                                        Swal.fire({
+                                            title: 'USUARIO EXONERADO',
+                                            text: 'ADELANTE: registro permitido y sin penalización.',
+                                            icon: 'info',
+                                            confirmButtonColor: '#2563eb',
+                                            timer: 2600,
+                                            showConfirmButton: false
+                                        });
+                                    }
                                     setTimeout(() => this.showSuccess = false, 3000);
 
                                 } else {
@@ -301,6 +315,15 @@
                                 const data = await response.json();
                                 if (!response.ok) {
                                     this.error = data.error || 'No se pudo cerrar el evento.';
+                                    if (data.code === 'EXONERADO_MISMATCH' && window.Swal) {
+                                        const a = data.alert || {};
+                                        Swal.fire({
+                                            title: 'Cierre bloqueado por consistencia',
+                                            html: `Exonerados padrón: <b>${a.total_exonerados_padron ?? '-'}</b><br>Exonerados presentes: <b>${a.exonerados_presentes ?? '-'}</b>`,
+                                            icon: 'warning',
+                                            confirmButtonColor: '#ca8a04'
+                                        });
+                                    }
                                     return;
                                 }
 
@@ -643,6 +666,11 @@
                             <i class="bi bi-check-circle-fill text-xl"></i>
                             Registro Exitoso
                         </div>
+                        <template x-if="lastUser.is_exonerado">
+                            <div class="mt-4 px-5 py-2 bg-blue-50 border border-blue-200 text-blue-700 rounded-xl text-[10px] font-black uppercase tracking-wider">
+                                Exonerado: no penaliza tardanza
+                            </div>
+                        </template>
                     </div>
 
                     <template x-if="error">
@@ -775,5 +803,3 @@
         }
     </style>
 {% endblock content %}
-
-

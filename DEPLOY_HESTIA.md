@@ -57,7 +57,9 @@ En Hestia:
 
 1. Confirma que `DEBUG=False`.
 2. Confirma que `SECRET_KEY` sea larga y aleatoria.
-3. Confirma que `ALLOWED_HOSTS` y `CSRF_TRUSTED_ORIGINS` contengan solo dominios reales.
+3. Configura y conserva `QR_SIGNING_KEY` estable entre despliegues/migraciones. Si rota, los QR antiguos quedarán inválidos.
+4. Si rotaste clave por error, usa `QR_SIGNING_FALLBACK_KEYS` (lista separada por comas) para aceptar QR firmados con claves anteriores.
+5. Confirma que `ALLOWED_HOSTS` y `CSRF_TRUSTED_ORIGINS` contengan solo dominios reales.
 4. Verifica que `public_html/` no tenga `.env`, `.git`, `db.sqlite3`, backups ni codigo Python.
 5. Verifica que `https://dominio/static/...` responda por Nginx y que `https://dominio/` responda por proxy a Gunicorn.
 

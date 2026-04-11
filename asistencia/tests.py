@@ -16,7 +16,7 @@ from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
 
-from .models import Asistencia, ConfiguracionSistema, Evento, LogAccion, Usuario
+from .models import Asistencia, ConfiguracionSistema, Evento, HistorialCarnet, Justificacion, LogAccion, Usuario
 from .services import AsistenciaService
 from .forms import FiltroAsistenciaForm
 from .utils.reports import generate_attendance_csv, get_filtered_attendance_data
@@ -122,6 +122,29 @@ class AttendanceEnhancementsTests(TestCase):
         self.assertFalse(getattr(unified_list[0], 'is_late_absent', False))
         self.assertEqual(unified_list[0].puntualidad, Asistencia.PUNTUALIDAD_TARDE)
 
+    def test_exonerado_tarde_no_se_convierte_en_falta(self):
+        socio_exonerado = Usuario.objects.create(
+            nombre='Julia',
+            apellido='Diaz',
+            dni='12345699',
+            estado=Usuario.ESTADO_EXONERADO,
+        )
+        Asistencia.objects.create(
+            usuario=socio_exonerado,
+            evento=self.evento,
+            fecha=self.evento.fecha,
+            hora_ingreso=time(8, 30),
+            confirmada=True,
+            puntualidad=Asistencia.PUNTUALIDAD_TARDE,
+        )
+
+        data = get_filtered_attendance_data({'evento': self.evento})
+        unified_list = data['unified_report']
+
+        self.assertEqual(len(unified_list), 1)
+        self.assertFalse(unified_list[0].is_absent)
+        self.assertFalse(getattr(unified_list[0], 'is_late_absent', False))
+
     def test_filtro_faltaron_ignora_confirmada_para_ausencias(self):
         socio_tarde = Usuario.objects.create(nombre='Luis', apellido='Rojas', dni='12345671', estado=Usuario.ESTADO_ACTIVO)
         socio_justificado = Usuario.objects.create(nombre='Marta', apellido='Lopez', dni='12345672', estado=Usuario.ESTADO_ACTIVO)
@@ -183,6 +206,22 @@ class AttendanceEnhancementsTests(TestCase):
 
         audit_log = LogAccion.objects.filter(accion__icontains='Auditoria').order_by('-fecha').first()
         self.assertIsNotNone(audit_log)
+
+    def test_cerrar_evento_bloquea_si_hay_inconsistencia_exonerados(self):
+        Usuario.objects.create(
+            nombre='Exo',
+            apellido='SinRegistro',
+            dni='12345999',
+            estado=Usuario.ESTADO_EXONERADO,
+        )
+
+        response = self.client.post(reverse('cerrar_evento', args=[self.evento.id]))
+        self.assertEqual(response.status_code, 409)
+        payload = response.json()
+        self.assertEqual(payload.get('code'), 'EXONERADO_MISMATCH')
+
+        self.evento.refresh_from_db()
+        self.assertTrue(self.evento.activo)
 
     def test_actualizar_foto_rapida_sube_imagen_y_devuelve_fragmento_htmx(self):
         usuario = Usuario.objects.create(nombre='Elena', apellido='Quispe', dni='12345674', estado=Usuario.ESTADO_ACTIVO)
@@ -392,6 +431,68 @@ class AttendanceEnhancementsTests(TestCase):
         self.assertIn((usuario_asiste.dni, 'Evento Dos', True), resumen)
         self.assertIn((usuario_falta.dni, 'Evento Dos', True), resumen)
 
+    def test_justificacion_rechazada_vuelve_a_falta_en_reportes(self):
+        usuario = Usuario.objects.create(
+            nombre='Nora',
+            apellido='Quispe',
+            dni='12345683',
+            estado=Usuario.ESTADO_ACTIVO,
+        )
+
+        justificacion = Justificacion.objects.create(
+            usuario=usuario,
+            evento=self.evento,
+            motivo='Motivo inicial',
+            estado=Justificacion.ESTADO_APROBADO,
+            procesado_por=self.user,
+        )
+
+        self.assertTrue(
+            Asistencia.objects.filter(usuario=usuario, evento=self.evento, es_justificada=True).exists()
+        )
+
+        justificacion.estado = Justificacion.ESTADO_RECHAZADO
+        justificacion.save()
+
+        self.assertFalse(Asistencia.objects.filter(usuario=usuario, evento=self.evento).exists())
+
+        data = get_filtered_attendance_data({'evento': self.evento, 'estado': 'faltas_injustificadas'})
+        resumen = {
+            (
+                item.usuario.dni if hasattr(item, 'usuario') else item.dni,
+                bool(getattr(item, 'is_absent', False)),
+                bool(getattr(item, 'es_justificada', False)),
+            )
+            for item in data['unified_report']
+        }
+        self.assertIn((usuario.dni, True, False), resumen)
+
+    def test_admin_no_puede_justificar_usuario_exonerado(self):
+        usuario_exonerado = Usuario.objects.create(
+            nombre='Elio',
+            apellido='Exonerado',
+            dni='12345684',
+            estado=Usuario.ESTADO_EXONERADO,
+        )
+
+        response = self.client.post(
+            reverse('admin_solicitar_justificacion'),
+            data={
+                'usuario': usuario_exonerado.id,
+                'evento': self.evento.id,
+                'motivo': 'Intento de justificación inválido',
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'Este usuario es exonerado y no se puede proceder con una justificación.',
+        )
+        self.assertFalse(
+            Justificacion.objects.filter(usuario=usuario_exonerado, evento=self.evento).exists()
+        )
+
 
 class CarnetsZipDownloadTests(TestCase):
     def setUp(self):
@@ -508,3 +609,104 @@ class CarnetsZipDownloadTests(TestCase):
 
         with zipfile.ZipFile(BytesIO(response.content)) as zip_file:
             self.assertEqual(zip_file.namelist(), ['usuarios_sin_foto_notificar.pdf'])
+
+
+class GestionCarnetsModuleTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username='manager_carnets', password='password')
+        self.user.user_permissions.add(Permission.objects.get(codename='can_manage_users'))
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.url = reverse('modulo_gestion_carnets')
+
+    def _create_photo_file(self, name='foto.jpg', color=(40, 100, 180)):
+        image = Image.new('RGB', (50, 50), color=color)
+        buffer = BytesIO()
+        image.save(buffer, format='JPEG')
+        return SimpleUploadedFile(name, buffer.getvalue(), content_type='image/jpeg')
+
+    def test_reposicion_perdida_guarda_motivo_estandar_y_auditoria(self):
+        usuario = Usuario.objects.create(
+            nombre='Lucia',
+            apellido='Prueba',
+            dni='76543210',
+            estado=Usuario.ESTADO_ACTIVO,
+            foto_perfil=self._create_photo_file(),
+        )
+        version_inicial = usuario.qr_version
+        HistorialCarnet.objects.create(
+            usuario=usuario,
+            motivo='Primer Carnet',
+            estado='Activo',
+            entregado_por=self.user,
+        )
+
+        response = self.client.post(
+            self.url,
+            {'usuario_id': usuario.id, 'accion': 'reposicion_perdida'},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            HistorialCarnet.objects.filter(
+                usuario=usuario,
+                motivo='Reposición por Pérdida/Robo',
+                estado='Activo',
+                entregado_por=self.user,
+            ).exists()
+        )
+        self.assertTrue(
+            LogAccion.objects.filter(
+                usuario=self.user,
+                accion='Emisión de carnet físico',
+                descripcion__contains='Reposición por Pérdida/Robo',
+            ).exists()
+        )
+        usuario.refresh_from_db()
+        self.assertEqual(usuario.qr_version, version_inicial + 1)
+
+    def test_primer_carnet_requiere_foto(self):
+        usuario = Usuario.objects.create(
+            nombre='Mario',
+            apellido='SinFoto',
+            dni='76543211',
+            estado=Usuario.ESTADO_ACTIVO,
+        )
+
+        response = self.client.post(
+            self.url,
+            {'usuario_id': usuario.id, 'accion': 'primer_carnet'},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(HistorialCarnet.objects.filter(usuario=usuario).exists())
+        mensajes = [str(m) for m in response.context['messages']]
+        self.assertTrue(any('sin fotografía' in mensaje for mensaje in mensajes))
+
+    def test_primer_carnet_no_permite_duplicar_activo(self):
+        usuario = Usuario.objects.create(
+            nombre='Ana',
+            apellido='Activa',
+            dni='76543212',
+            estado=Usuario.ESTADO_ACTIVO,
+            foto_perfil=self._create_photo_file(name='activa.jpg', color=(120, 120, 20)),
+        )
+        HistorialCarnet.objects.create(
+            usuario=usuario,
+            motivo='Primer Carnet',
+            estado='Activo',
+            entregado_por=self.user,
+        )
+
+        response = self.client.post(
+            self.url,
+            {'usuario_id': usuario.id, 'accion': 'primer_carnet'},
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(HistorialCarnet.objects.filter(usuario=usuario, estado='Activo').count(), 1)
+        mensajes = [str(m) for m in response.context['messages']]
+        self.assertTrue(any('ya cuenta con un carnet activo' in mensaje for mensaje in mensajes))

@@ -3,6 +3,7 @@ services:
     build: .
     command: /bin/sh /app/scripts/start-web.sh
     ports:
+      # Solo accesible desde localhost del servidor (Nginx/Hestia hace de reverse proxy).
       - "127.0.0.1:8000:8000"
     volumes:
       - ../public_html/static:/app/staticfiles

@@ -1,17 +1,17 @@
 from django.db import models
 from django.core.files.base import ContentFile
-from django.core.signing import Signer
 from django.core.exceptions import ValidationError
 from django.core.validators import FileExtensionValidator
 from django.templatetags.static import static
 import qrcode
 from io import BytesIO
-import base64
 import re
+import uuid
 from django.contrib.auth.models import User
 from django.utils import timezone
 from PIL import Image, ImageOps
 from datetime import date, datetime
+from .qr_security import build_qr_encoded_payload
 
 
 def validate_file_size(value):
@@ -114,6 +114,8 @@ class Usuario(models.Model):
     dni = models.CharField(max_length=8, unique=True)
     fecha_nacimiento = models.DateField(null=True, blank=True)
     estado = models.CharField(max_length=10, choices=ESTADOS, default=ESTADO_ACTIVO)
+    qr_uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    qr_version = models.PositiveIntegerField(default=1)
     qr_code = models.ImageField(upload_to='qr_codes/', blank=True)
     foto_perfil = models.ImageField(
         upload_to='perfil_fotos/',
@@ -141,6 +143,18 @@ class Usuario(models.Model):
             raise ValidationError({'apellido': 'El apellido solo puede contener letras y espacios.'})
 
     def save(self, *args, **kwargs):
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None:
+            update_fields = set(update_fields)
+
+        is_new = self.pk is None
+        original_dni = None
+        original_qr_version = None
+        if not is_new:
+            original_dni, original_qr_version = Usuario.objects.filter(pk=self.pk).values_list('dni', 'qr_version').first()
+        dni_changed = (original_dni is not None and original_dni != self.dni)
+        qr_version_changed = (original_qr_version is not None and original_qr_version != self.qr_version)
+
         self.full_clean()
 
         if self.foto_perfil:
@@ -163,24 +177,36 @@ class Usuario(models.Model):
                     ContentFile(buffer.getvalue()),
                     save=False
                 )
-            except Exception as e:
+                if update_fields is not None:
+                    update_fields.add('foto_perfil')
+            except Exception:
                 self.foto_perfil = None
 
         if not self.foto_perfil:
             self.foto_perfil = None
 
-        qr = qrcode.QRCode(version=1, box_size=5, border=2)
-        # Firmamos el DNI con la SECRET_KEY para que el QR no pueda ser falsificado fácilmente.
-        signed_dni = Signer().sign(self.dni)
-        encoded_dni = base64.b64encode(signed_dni.encode()).decode()
-        qr.add_data(encoded_dni)
-        qr.make(fit=True)
-        img = qr.make_image(fill='black', back_color='white')
-        buffer = BytesIO()
-        img.save(buffer, format='PNG', quality=70)
-        self.qr_code.save(f'qr_{self.dni}.png', ContentFile(buffer.getvalue()), save=False)
+        qr_needs_refresh = is_new or qr_version_changed or not self.qr_code
+        if qr_needs_refresh:
+            qr = qrcode.QRCode(version=1, box_size=5, border=2)
+            # Firma estable entre servidores con clave dedicada y payload versionado.
+            encoded_qr_payload = build_qr_encoded_payload(self.qr_uid, self.qr_version)
+            qr.add_data(encoded_qr_payload)
+            qr.make(fit=True)
+            img = qr.make_image(fill='black', back_color='white')
+            buffer = BytesIO()
+            img.save(buffer, format='PNG', quality=70)
+            self.qr_code.save(f'qr_{self.qr_uid}_v{self.qr_version}.png', ContentFile(buffer.getvalue()), save=False)
+            if update_fields is not None:
+                update_fields.add('qr_code')
+
+        if update_fields is not None:
+            kwargs['update_fields'] = list(update_fields)
 
         super().save(*args, **kwargs)
+
+    def rotate_qr(self):
+        self.qr_version += 1
+        self.save(update_fields=['qr_version'])
 
     def __str__(self):
         return f"{self.nombre} {self.apellido} ({self.dni})"
@@ -290,12 +316,18 @@ class Justificacion(models.Model):
                 asistencia.confirmada = True
                 asistencia.save()
         
-        # Si se rechaza y antes estaba aprobada, quitar el flag de justificada (opcional)
+        # Si deja de estar aprobada (ej. RECHAZADA), debe volver a computar como falta real.
         elif self.estado != self.ESTADO_APROBADO and old_estado == self.ESTADO_APROBADO:
             asistencia = Asistencia.objects.filter(usuario=self.usuario, evento=self.evento).first()
             if asistencia:
-                asistencia.es_justificada = False
-                asistencia.save()
+                # Si el registro fue creado automáticamente por la aprobación de justificación
+                # (sin ingreso/salida reales), lo eliminamos para que reportes lo cuenten como FALTA.
+                if not asistencia.hora_ingreso and not asistencia.hora_salida:
+                    asistencia.delete()
+                else:
+                    # Si hubo asistencia real, solo retiramos el estado de justificada.
+                    asistencia.es_justificada = False
+                    asistencia.save(update_fields=['es_justificada'])
 
     class Meta:
         constraints = [
@@ -397,4 +429,3 @@ class HistorialCarnet(models.Model):
 
     def __str__(self):
         return f"Carnet {self.motivo} - {self.usuario} ({self.estado})"
-
