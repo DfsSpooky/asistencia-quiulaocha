@@ -39,7 +39,7 @@ RUN pip install -r requirements.txt
 COPY . /app/
 
 # Expose port
-EXPOSE 8000
+EXPOSE 8010
 
 # Command to run the application
-CMD ["gunicorn", "qr_asistencia.wsgi:application", "--bind", "0.0.0.0:8000"]
+CMD ["gunicorn", "qr_asistencia.wsgi:application", "--bind", "0.0.0.0:8010"]

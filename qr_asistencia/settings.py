@@ -51,8 +51,7 @@ ALLOWED_HOSTS = list(dict.fromkeys(ALLOWED_HOSTS))
 default_csrf_origins = (
     "http://localhost,http://127.0.0.1,"
     "http://localhost:8000,http://127.0.0.1:8000,"
-    "http://localhost:8001,http://127.0.0.1:8001,"
-    "https://quiulacocha.theworkpc.com"
+    "http://localhost:8010,http://127.0.0.1:8010"
 )
 CSRF_TRUSTED_ORIGINS = list(
     dict.fromkeys(get_csv("CSRF_TRUSTED_ORIGINS", default_csrf_origins))

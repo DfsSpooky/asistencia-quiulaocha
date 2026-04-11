@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Configuration
 USER_HESTIA="${USER_HESTIA:-aquiulacocha}"
-DOMAIN="${DOMAIN:-quiulacocha.theworkpc.com}"
+DOMAIN="${DOMAIN:-ccquiulacocha.com}"
 SITE_ROOT="/home/$USER_HESTIA/web/$DOMAIN"
 APP_DIR="$SITE_ROOT/app"
 PUBLIC_DIR="$SITE_ROOT/public_html"
@@ -74,6 +74,7 @@ if [ ! -f "$ENV_FILE" ]; then
     grep -q "ALLOWED_HOSTS" "$ENV_FILE" || echo "ALLOWED_HOSTS=$DOMAIN,localhost,127.0.0.1" >> "$ENV_FILE"
     grep -q "CSRF_TRUSTED_ORIGINS" "$ENV_FILE" || echo "CSRF_TRUSTED_ORIGINS=https://$DOMAIN" >> "$ENV_FILE"
     grep -q "SECURE_SSL_REDIRECT" "$ENV_FILE" || echo "SECURE_SSL_REDIRECT=True" >> "$ENV_FILE"
+    grep -q "APP_PORT" "$ENV_FILE" || echo "APP_PORT=8010" >> "$ENV_FILE"
     grep -q "SESSION_COOKIE_SECURE" "$ENV_FILE" || echo "SESSION_COOKIE_SECURE=True" >> "$ENV_FILE"
     grep -q "CSRF_COOKIE_SECURE" "$ENV_FILE" || echo "CSRF_COOKIE_SECURE=True" >> "$ENV_FILE"
     grep -q "DEBUG" "$ENV_FILE" || echo "DEBUG=False" >> "$ENV_FILE"
@@ -114,12 +115,16 @@ if [ -d "nginx_hestia_templates" ]; then
     mkdir -p "$NGINX_PROXY_DIR"
     cp nginx_hestia_templates/django-8000.tpl "$NGINX_PROXY_DIR/"
     cp nginx_hestia_templates/django-8000.stpl "$NGINX_PROXY_DIR/"
+    cp nginx_hestia_templates/django-8010.tpl "$NGINX_PROXY_DIR/"
+    cp nginx_hestia_templates/django-8010.stpl "$NGINX_PROXY_DIR/"
     echo "Templates installed to $NGINX_PROXY_DIR/"
     echo "  → django-8000.tpl"
     echo "  → django-8000.stpl"
+    echo "  → django-8010.tpl"
+    echo "  → django-8010.stpl"
 fi
 
 echo -e "${GREEN}Deployment Finished Successfully!${NC}"
-echo "App reachable at http://127.0.0.1:8000 locally."
+echo "App reachable at http://127.0.0.1:${APP_PORT:-8010} locally."
 echo "Hestia public_html now contains only static assets in $PUBLIC_DIR/static."
-echo "Ensure your Hestia Proxy Template is set to 'django-8000' and points to port 8000."
+echo "Ensure your Hestia Proxy Template is set to 'django-8010' for port 8010, or another matching template if you change APP_PORT."

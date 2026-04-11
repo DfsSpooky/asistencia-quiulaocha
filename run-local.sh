@@ -15,5 +15,5 @@ docker compose exec web python manage.py check
 
 echo "Listo. La aplicacion esta disponible en:"
 echo "- http://localhost:8000"
-echo "- http://localhost:8001"
+echo "- http://localhost:8010"
 echo "Logs: docker compose logs -f web"
