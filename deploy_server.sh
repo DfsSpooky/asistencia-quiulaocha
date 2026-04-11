@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Configuration
-USER_HESTIA="${USER_HESTIA:-aquiulacocha}"
+USER_HESTIA="${USER_HESTIA:-quiulacocha}"
 DOMAIN="${DOMAIN:-ccquiulacocha.com}"
 SITE_ROOT="/home/$USER_HESTIA/web/$DOMAIN"
 APP_DIR="$SITE_ROOT/app"
@@ -11,7 +11,7 @@ PRIVATE_DIR="$SITE_ROOT/private"
 MEDIA_DIR="$PRIVATE_DIR/media"
 ENV_FILE="$PRIVATE_DIR/.env"
 REPO_URL="${REPO_URL:-https://github.com/DfsSpooky/asistencia-quiulaocha.git}"
-BRANCH="${BRANCH:-despliegue-local-y-produccion}"
+BRANCH="${BRANCH:-Implementacion-carnets-despliegue}"
 
 generate_secret_key() {
     if command -v openssl >/dev/null 2>&1; then
