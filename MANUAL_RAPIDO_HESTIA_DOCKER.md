@@ -59,7 +59,7 @@ En Hestia Panel:
 
 1. Ve a `WEB`
 2. Edita `ccquiulacocha.com`
-3. En `Proxy Template` selecciona `django-8010`
+3. En `Proxy Template` selecciona `django-8020`
 4. Guarda
 
 Luego en consola:

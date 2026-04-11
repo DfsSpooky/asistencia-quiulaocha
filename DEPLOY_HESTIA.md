@@ -17,7 +17,7 @@ Esta guia reemplaza el plan anterior. En Hestia, `public_html` debe contener sol
 ## Principios de seguridad
 
 1. `public_html` no debe contener codigo fuente, `.git`, `.env`, base de datos ni backups.
-2. Gunicorn escucha solo en `127.0.0.1:8010`.
+2. Gunicorn escucha solo en `127.0.0.1:8020`.
 3. Nginx de Hestia publica `/static/` desde `public_html/static/` y enruta `/` al backend.
 4. `media/` vive fuera de `public_html`, en `private/media/`.
 5. Django no debe servir `static` ni `media` con `DEBUG=False`.
@@ -40,7 +40,7 @@ chmod +x deploy_server.sh
 3. Crea `private/.env` con permisos `600`.
 4. Levanta Docker usando ese `.env` fuera del docroot.
 5. Ejecuta migraciones y `collectstatic`; los estaticos terminan en `public_html/static/`.
-6. Instala la plantilla `django-8010` actualizada para Hestia.
+6. Instala la plantilla `django-8020` actualizada para Hestia.
 7. Ajusta permisos para que lo publico y lo privado queden separados.
 
 ## Configuracion en Hestia
@@ -50,7 +50,7 @@ En Hestia:
 1. Ve a `WEB`.
 2. Edita `ccquiulacocha.com`.
 3. Mantén el docroot en `public_html`.
-4. En Proxy Template selecciona `django-8010`.
+4. En Proxy Template selecciona `django-8020`.
 5. Guarda y reconstruye la configuracion del dominio si hace falta.
 
 ## Validaciones previas al go-live
@@ -65,7 +65,7 @@ En Hestia:
 
 ## Problemas comunes
 
-- `403 / Access Denied`: Hestia no esta usando la plantilla `django-8010`.
+- `403 / Access Denied`: Hestia no esta usando la plantilla `django-8020`.
 - `DisallowedHost`: el dominio no esta incluido en `ALLOWED_HOSTS`.
 - `502 Bad Gateway`: Gunicorn no esta arriba o Docker no pudo iniciar el servicio `web`.
 - `media` no carga: revisa que `private/media/` exista y que la plantilla Nginx apunte a esa ruta.

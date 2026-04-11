@@ -4,7 +4,7 @@ services:
     command: /bin/sh /app/scripts/start-web.sh
     ports:
       # Solo accesible desde localhost del servidor (Nginx/Hestia hace de reverse proxy).
-      - "127.0.0.1:${APP_PORT:-8010}:${APP_PORT:-8010}"
+      - "127.0.0.1:${APP_PORT:-8020}:${APP_PORT:-8020}"
     volumes:
       - ../public_html/static:/app/staticfiles
       - ../private/media:/app/media
@@ -14,7 +14,7 @@ services:
       db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import os, urllib.request; port = os.environ.get('APP_PORT', '8010'); urllib.request.urlopen(f'http://127.0.0.1:{port}/').read()\""]
+      test: ["CMD-SHELL", "python -c \"import os, urllib.request; port = os.environ.get('APP_PORT', '8020'); urllib.request.urlopen(f'http://127.0.0.1:{port}/').read()\""]
       interval: 30s
       timeout: 10s
       retries: 5
