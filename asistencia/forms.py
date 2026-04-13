@@ -175,8 +175,24 @@ class AdminCarnetForm(CarnetForm):
 class MultipleFileInput(forms.ClearableFileInput):
     allow_multiple_selected = True
 
+
+class MultipleFileField(forms.FileField):
+    widget = MultipleFileInput
+
+    def clean(self, data, initial=None):
+        single_file_clean = super().clean
+
+        if isinstance(data, (list, tuple)):
+            if not data:
+                return []
+            return [single_file_clean(item, initial) for item in data]
+
+        cleaned = single_file_clean(data, initial)
+        return [cleaned] if cleaned else []
+
+
 class CargaMasivaFotosForm(forms.Form):
-    fotos = forms.FileField(
+    fotos = MultipleFileField(
         widget=MultipleFileInput(attrs={'multiple': True, 'accept': '.jpg,.jpeg,.png,.webp,image/*'}),
         label='Seleccione las fotos a cargar',
         help_text='Los nombres de los archivos deben ser el DNI del usuario (ej: 12345678.jpg).',
@@ -188,7 +204,7 @@ class CargaMasivaFotosForm(forms.Form):
 
     def clean(self):
         cleaned_data = super().clean()
-        fotos = self.files.getlist('fotos')
+        fotos = cleaned_data.get('fotos') or []
 
         if not fotos:
             raise forms.ValidationError('Debe seleccionar al menos una foto.')

@@ -18,7 +18,7 @@ from PIL import Image
 
 from .models import Asistencia, ConfiguracionSistema, Evento, HistorialCarnet, Justificacion, LogAccion, Usuario
 from .services import AsistenciaService
-from .forms import FiltroAsistenciaForm
+from .forms import CargaMasivaFotosForm, FiltroAsistenciaForm
 from .utils.reports import generate_attendance_csv, get_filtered_attendance_data
 
 
@@ -254,6 +254,20 @@ class AttendanceEnhancementsTests(TestCase):
                 accion='Actualización de foto rápida',
             ).exists()
         )
+
+    def test_carga_masiva_form_acepta_varias_imagenes(self):
+        first_buffer = BytesIO()
+        second_buffer = BytesIO()
+        Image.new('RGB', (200, 200), color=(20, 120, 180)).save(first_buffer, format='JPEG')
+        Image.new('RGB', (200, 200), color=(180, 80, 40)).save(second_buffer, format='PNG')
+
+        foto_1 = SimpleUploadedFile('12345678.jpg', first_buffer.getvalue(), content_type='image/jpeg')
+        foto_2 = SimpleUploadedFile('87654321.png', second_buffer.getvalue(), content_type='image/png')
+
+        form = CargaMasivaFotosForm(files={'fotos': [foto_1, foto_2]})
+
+        self.assertTrue(form.is_valid(), form.errors.as_json())
+        self.assertEqual(len(form.cleaned_data['fotos']), 2)
 
     def test_actualizar_foto_rapida_requiere_permiso(self):
         usuario = Usuario.objects.create(nombre='Mario', apellido='Lopez', dni='12345675', estado=Usuario.ESTADO_ACTIVO)
@@ -492,6 +506,52 @@ class AttendanceEnhancementsTests(TestCase):
         self.assertFalse(
             Justificacion.objects.filter(usuario=usuario_exonerado, evento=self.evento).exists()
         )
+
+
+class AdminMassPhotoUploadTests(TestCase):
+    def setUp(self):
+        self.temp_media_root = tempfile.mkdtemp(prefix='test-media-')
+        self._original_media_root = settings.MEDIA_ROOT
+        settings.MEDIA_ROOT = self.temp_media_root
+
+        self.admin_user = User.objects.create_superuser(
+            username='admin',
+            email='admin@example.com',
+            password='password',
+        )
+        self.client = Client()
+        self.client.force_login(self.admin_user)
+
+    def tearDown(self):
+        settings.MEDIA_ROOT = self._original_media_root
+        shutil.rmtree(self.temp_media_root, ignore_errors=True)
+
+    def _build_image(self, name, color):
+        buffer = BytesIO()
+        Image.new('RGB', (320, 320), color=color).save(buffer, format='JPEG')
+        return SimpleUploadedFile(name, buffer.getvalue(), content_type='image/jpeg')
+
+    def test_carga_masiva_admin_ajax_procesa_archivos(self):
+        usuario = Usuario.objects.create(
+            nombre='Julia',
+            apellido='Ramos',
+            dni='12345678',
+            estado=Usuario.ESTADO_ACTIVO,
+        )
+
+        response = self.client.post(
+            reverse('admin:asistencia_usuario_carga_masiva_fotos'),
+            {'fotos': [self._build_image('12345678.jpg', (12, 120, 200))]},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+        self.assertEqual(response.status_code, 200, response.content.decode())
+        payload = response.json()
+        self.assertTrue(payload['ok'])
+        self.assertEqual(payload['actualizados'], 1)
+
+        usuario.refresh_from_db()
+        self.assertTrue(bool(usuario.foto_perfil))
 
 
 class CarnetsZipDownloadTests(TestCase):
