@@ -326,6 +326,14 @@ def keep_alive(request):
     """
     return JsonResponse({'status': 'success', 'message': 'SesiÃƒÂ³n mantenida activa'})
 
+
+def healthcheck(request):
+    """
+    Endpoint pÃƒÂºblico y liviano para health checks de Docker/Hestia.
+    No depende de sesiÃƒÂ³n ni de datos del sistema.
+    """
+    return JsonResponse({'status': 'ok'})
+
 def _format_bytes(size):
     units = ['B', 'KB', 'MB', 'GB', 'TB']
     value = float(size)

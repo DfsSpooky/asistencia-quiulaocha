@@ -31,7 +31,7 @@ if [ "${SKIP_SERVER:-0}" = "1" ]; then
     exit 0
 fi
 
-APP_PORT_VALUE="${APP_PORT:-8010}"
+APP_PORT_VALUE="${APP_PORT:-8020}"
 
 echo "Starting Gunicorn..."
 exec gunicorn qr_asistencia.wsgi:application --bind "0.0.0.0:${APP_PORT_VALUE}" --timeout 600 --workers 2
