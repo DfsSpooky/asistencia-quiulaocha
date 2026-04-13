@@ -116,10 +116,10 @@ def _build_carnet_payload(usuario):
 
 def landing_page(request):
     """
-    Landing page pÃƒÂºblica para el sistema de asistencia de Quiulacocha.
+    Landing page pública para el sistema de asistencia de Quiulacocha.
     
-    Si el usuario estÃƒÂ¡ autenticado, muestra un botÃƒÂ³n para ir al dashboard.
-    Si no estÃƒÂ¡ autenticado, muestra la pÃƒÂ¡gina de bienvenida con CTA para login.
+    Si el usuario está autenticado, muestra un botón para ir al dashboard.
+    Si no está autenticado, muestra la página de bienvenida con CTA para login.
     """
     config = ConfiguracionSistema.objects.first()
     return render(request, 'asistencia/landing.html', {
@@ -262,7 +262,7 @@ def lista_usuarios(request):
         )
     )
     
-    # Calcular estadÃƒÂ­sticas basadas en los resultados filtrados
+    # Calcular estadísticas basadas en los resultados filtrados
     total_usuarios = usuarios.count()
     usuarios_activos = usuarios.filter(estado=Usuario.ESTADO_ACTIVO).count()
     usuarios_pasivos = usuarios.filter(estado=Usuario.ESTADO_PASIVO).count()
@@ -322,15 +322,15 @@ def escanear_qr(request, evento_id=None):
 @permission_required('asistencia.can_scan_qr', raise_exception=True)
 def keep_alive(request):
     """
-    Vista para mantener viva la sesiÃƒÂ³n del usuario mientras estÃƒÂ¡ en la pÃƒÂ¡gina de escaneo.
+    Vista para mantener viva la sesión del usuario mientras está en la página de escaneo.
     """
-    return JsonResponse({'status': 'success', 'message': 'SesiÃƒÂ³n mantenida activa'})
+    return JsonResponse({'status': 'success', 'message': 'Sesión mantenida activa'})
 
 
 def healthcheck(request):
     """
-    Endpoint pÃƒÂºblico y liviano para health checks de Docker/Hestia.
-    No depende de sesiÃƒÂ³n ni de datos del sistema.
+    Endpoint público y liviano para health checks de Docker/Hestia.
+    No depende de sesión ni de datos del sistema.
     """
     return JsonResponse({'status': 'ok'})
 
@@ -523,10 +523,10 @@ class RegistrarAsistencia(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        # ValidaciÃƒÂ³n de autenticaciÃƒÂ³n y permisos (capa HTTP)
+        # Validación de autenticación y permisos (capa HTTP)
         if not request.user.is_authenticated:
             return Response(
-                {'error': 'No estÃƒÂ¡s autenticado. Por favor, inicia sesiÃƒÂ³n.'}, 
+                {'error': 'No estás autenticado. Por favor, inicia sesión.'}, 
                 status=status.HTTP_403_FORBIDDEN
             )
         
@@ -542,7 +542,7 @@ class RegistrarAsistencia(APIView):
         evento_id = request.data.get('evento_id')
         tipo_escaneo = request.data.get('tipo_escaneo')
         
-        # Extraer timestamp opcional (para sincronizaciÃƒÂ³n offline)
+        # Extraer timestamp opcional (para sincronización offline)
         timestamp_str = request.data.get('timestamp')
         fecha_registro = None
         
@@ -550,17 +550,17 @@ class RegistrarAsistencia(APIView):
             from django.utils.dateparse import parse_datetime
             fecha_registro = parse_datetime(timestamp_str)
             
-            # Validar que el timestamp sea vÃƒÂ¡lido
+            # Validar que el timestamp sea válido
             if not fecha_registro:
                 return Response(
-                    {'error': 'Formato de timestamp invÃƒÂ¡lido. Use ISO 8601.'},
+                    {'error': 'Formato de timestamp inválido. Use ISO 8601.'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
         
         # Validar tipo de escaneo
         if tipo_escaneo not in ['ingreso', 'salida']:
             return Response(
-                {'error': 'Tipo de escaneo no vÃƒÂ¡lido. Debe ser "ingreso" o "salida".'}, 
+                {'error': 'Tipo de escaneo no válido. Debe ser "ingreso" o "salida".'}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -582,12 +582,12 @@ class RegistrarAsistencia(APIView):
             if evento_id:
                 evento = Evento.objects.get(id=evento_id, activo=True)
             
-            # Obtener ubicaciÃƒÂ³n si fue especificada
+            # Obtener ubicación si fue especificada
             ubicacion = None
             if ubicacion_id:
                 ubicacion = Ubicacion.objects.get(id=ubicacion_id)
             
-            # Delegar la lÃƒÂ³gica de negocio al servicio
+            # Delegar la lógica de negocio al servicio
             from .services import AsistenciaService
             
             if tipo_escaneo == 'ingreso':
@@ -622,7 +622,7 @@ class RegistrarAsistencia(APIView):
             }, status=status.HTTP_201_CREATED)
             
         except ValidationError as e:
-            # Errores de validaciÃƒÂ³n de negocio
+            # Errores de validación de negocio
             return Response({'error': str(e.message)}, status=status.HTTP_400_BAD_REQUEST)
         
         except BadSignature:
@@ -633,25 +633,25 @@ class RegistrarAsistencia(APIView):
 
         except Usuario.DoesNotExist:
             return Response(
-                {'error': 'El DNI escaneado no corresponde a ningÃƒÂºn usuario registrado.'}, 
+                {'error': 'El DNI escaneado no corresponde a ningún usuario registrado.'}, 
                 status=status.HTTP_404_NOT_FOUND
             )
         
         except Evento.DoesNotExist:
             return Response(
-                {'error': 'El evento seleccionado no es vÃƒÂ¡lido o no estÃƒÂ¡ activo.'}, 
+                {'error': 'El evento seleccionado no es válido o no está activo.'}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         except Ubicacion.DoesNotExist:
             return Response(
-                {'error': 'La ubicaciÃƒÂ³n seleccionada no es vÃƒÂ¡lida.'}, 
+                {'error': 'La ubicación seleccionada no es válida.'}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         except base64.binascii.Error:
             return Response(
-                {'error': 'El cÃƒÂ³digo QR escaneado es invÃƒÂ¡lido.'}, 
+                {'error': 'El código QR escaneado es inválido.'}, 
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -735,7 +735,7 @@ def historial_asistencias(request):
     unified_list = list(data.get('unified_report', []))
     
     # Re-ordenar la lista unificada si es necesario (ya que mezclamos tipos de objetos)
-    # Por defecto, los asistentes van primero o segÃƒÂºn la lÃƒÂ³gica de reports.py
+    # Por defecto, los asistentes van primero o según la lógica de reports.py
     
     total_registros = len(unified_list)
     # Mutuamente excluyentes:
@@ -744,7 +744,7 @@ def historial_asistencias(request):
     inasistencias = sum(1 for item in unified_list if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False))
     pendientes = sum(1 for item in unified_list if not getattr(item, 'is_absent', False) and not getattr(item, 'hora_salida', None) and item.usuario.estado != 'EXONERADO')
     
-    # LÃƒÂ³gica de Contadores segÃƒÂºn selecciÃƒÂ³n de evento
+    # Lógica de Contadores según selección de evento
     advanced_filters_active = any(
         filters.get(key) for key in ['fecha_inicio', 'fecha_fin', 'ubicacion', 'confirmada']
     )
@@ -756,8 +756,8 @@ def historial_asistencias(request):
         inasistencias = 0
         pendientes = 0
     else:
-        # Si hay evento, "PadrÃƒÂ³n Esperado" debe ser el total de usuarios empadronados (Activos + Pasivos + Exonerados)
-        # independientemente de cuÃƒÂ¡ntos registros traiga el filtrado (unified_list)
+        # Si hay evento, "Padrón Esperado" debe ser el total de usuarios empadronados (Activos + Pasivos + Exonerados)
+        # independientemente de cuántos registros traiga el filtrado (unified_list)
         if filters.get('evento'):
             total_registros = Usuario.objects.filter(
                 estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_EXONERADO, Usuario.ESTADO_PASIVO]
@@ -803,8 +803,8 @@ def historial_asistencias(request):
 @permission_required('asistencia.can_manage_users', raise_exception=True)
 def descargar_reporte_global_pdf(request):
     """
-    Genera un PDF histÃƒÂ³rico de TODO el sistema, agrupado por eventos
-    en orden cronolÃƒÂ³gico (Enero a Diciembre).
+    Genera un PDF histórico de TODO el sistema, agrupado por eventos
+    en orden cronológico (Enero a Diciembre).
     """
     from .utils.reports import get_logo_base64
     
@@ -834,7 +834,7 @@ def descargar_reporte_global_pdf(request):
         asistencias = list(data.get('asistencias', []))
         no_asistentes = data.get('usuarios_no_asistentes', [])
         
-        # Procesar rÃƒÂ©cords unificados para este evento
+        # Procesar récords unificados para este evento
         records = []
         for a in asistencias:
             is_late_absent = bool(
@@ -854,7 +854,7 @@ def descargar_reporte_global_pdf(request):
                 total_general_asistencias += 1
                 
         for u in no_asistentes:
-            # Buscar justificaciÃƒÂ³n
+            # Buscar justificación
             just = Justificacion.objects.filter(usuario=u, evento=ev, estado='APROBADO').first()
             records.append({
                 'usuario': u,
@@ -863,7 +863,7 @@ def descargar_reporte_global_pdf(request):
                 'justificacion_obs': just.motivo if just else ""
             })
             
-        # EstadÃƒÂ­sticas del evento
+        # Estadísticas del evento
         total_padron = len(records)
         asistencias_fisicas = sum(1 for r in records if not r['is_absent'] and not r.get('es_justificada', False))
         justificadas = sum(1 for r in records if r.get('es_justificada', False))
@@ -924,7 +924,7 @@ def descargar_backup(request):
             LogAccion.objects.create(
                 usuario=request.user,
                 accion="Generar Backup",
-                descripcion=f"{request.user.username} generÃ³ y descargó una copia de seguridad."
+                descripcion=f"{request.user.username} generó y descargó una copia de seguridad."
             )
             return response
         else:
@@ -1119,7 +1119,7 @@ def exportar_asistencias_excel(request):
     LogAccion.objects.create(
         usuario=request.user,
         accion="Exportar Excel",
-        descripcion=f"{request.user.username} exportÃƒÂ³ las asistencias a Excel."
+        descripcion=f"{request.user.username} exportó las asistencias a Excel."
     )
     return generate_attendance_excel(unified_list)
 
@@ -1127,7 +1127,7 @@ def exportar_asistencias_excel(request):
 @permission_required('asistencia.can_manage_users', raise_exception=True)
 def exportar_reporte_global_excel(request):
     """
-    Genera un Excel histÃƒÂ³rico de TODO el sistema, similar al reporte global PDF.
+    Genera un Excel histórico de TODO el sistema, similar al reporte global PDF.
     """
     from .utils.reports import generate_global_attendance_excel, get_filtered_attendance_data
     
@@ -1190,7 +1190,7 @@ def exportar_reporte_global_excel(request):
     LogAccion.objects.create(
         usuario=request.user,
         accion="Exportar Reporte Global Excel",
-        descripcion=f"{request.user.username} exportÃƒÂ³ el reporte anual consolidado a Excel ({len(eventos)} eventos)."
+        descripcion=f"{request.user.username} exportó el reporte anual consolidado a Excel ({len(eventos)} eventos)."
     )
     
     return generate_global_attendance_excel(report_data, system_config)
@@ -1206,7 +1206,7 @@ def confirmar_asistencia(request, asistencia_id):
         LogAccion.objects.create(
             usuario=request.user,
             accion="Confirmar asistencia",
-            descripcion=f"{request.user.username} confirmÃƒÂ³ la asistencia de {asistencia.usuario.nombre} {asistencia.usuario.apellido} para el evento {asistencia.evento.nombre if asistencia.evento else 'sin evento'}."
+            descripcion=f"{request.user.username} confirmó la asistencia de {asistencia.usuario.nombre} {asistencia.usuario.apellido} para el evento {asistencia.evento.nombre if asistencia.evento else 'sin evento'}."
             )
     else:
         messages.warning(request, f"La asistencia de {asistencia.usuario} ya estaba confirmada.")
@@ -1222,8 +1222,8 @@ def descargar_reporte_pdf(request):
     # Usar la lista unificada
     unified_list = data.get('unified_report', [])
     
-    # Calcular estadÃƒÂ­sticas detalladas
-    total_padron = len(unified_list) # Usar el padrÃƒÂ³n del reporte (Activos + Exon)
+    # Calcular estadísticas detalladas
+    total_padron = len(unified_list) # Usar el padrón del reporte (Activos + Exon)
     asistencias_puras = sum(1 for item in unified_list if not getattr(item, 'is_absent', False))
     justificadas = sum(1 for item in unified_list if getattr(item, 'es_justificada', False))
     total_asistentes_efectivos = asistencias_puras + justificadas
@@ -1259,7 +1259,7 @@ def descargar_reporte_usuario_pdf(request, dni):
     sistema_config = ConfiguracionSistema.objects.first()
     tardanza_activa = bool(sistema_config and sistema_config.tardanza_activa)
     
-    # 1. Obtener TODOS los eventos histÃƒÂ³ricos ordenados por fecha descendente
+    # 1. Obtener TODOS los eventos históricos ordenados por fecha descendente
     todos_eventos = Evento.objects.all().order_by('-fecha', '-hora_ingreso')
     
     # 2. Obtener asistencias del usuario mapeadas por ID de evento
@@ -1275,10 +1275,10 @@ def descargar_reporte_usuario_pdf(request, dni):
     # 4. Construir la lista unificada recorriendo TODOS los eventos
     for evento in todos_eventos:
         if evento.id in asistencia_map:
-            # CASO 1: ASISTIÃƒâ€œ (O PENDIENTE)
+            # CASO 1: ASISTIÓ (O PENDIENTE)
             # El usuario tiene un registro de asistencia
             item = asistencia_map[evento.id]
-            # Mantener el estado real de justificaciÃƒÂ³n guardado en el registro.
+            # Mantener el estado real de justificación guardado en el registro.
             item.es_justificada = bool(getattr(item, 'es_justificada', False))
             item.is_late_absent = bool(
                 tardanza_activa
@@ -1290,7 +1290,7 @@ def descargar_reporte_usuario_pdf(request, dni):
             
         elif evento.id in justificacion_map:
             # CASO 2: FALTA JUSTIFICADA
-            # No tiene asistencia pero sÃƒÂ­ justificaciÃƒÂ³n aprobada
+            # No tiene asistencia pero sí justificación aprobada
             justificacion = justificacion_map[evento.id]
             
             # Crear objeto mock para el template
@@ -1299,9 +1299,9 @@ def descargar_reporte_usuario_pdf(request, dni):
                 'hora_ingreso': None,
                 'hora_salida': None,
                 'evento': evento,
-                'ubicacion': None, # No hay ubicaciÃƒÂ³n registrada para la falta
+                'ubicacion': None, # No hay ubicación registrada para la falta
                 'usuario': usuario,
-                'is_absent': True, # Es ausencia fÃƒÂ­sica
+                'is_absent': True, # Es ausencia física
                 'es_justificada': True, # Pero justificada
                 'justificacion_obs': justificacion.motivo,
                 'estado_display': 'JUSTIFICADA'
@@ -1310,7 +1310,7 @@ def descargar_reporte_usuario_pdf(request, dni):
             
         else:
             # CASO 3: FALTA INJUSTIFICADA
-            # No hay registro ni justificaciÃƒÂ³n
+            # No hay registro ni justificación
             mock_item = type('MockAsistencia', (object,), {
                 'fecha': evento.fecha,
                 'hora_ingreso': None,
@@ -1324,7 +1324,7 @@ def descargar_reporte_usuario_pdf(request, dni):
             })
             unified_list.append(mock_item)
 
-    # Calcular mÃƒÂ©tricas avanzadas sobre la lista completa
+    # Calcular métricas avanzadas sobre la lista completa
     total_eventos = len(todos_eventos)
     
     # Confirmadas: Tiene salida O es exonerado (y no es mock de falta/justificada)
@@ -1349,12 +1349,12 @@ def descargar_reporte_usuario_pdf(request, dni):
     score_asistencia = (total_participaciones / total_eventos * 100) if total_eventos > 0 else 0
     
     # Calcular racha de asistencias (eventos consecutivos asistidos/justificados)
-    # La lista ya estÃƒÂ¡ ordenada por fecha descendente (mÃƒÂ¡s reciente primero).
+    # La lista ya está ordenada por fecha descendente (más reciente primero).
     # Para racha actual, contamos desde el inicio hasta que se rompa.
     racha_actual = 0
     for item in unified_list:
         if not getattr(item, 'is_absent', False) or getattr(item, 'es_justificada', False):
-             # Consideramos asistencia o justificaciÃƒÂ³n como continuar la racha
+             # Consideramos asistencia o justificación como continuar la racha
              racha_actual += 1
         else:
             if item.fecha < timezone.now().date(): # Si es falta pasada, rompe racha
@@ -1363,10 +1363,10 @@ def descargar_reporte_usuario_pdf(request, dni):
             # Asumimos que todos_eventos son pasados o presentes.
             break
 
-    # Racha mÃƒÂ¡xima (requiere recorrer cronolÃƒÂ³gicamente o iterar toda la lista)
+    # Racha máxima (requiere recorrer cronológicamente o iterar toda la lista)
     racha_maxima = 0
     temp_racha = 0
-    # Recorremos en orden CRONOLÃƒâ€œGICO (invertido de unified_list)
+    # Recorremos en orden CRONOLÓGICO (invertido de unified_list)
     for item in reversed(unified_list):
         if not getattr(item, 'is_absent', False) or getattr(item, 'es_justificada', False):
             temp_racha += 1
@@ -1375,7 +1375,7 @@ def descargar_reporte_usuario_pdf(request, dni):
         else:
             temp_racha = 0
 
-    # ÃƒÅ¡ltimas 5 asistencias (para el resumen visual, tomamos las 5 primeras del unified que son las recientes)
+    # Últimas 5 asistencias (para el resumen visual, tomamos las 5 primeras del unified que son las recientes)
     ultimas_asistencias = unified_list[:5]
     
     context = {
@@ -1400,7 +1400,7 @@ def descargar_reporte_usuario_pdf(request, dni):
     LogAccion.objects.create(
         usuario=request.user,
         accion="Descargar reporte asistencias usuario PDF",
-        descripcion=f"{request.user.username} descargÃƒÂ³ el reporte de asistencias de {usuario.nombre} {usuario.apellido} (DNI: {usuario.dni}) en PDF."
+        descripcion=f"{request.user.username} descargó el reporte de asistencias de {usuario.nombre} {usuario.apellido} (DNI: {usuario.dni}) en PDF."
     )
     
     return generate_pdf_report('asistencia/reporte_asistencias_usuario.html', context, f"reporte_asistencias_{usuario.dni}.pdf")
@@ -1417,7 +1417,7 @@ def descargar_reporte_evento_pdf(request, evento_id):
     LogAccion.objects.create(
         usuario=request.user,
         accion="Descargar reporte evento PDF",
-        descripcion=f"{request.user.username} descargÃƒÂ³ el reporte del evento {evento.nombre} en PDF."
+        descripcion=f"{request.user.username} descargó el reporte del evento {evento.nombre} en PDF."
     )
     
     return generate_pdf_report('asistencia/reporte_evento.html', context, f"reporte_evento_{evento.id}.pdf")
@@ -1483,7 +1483,7 @@ def cerrar_evento(request, evento_id):
         usuario=request.user,
         accion="Cierre de evento",
         descripcion=(
-            f"Se cerrÃƒÆ’Ã‚Â³ el evento {evento.nombre}. PDF: {pdf_filename}. "
+            f"Se cerró el evento {evento.nombre}. PDF: {pdf_filename}. "
             f"Excel: {excel_filename}. Tardanzas: {context.get('total_tardanzas', 0)}."
         ),
     )
@@ -1510,7 +1510,7 @@ def buscar_usuario_dni(request):
 @login_required
 @permission_required('asistencia.can_manage_users', raise_exception=True)
 def descargar_reporte_filtrado_pdf(request):
-    """Genera un PDF con los filtros aplicados desde la pÃƒÂ¡gina de historial"""
+    """Genera un PDF con los filtros aplicados desde la página de historial"""
     form = FiltroAsistenciaForm(request.GET or None)
     
     filters = form.cleaned_data if form.is_valid() else {}
@@ -1526,7 +1526,7 @@ def descargar_reporte_filtrado_pdf(request):
     data = get_filtered_attendance_data(effective_filters)
     unified_list = data.get('unified_report', [])
     
-    # Calcular estadÃƒÂ­sticas
+    # Calcular estadísticas
     if effective_filters.get('evento'):
         total_registros = Usuario.objects.filter(
             estado__in=[Usuario.ESTADO_ACTIVO, Usuario.ESTADO_EXONERADO, Usuario.ESTADO_PASIVO]
@@ -1587,7 +1587,7 @@ def descargar_reporte_filtrado_pdf(request):
     LogAccion.objects.create(
         usuario=request.user,
         accion="Descargar reporte filtrado PDF",
-        descripcion=f"{request.user.username} descargÃƒÂ³ un reporte filtrado en PDF."
+        descripcion=f"{request.user.username} descargó un reporte filtrado en PDF."
     )
     
     return generate_pdf_report('asistencia/reporte_filtrado.html', context, "reporte_filtrado.pdf")
@@ -1628,12 +1628,12 @@ def importar_usuarios(request):
                         if age >= 65:
                             estado = Usuario.ESTADO_EXONERADO
                     except ValueError:
-                        errores.append(f"Fila con DNI {dni}: Formato de fecha de nacimiento invÃƒÂ¡lido (use YYYY-MM-DD).")
+                        errores.append(f"Fila con DNI {dni}: Formato de fecha de nacimiento inválido (use YYYY-MM-DD).")
                         continue
 
                 if 'estado' in row and row['estado']:
                     if row['estado'] not in dict(Usuario.ESTADOS).keys():
-                        errores.append(f"Fila con DNI {dni}: Estado invÃƒÂ¡lido. Debe ser ACTIVO, PASIVO o EXONERADO.")
+                        errores.append(f"Fila con DNI {dni}: Estado inválido. Debe ser ACTIVO, PASIVO o EXONERADO.")
                         continue
 
                 usuario = Usuario.objects.create(
@@ -1646,7 +1646,7 @@ def importar_usuarios(request):
                 LogAccion.objects.create(
                     usuario=request.user,
                     accion="Importar usuario",
-                    descripcion=f"{request.user.username} importÃƒÂ³ al usuario {usuario.nombre} {usuario.apellido} (DNI: {usuario.dni})."
+                    descripcion=f"{request.user.username} importó al usuario {usuario.nombre} {usuario.apellido} (DNI: {usuario.dni})."
                 )
                 usuarios_importados += 1
             except Exception as e:
@@ -1696,7 +1696,7 @@ def registrar_usuario(request):
             LogAccion.objects.create(
                 usuario=request.user,
                 accion="Registrar usuario",
-                descripcion=f"{request.user.username} registrÃƒÂ³ al usuario {usuario.nombre} {usuario.apellido} (DNI: {usuario.dni})."
+                descripcion=f"{request.user.username} registró al usuario {usuario.nombre} {usuario.apellido} (DNI: {usuario.dni})."
             )
             return redirect('lista_usuarios')
     else:
@@ -1729,7 +1729,7 @@ def perfil_usuario(request):
         return render(request, 'asistencia/perfil_usuario.html', context)
     except Usuario.DoesNotExist:
         context = {
-            'error': 'No se encontrÃƒÂ³ un usuario asociado a tu cuenta.',
+            'error': 'No se encontró un usuario asociado a tu cuenta.',
             'can_scan_qr': request.user.has_perm('asistencia.can_scan_qr')
         }
         return render(request, 'asistencia/perfil_usuario.html', context)
@@ -1808,9 +1808,9 @@ def descargar_todos_carnets_pdf(request):
     """
     Genera un archivo ZIP con:
     - Un PDF de carnets para usuarios con foto.
-    - Un PDF de notificaciÃƒÂ³n para usuarios sin foto.
+    - Un PDF de notificación para usuarios sin foto.
 
-    Para evitar Out Of Memory (OOM), los carnets se procesan en lotes pequeÃƒÂ±os
+    Para evitar Out Of Memory (OOM), los carnets se procesan en lotes pequeños
     y los PDFs parciales se combinan con pypdf.
     """
     import gc
@@ -1820,12 +1820,12 @@ def descargar_todos_carnets_pdf(request):
     try:
         from weasyprint import HTML
     except ImportError:
-        return HttpResponse("WeasyPrint no estÃƒÂ¡ instalado.", status=500)
+        return HttpResponse("WeasyPrint no está instalado.", status=500)
 
     try:
         from pypdf import PdfWriter, PdfReader
     except ImportError:
-        return HttpResponse("pypdf no estÃƒÂ¡ instalado. AÃƒÂ±ade 'pypdf' a requirements.txt", status=500)
+        return HttpResponse("pypdf no está instalado. Añade 'pypdf' a requirements.txt", status=500)
 
     started_at = timezone.localtime()
     started_perf = time.perf_counter()
@@ -1852,7 +1852,7 @@ def descargar_todos_carnets_pdf(request):
         usuario=request.user,
         accion="Descargar carnets ZIP",
         descripcion=(
-            f"{request.user.username} iniciÃƒÂ³ la descarga de {total_usuarios} usuarios "
+            f"{request.user.username} inició la descarga de {total_usuarios} usuarios "
             f"en ZIP: {total_con_foto} con foto y {total_sin_foto} sin foto."
         )
     )
@@ -1865,7 +1865,7 @@ def descargar_todos_carnets_pdf(request):
 
     with zipfile.ZipFile(zip_buffer, mode='w', compression=zipfile.ZIP_DEFLATED) as zip_file:
         if total_con_foto:
-            # Procesar en lotes pequeÃƒÂ±os para evitar OOM.
+            # Procesar en lotes pequeños para evitar OOM.
             # Cada lote se renderiza con WeasyPrint y se libera de memoria inmediatamente.
             CHUNK_SIZE = 10
             writer = PdfWriter()
@@ -1967,7 +1967,7 @@ def descargar_todos_carnets_pdf(request):
         usuario=request.user,
         accion="Descarga carnets ZIP exitosa",
         descripcion=(
-            f"{request.user.username} finalizÃƒÂ³ la descarga ZIP con "
+            f"{request.user.username} finalizó la descarga ZIP con "
             f"{total_carnets_generados} carnets generados, "
             f"{len(incidencias)} incidencias, archivos {', '.join(zip_members) or 'ninguno'} "
             f"en {duration_seconds:.2f}s."

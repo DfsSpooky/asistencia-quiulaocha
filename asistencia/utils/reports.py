@@ -1,4 +1,4 @@
-﻿import csv
+import csv
 import base64
 import os
 import functools
@@ -26,7 +26,7 @@ from django.db.models import Q
 
 def get_filtered_attendance_data(filters):
     """
-    Centraliza la lÃ³gica de filtrado de asistencias e inasistencias.
+    Centraliza la lógica de filtrado de asistencias e inasistencias.
     """
     asistencias_base = Asistencia.objects.select_related('usuario', 'ubicacion', 'evento').all()
 
@@ -44,7 +44,7 @@ def get_filtered_attendance_data(filters):
 
     # Aplicar filtros base
     if dni:
-        # BÃºsqueda general: Nombre, Apellido o DNI
+        # Búsqueda general: Nombre, Apellido o DNI
         asistencias_base = asistencias_base.filter(
             Q(usuario__dni__icontains=dni) |
             Q(usuario__nombre__icontains=dni) |
@@ -67,7 +67,7 @@ def get_filtered_attendance_data(filters):
 
     usuarios_no_asistentes = None
     
-    # LÃ³gica de estado: asistieron vs faltaron
+    # Lógica de estado: asistieron vs faltaron
     asistencias_justificadas = asistencias_base.filter(es_justificada=True)
     asistencias_regulares = asistencias_base.filter(es_justificada=False)
     tardy_asistencias = None
@@ -146,16 +146,16 @@ def get_filtered_attendance_data(filters):
                 )
             base_users = list(base_users_qs)
 
-            # Iterar por cada evento para encontrar quiÃ©n faltÃ³ a QUÃ‰ evento
+            # Iterar por cada evento para encontrar quién faltó a QUÉ evento
             for ev in target_events:
                 for u in base_users:
-                    # Si tiene asistencia registrada para este evento, NO es falta (ya estÃ¡ en 'asistencias')
+                    # Si tiene asistencia registrada para este evento, NO es falta (ya está en 'asistencias')
                     # Nota: Las faltas justificadas que generaron registro en Asistencia (es_justificada=True)
-                    # ya estÃ¡n en la lista principal 'asistencias'. AquÃ­ buscamos solo los SIN REGISTRO.
+                    # ya están en la lista principal 'asistencias'. Aquí buscamos solo los SIN REGISTRO.
                     if (u.id, ev.id) in all_attendances:
                         continue
 
-                    # Verificar si tiene justificaciÃ³n (pero sin registro de asistencia, caso raro pero posible)
+                    # Verificar si tiene justificación (pero sin registro de asistencia, caso raro pero posible)
                     just = all_justifications.get((u.id, ev.id))
                     is_justified = just is not None
 
@@ -182,7 +182,7 @@ def get_filtered_attendance_data(filters):
             usuarios_no_asistentes = []
 
     else:
-        # Estado "Todos" o vacÃ­o
+        # Estado "Todos" o vacío
         asistencias = asistencias_confirmadas
         # Calcular faltantes sin registro (si hay contexto)
         target_events = None
@@ -270,7 +270,7 @@ def get_filtered_attendance_data(filters):
     for a in asistencias:
         flags = classify_attendance_item(a, tardanza_activa)
         a.is_late_absent = flags.is_late_absent
-        # Si es justificada o tardÃ­a fuera de lÃ­mite, la tratamos como ausencia.
+        # Si es justificada o tardía fuera de límite, la tratamos como ausencia.
         a.is_absent = flags.is_absent
         if a.es_justificada:
             a.justificacion_obs = justificacion_map.get((a.usuario_id, a.evento_id), "")
@@ -311,7 +311,7 @@ def generate_attendance_csv(unified_list):
                 ingreso_texto = item.hora_ingreso.strftime('%H:%M') if item.hora_ingreso else 'No registrado'
                 salida_texto = item.hora_salida.strftime('%H:%M') if item.hora_salida else 'No registrado'
                 puntualidad_texto = item.get_puntualidad_display() if getattr(item, 'puntualidad', None) else 'No aplica'
-                confirmada_texto = 'SÃ­' if item.confirmada else 'No'
+                confirmada_texto = 'Sí' if item.confirmada else 'No'
 
             writer.writerow([
                 f"{item.usuario.nombre} {item.usuario.apellido}",
@@ -328,13 +328,13 @@ def generate_attendance_csv(unified_list):
         else:
             # Registro de asistencia
             # Registro de asistencia
-            # Exonerados siempre ASISTIÃ“ si tienen registro, otros dependen de salida
+            # Exonerados siempre ASISTIÓ si tienen registro, otros dependen de salida
             if item.usuario.estado == 'EXONERADO':
-                estado = 'ASISTIÃ“'
+                estado = 'ASISTIÓ'
                 ingreso_valor = 'EXONERADO'
                 salida_valor = 'EXONERADO'
             else:
-                estado = 'ASISTIÃ“' if item.hora_salida else 'PENDIENTE'
+                estado = 'ASISTIÓ' if item.hora_salida else 'PENDIENTE'
                 ingreso_valor = item.hora_ingreso.strftime('%H:%M') if item.hora_ingreso else 'No registrado'
                 salida_valor = item.hora_salida.strftime('%H:%M') if item.hora_salida else 'No registrado'
             writer.writerow([
@@ -343,11 +343,11 @@ def generate_attendance_csv(unified_list):
                 item.fecha.strftime('%d/%m/%Y') if item.fecha else '',
                 ingreso_valor,
                 salida_valor,
-                item.ubicacion.nombre if item.ubicacion else 'Sin ubicaciÃ³n',
+                item.ubicacion.nombre if item.ubicacion else 'Sin ubicación',
                 item.evento.nombre if item.evento else 'Sin evento',
                 estado,
                 item.get_puntualidad_display() if getattr(item, 'puntualidad', None) else 'No aplica',
-                'SÃ­' if item.confirmada else 'No'
+                'Sí' if item.confirmada else 'No'
             ])
     return response
 
@@ -398,7 +398,7 @@ def generate_attendance_excel(unified_list, filename="asistencias.xlsx"):
                 ingreso_texto = item.hora_ingreso.strftime('%H:%M') if item.hora_ingreso else 'No registrado'
                 salida_texto = item.hora_salida.strftime('%H:%M') if item.hora_salida else 'No registrado'
                 puntualidad_texto = item.get_puntualidad_display() if getattr(item, 'puntualidad', None) else 'No aplica'
-                confirmada_texto = 'SÃ­' if item.confirmada else 'No'
+                confirmada_texto = 'Sí' if item.confirmada else 'No'
 
             # Registro de falta
             data = [
@@ -425,11 +425,11 @@ def generate_attendance_excel(unified_list, filename="asistencias.xlsx"):
             # Registro de asistencia
             # Registro de asistencia
             if item.usuario.estado == 'EXONERADO':
-                estado = 'ASISTIÃ“'
+                estado = 'ASISTIÓ'
                 ingreso_valor = 'EXONERADO'
                 salida_valor = 'EXONERADO'
             else:
-                estado = 'ASISTIÃ“' if item.hora_salida else 'PENDIENTE'
+                estado = 'ASISTIÓ' if item.hora_salida else 'PENDIENTE'
                 ingreso_valor = item.hora_ingreso.strftime('%H:%M') if item.hora_ingreso else '--'
                 salida_valor = item.hora_salida.strftime('%H:%M') if item.hora_salida else '--'
             data = [
@@ -442,7 +442,7 @@ def generate_attendance_excel(unified_list, filename="asistencias.xlsx"):
                 item.evento.nombre if item.evento else 'Sin evento',
                 estado,
                 item.get_puntualidad_display() if getattr(item, 'puntualidad', None) else 'No aplica',
-                'SÃ' if item.confirmada else 'NO'
+                'SÍ' if item.confirmada else 'NO'
             ]
             for col, value in enumerate(data, 1):
                 cell = ws.cell(row=row_idx, column=col, value=value)
@@ -481,10 +481,10 @@ def generate_pdf_report(template_name, context, filename):
             return response
         except Exception as exc:
             weasyprint_error = exc
-            print(f"WeasyPrint fallÃ³, intentando fallback con xhtml2pdf: {str(exc)}")
+            print(f"WeasyPrint falló, intentando fallback con xhtml2pdf: {str(exc)}")
     else:
-        weasyprint_error = RuntimeError("WeasyPrint no estÃ¡ disponible en este entorno.")
-        print("WeasyPrint no estÃ¡ disponible, intentando fallback con xhtml2pdf.")
+        weasyprint_error = RuntimeError("WeasyPrint no está disponible en este entorno.")
+        print("WeasyPrint no está disponible, intentando fallback con xhtml2pdf.")
 
     if pisa is not None:
         try:
@@ -502,7 +502,7 @@ def generate_pdf_report(template_name, context, filename):
                 response['X-Content-Type-Options'] = 'nosniff'
                 return response
         except Exception as fallback_e:
-            print(f"Fallback tambiÃ©n fallÃ³: {str(fallback_e)}")
+            print(f"Fallback también falló: {str(fallback_e)}")
 
     return HttpResponse(f"Error al generar el reporte: {str(weasyprint_error)}", status=500)
 
@@ -536,7 +536,7 @@ def get_image_base64(image_field):
 
 def generate_global_attendance_excel(report_data, system_config):
     """
-    Genera un Excel Premium con mÃºltiples hojas: Resumen y Detalle.
+    Genera un Excel Premium con múltiples hojas: Resumen y Detalle.
     """
     from io import BytesIO
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -561,7 +561,7 @@ def generate_global_attendance_excel(report_data, system_config):
         bottom=Side(style='thin', color="E2E8F0")
     )
 
-    # TÃ­tulo Principal
+    # Título Principal
     ws_summary.merge_cells('B2:F2')
     cell_title = ws_summary['B2']
     cell_title.value = (system_config.nombre_institucion if system_config else "SISTEMA DE ASISTENCIA").upper()
@@ -575,7 +575,7 @@ def generate_global_attendance_excel(report_data, system_config):
     cell_subtitle.alignment = Alignment(horizontal="center")
 
     # Tabla de Totales Generales
-    ws_summary['B5'] = "MÃ‰TRICA"
+    ws_summary['B5'] = "MÉTRICA"
     ws_summary['C5'] = "VALOR"
     for cell in [ws_summary['B5'], ws_summary['C5']]:
         cell.fill = slate_fill
@@ -592,10 +592,10 @@ def generate_global_attendance_excel(report_data, system_config):
 
     metrics = [
         ("Total Eventos", total_eventos),
-        ("PadrÃ³n Total (Acumulado)", total_padron_acumulado),
-        ("Asistencias FÃ­sicas", total_asistencias_fisicas_acumulado),
+        ("Padrón Total (Acumulado)", total_padron_acumulado),
+        ("Asistencias Físicas", total_asistencias_fisicas_acumulado),
         ("Justificadas Totales", total_justificadas_acumulado),
-        ("Presentes* (FÃ­sicas + Just.)", total_presentes_acumulado),
+        ("Presentes* (Físicas + Just.)", total_presentes_acumulado),
         ("Promedio de Asistencia", f"{promedio_asistencia:.1f}%")
     ]
 
@@ -610,7 +610,7 @@ def generate_global_attendance_excel(report_data, system_config):
     ws_summary.cell(row=start_row_events, column=2).font = white_font
     ws_summary.cell(row=start_row_events, column=3, value="FECHA").fill = indigo_fill
     ws_summary.cell(row=start_row_events, column=3).font = white_font
-    ws_summary.cell(row=start_row_events, column=4, value="PADRÃ“N").fill = indigo_fill
+    ws_summary.cell(row=start_row_events, column=4, value="PADRÓN").fill = indigo_fill
     ws_summary.cell(row=start_row_events, column=4).font = white_font
     ws_summary.cell(row=start_row_events, column=5, value="PRESENTES*").fill = indigo_fill
     ws_summary.cell(row=start_row_events, column=5).font = white_font
@@ -644,7 +644,7 @@ def generate_global_attendance_excel(report_data, system_config):
     # --- HOJA 2: DETALLE COMPLETO ---
     ws_detail = wb.create_sheet("Detalle de Asistencias")
     
-    headers = ['EVENTO', 'SOCIO', 'DNI', 'ESTADO', 'INGRESO', 'SALIDA', 'OBSERVACIÃ“N']
+    headers = ['EVENTO', 'SOCIO', 'DNI', 'ESTADO', 'INGRESO', 'SALIDA', 'OBSERVACIÓN']
     for col, head in enumerate(headers, 1):
         cell = ws_detail.cell(row=1, column=col, value=head)
         cell.fill = slate_fill
@@ -658,14 +658,14 @@ def generate_global_attendance_excel(report_data, system_config):
             ws_detail.cell(row=curr_row, column=2, value=f"{rec['usuario'].nombre} {rec['usuario'].apellido}")
             ws_detail.cell(row=curr_row, column=3, value=rec['usuario'].dni)
             
-            # LÃ³gica de Estado
-            status_text = "ASISTIÃ“"
+            # Lógica de Estado
+            status_text = "ASISTIÓ"
             if rec['is_absent']:
                 status_text = "JUSTIFICADA" if rec['es_justificada'] else "FALTA"
             elif not rec.get('hora_salida'):
                 # Si es exonerado, se considera asistencia completa
                 if rec['usuario'].estado == 'EXONERADO':
-                    status_text = "ASISTIÃ“"
+                    status_text = "ASISTIÓ"
                 else:
                     status_text = "PENDIENTE"
             
