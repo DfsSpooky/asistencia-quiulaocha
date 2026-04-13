@@ -553,6 +553,34 @@ class AdminMassPhotoUploadTests(TestCase):
         usuario.refresh_from_db()
         self.assertTrue(bool(usuario.foto_perfil))
 
+    def test_carga_masiva_reemplaza_foto_anterior_sin_dejar_huerfanos(self):
+        usuario = Usuario.objects.create(
+            nombre='Julia',
+            apellido='Ramos',
+            dni='12345678',
+            estado=Usuario.ESTADO_ACTIVO,
+        )
+
+        first_response = self.client.post(
+            reverse('admin:asistencia_usuario_carga_masiva_fotos'),
+            {'fotos': [self._build_image('12345678.jpg', (12, 120, 200))]},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(first_response.status_code, 200, first_response.content.decode())
+
+        second_response = self.client.post(
+            reverse('admin:asistencia_usuario_carga_masiva_fotos'),
+            {'fotos': [self._build_image('12345678.jpg', (220, 80, 40))]},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+        self.assertEqual(second_response.status_code, 200, second_response.content.decode())
+
+        usuario.refresh_from_db()
+        self.assertEqual(usuario.foto_perfil.name, 'perfil_fotos/perfil_12345678.jpg')
+
+        photo_dir = os.path.join(settings.MEDIA_ROOT, 'perfil_fotos')
+        self.assertEqual(sorted(os.listdir(photo_dir)), ['perfil_12345678.jpg'])
+
 
 class CarnetsZipDownloadTests(TestCase):
     def setUp(self):

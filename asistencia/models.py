@@ -9,6 +9,7 @@ import re
 import uuid
 from django.contrib.auth.models import User
 from django.utils import timezone
+from django.db.models.fields.files import FieldFile
 from PIL import Image, ImageOps
 from datetime import date, datetime
 from .qr_security import build_qr_encoded_payload
@@ -150,10 +151,20 @@ class Usuario(models.Model):
         is_new = self.pk is None
         original_dni = None
         original_qr_version = None
+        original_foto_perfil = None
         if not is_new:
-            original_dni, original_qr_version = Usuario.objects.filter(pk=self.pk).values_list('dni', 'qr_version').first()
+            original_dni, original_qr_version, original_foto_perfil = (
+                Usuario.objects.filter(pk=self.pk).values_list('dni', 'qr_version', 'foto_perfil').first()
+            )
         dni_changed = (original_dni is not None and original_dni != self.dni)
         qr_version_changed = (original_qr_version is not None and original_qr_version != self.qr_version)
+        replacing_photo = bool(
+            self.foto_perfil and (
+                is_new or
+                not isinstance(self.foto_perfil, FieldFile) or
+                self.foto_perfil.name != (original_foto_perfil or '')
+            )
+        )
 
         self.full_clean()
 
@@ -172,8 +183,11 @@ class Usuario(models.Model):
                     progressive=True,
                 )
                 buffer.seek(0)
+                target_photo_name = f'perfil_{self.dni}.jpg'
+                if replacing_photo and original_foto_perfil:
+                    self.foto_perfil.storage.delete(original_foto_perfil)
                 self.foto_perfil.save(
-                    f'perfil_{self.dni}.jpg',
+                    target_photo_name,
                     ContentFile(buffer.getvalue()),
                     save=False
                 )
