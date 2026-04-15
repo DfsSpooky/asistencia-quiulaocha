@@ -116,7 +116,7 @@ def _build_carnet_payload(usuario):
     }, None
 
 
-def _build_carnet_payload_sin_foto_permitida(usuario):
+def _build_carnet_payload_sin_foto_permitida(usuario, foto_base64_override=None):
     qr_base64, qr_error = _read_image_field_base64(usuario.qr_code, 'código QR')
     if qr_error:
         return None, _crear_incidencia_carnet(usuario, qr_error)
@@ -127,7 +127,7 @@ def _build_carnet_payload_sin_foto_permitida(usuario):
         'dni': usuario.dni,
         'estado': usuario.get_estado_display(),
         'id': usuario.id,
-        'foto_base64': None,
+        'foto_base64': foto_base64_override,
         'qr_base64': qr_base64,
     }, None
 
@@ -219,6 +219,12 @@ def _generate_carnets_zip_payload():
 
     logo = get_logo_base64()
     sys_config = ConfiguracionSistema.objects.first()
+    avatar_carnet_sin_foto_base64 = None
+    if sys_config and sys_config.avatar_carnet_sin_foto:
+        avatar_carnet_sin_foto_base64, _ = _read_image_field_base64(
+            sys_config.avatar_carnet_sin_foto,
+            'avatar por defecto para carnet sin foto',
+        )
     zip_buffer = io.BytesIO()
     zip_members = []
     total_carnets_con_foto = 0
@@ -339,7 +345,10 @@ def _generate_carnets_zip_payload():
         )
         total_carnets_sin_foto = generar_pdf_carnets(
             usuarios_sin_foto_qs,
-            _build_carnet_payload_sin_foto_permitida,
+            lambda usuario: _build_carnet_payload_sin_foto_permitida(
+                usuario,
+                foto_base64_override=avatar_carnet_sin_foto_base64,
+            ),
             'carnets_sin_foto.pdf',
             'Carnets sin foto',
             'No se encontraron usuarios sin fotografia pendientes en este lote.',

@@ -414,6 +414,13 @@ class ConfiguracionSistema(models.Model):
         help_text="Logo del sistema (se mostrará en la barra de navegación, login y reportes)",
         validators=[validate_file_size, validate_image_content],
     )
+    avatar_carnet_sin_foto = models.ImageField(
+        upload_to='logos/',
+        blank=True,
+        null=True,
+        help_text="Avatar por defecto solo para imprimir carnets sin foto real. No reemplaza la fotografía del socio en el sistema.",
+        validators=[validate_file_size, validate_image_content],
+    )
     nombre_institucion = models.CharField(
         max_length=100,
         default='QUIULACOCHA',
@@ -448,6 +455,29 @@ class ConfiguracionSistema(models.Model):
                 super().save(*args, **kwargs)
             except Exception as e:
                 print(f"Error al procesar el logo: {e}")
+
+        if self.avatar_carnet_sin_foto:
+            try:
+                img = Image.open(self.avatar_carnet_sin_foto)
+                img = ImageOps.exif_transpose(img).convert('RGB')
+                img = ImageOps.fit(img, Usuario.FOTO_PERFIL_SIZE, Image.Resampling.LANCZOS)
+                buffer = BytesIO()
+                img.save(
+                    buffer,
+                    format='JPEG',
+                    quality=Usuario.FOTO_PERFIL_QUALITY,
+                    optimize=True,
+                    progressive=True,
+                )
+                buffer.seek(0)
+                self.avatar_carnet_sin_foto.save(
+                    'avatar_carnet_sin_foto.jpg',
+                    ContentFile(buffer.getvalue()),
+                    save=False
+                )
+                super().save(*args, **kwargs)
+            except Exception as e:
+                print(f"Error al procesar avatar de carnet por defecto: {e}")
 
     def __str__(self):
         return "Configuración del Sistema"
