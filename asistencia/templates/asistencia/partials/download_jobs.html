@@ -7,6 +7,9 @@
         <div>
             <h3 class="text-2xl font-black text-slate-900 leading-tight">Descargas Preparadas</h3>
             <p class="text-slate-500 font-medium">El sistema genera el ZIP en segundo plano y aquí aparece cuando ya está listo.</p>
+            {% if solicitud_descarga_activa %}
+                <p class="text-amber-700 font-semibold mt-2">Hay una generación en curso. Cuando termine, el botón de descarga se habilitará automáticamente aquí.</p>
+            {% endif %}
         </div>
         <div class="inline-flex items-center gap-2 px-4 py-2 rounded-2xl bg-slate-50 border border-slate-200 text-slate-500 text-xs font-bold uppercase tracking-widest">
             <i class="bi bi-arrow-repeat"></i>
@@ -49,9 +52,11 @@
 
                     <div class="flex items-center">
                         {% if solicitud.estado == 'LISTO' and solicitud.archivo_zip %}
-                            <a href="{% url 'descargar_archivo_carnets' solicitud.id %}"
+                            <a href="{{ solicitud.archivo_zip.url }}"
                                hx-boost="false"
                                download
+                               target="_blank"
+                               rel="noopener"
                                class="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-lg shadow-emerald-600/20 transition-all">
                                 <i class="bi bi-download"></i>
                                 <span>Descargar ZIP</span>

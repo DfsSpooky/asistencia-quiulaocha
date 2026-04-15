@@ -12,11 +12,20 @@
                 <p class="text-slate-500 font-medium italic">Base de datos central de la comunidad</p>
             </div>
             <div class="flex flex-wrap gap-3">
-                <button onclick="confirmarDescargaMasiva()"
-                        class="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold shadow-lg shadow-indigo-600/20 transition-all transform hover:-translate-y-1 active:scale-95">
-                    <i class="bi bi-person-badge-fill text-xl"></i>
-                    <span>Generar ZIP de Carnets</span>
-                </button>
+                {% if solicitud_descarga_activa %}
+                    <button type="button"
+                            onclick="mostrarDescargaActiva()"
+                            class="inline-flex items-center gap-2 px-6 py-3 bg-slate-200 text-slate-700 rounded-2xl font-bold border border-slate-300 transition-all">
+                        <i class="bi bi-hourglass-split text-xl"></i>
+                        <span>ZIP en Preparación</span>
+                    </button>
+                {% else %}
+                    <button onclick="confirmarDescargaMasiva()"
+                            class="inline-flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold shadow-lg shadow-indigo-600/20 transition-all transform hover:-translate-y-1 active:scale-95">
+                        <i class="bi bi-person-badge-fill text-xl"></i>
+                        <span>Generar ZIP de Carnets</span>
+                    </button>
+                {% endif %}
                 <a href="{% url 'admin_solicitar_justificacion' %}"
                    class="inline-flex items-center gap-2 px-6 py-3 bg-primary-50 text-primary-700 rounded-2xl font-bold border border-primary-100 transition-all hover:bg-primary-100">
                     <i class="bi bi-patch-exclamation-fill text-xl"></i>
@@ -195,6 +204,16 @@
             });
         }
 
+        function mostrarDescargaActiva() {
+            Swal.fire({
+                title: 'Ya hay una generación en curso',
+                text: 'Tu ZIP actual todavía se está preparando. Apenas termine, aparecerá el botón de descarga en el panel inferior.',
+                icon: 'info',
+                confirmButtonText: 'Entendido',
+                confirmButtonColor: '#eab308'
+            });
+        }
+
         function refrescarPanelDescargas() {
             const panel = document.getElementById('download-jobs-panel');
             if (panel) {
@@ -231,6 +250,11 @@
                 refrescarPanelDescargas();
             })
             .catch((error) => {
+                if ((error.message || '').includes('Ya tienes una generación en curso')) {
+                    mostrarDescargaActiva();
+                    refrescarPanelDescargas();
+                    return;
+                }
                 Swal.fire({
                     title: 'No se pudo iniciar',
                     text: error.message || 'Ocurrió un problema al solicitar la descarga.',

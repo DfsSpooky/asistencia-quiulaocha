@@ -139,6 +139,31 @@ def _get_recent_carnet_download_requests(user, limit=5):
     )
 
 
+def _get_active_carnet_download_request(user):
+    return (
+        SolicitudDescargaCarnets.objects.filter(
+            solicitado_por=user,
+            estado__in=[
+                SolicitudDescargaCarnets.ESTADO_PENDIENTE,
+                SolicitudDescargaCarnets.ESTADO_PROCESANDO,
+            ],
+        )
+        .order_by('-fecha_solicitud')
+        .first()
+    )
+
+
+def _cleanup_previous_carnet_requests(user, keep_request_id=None):
+    previous_requests = SolicitudDescargaCarnets.objects.filter(solicitado_por=user)
+    if keep_request_id is not None:
+        previous_requests = previous_requests.exclude(pk=keep_request_id)
+
+    for previous_request in previous_requests:
+        if previous_request.archivo_zip:
+            previous_request.archivo_zip.delete(save=False)
+    previous_requests.delete()
+
+
 def _launch_carnets_generation_job(solicitud_id):
     manage_py = os.path.join(settings.BASE_DIR, 'manage.py')
     command = [
@@ -520,6 +545,7 @@ def lista_usuarios(request):
         'usuarios_pasivos': usuarios_pasivos,
         'usuarios_exonerados': usuarios_exonerados,
         'solicitudes_descarga_carnets': _get_recent_carnet_download_requests(request.user),
+        'solicitud_descarga_activa': _get_active_carnet_download_request(request.user),
     }
     if request.headers.get('HX-Request') and ('page' in request.GET or request.GET.get('query') or request.GET.get('estado') or request.GET.get('ordenar_por')):
         return render(request, 'asistencia/partials/user_list.html', context)
@@ -2046,13 +2072,7 @@ def actualizar_foto_rapida(request, dni):
 @permission_required('asistencia.can_manage_users', raise_exception=True)
 @require_POST
 def solicitar_descarga_carnets(request):
-    activa = SolicitudDescargaCarnets.objects.filter(
-        solicitado_por=request.user,
-        estado__in=[
-            SolicitudDescargaCarnets.ESTADO_PENDIENTE,
-            SolicitudDescargaCarnets.ESTADO_PROCESANDO,
-        ],
-    ).first()
+    activa = _get_active_carnet_download_request(request.user)
     if activa:
         return JsonResponse(
             {
@@ -2063,6 +2083,7 @@ def solicitar_descarga_carnets(request):
             status=409,
         )
 
+    _cleanup_previous_carnet_requests(request.user)
     solicitud = SolicitudDescargaCarnets.objects.create(solicitado_por=request.user)
     try:
         _launch_carnets_generation_job(solicitud.id)
@@ -2102,6 +2123,7 @@ def solicitar_descarga_carnets(request):
 def estado_descargas_carnets(request):
     context = {
         'solicitudes_descarga_carnets': _get_recent_carnet_download_requests(request.user, limit=8),
+        'solicitud_descarga_activa': _get_active_carnet_download_request(request.user),
     }
     return render(request, 'asistencia/partials/download_jobs.html', context)
 
