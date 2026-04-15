@@ -366,6 +366,46 @@ class LogAccion(models.Model):
             models.Index(fields=['usuario']),
         ]
 
+
+class SolicitudDescargaCarnets(models.Model):
+    ESTADO_PENDIENTE = 'PENDIENTE'
+    ESTADO_PROCESANDO = 'PROCESANDO'
+    ESTADO_LISTO = 'LISTO'
+    ESTADO_ERROR = 'ERROR'
+    ESTADOS = [
+        (ESTADO_PENDIENTE, 'Pendiente'),
+        (ESTADO_PROCESANDO, 'Procesando'),
+        (ESTADO_LISTO, 'Listo'),
+        (ESTADO_ERROR, 'Error'),
+    ]
+
+    solicitado_por = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='solicitudes_descarga_carnets',
+    )
+    estado = models.CharField(max_length=12, choices=ESTADOS, default=ESTADO_PENDIENTE)
+    archivo_zip = models.FileField(upload_to='descargas_carnets/', blank=True, null=True)
+    nombre_archivo = models.CharField(max_length=255, blank=True)
+    total_carnets_con_foto = models.PositiveIntegerField(default=0)
+    total_carnets_sin_foto = models.PositiveIntegerField(default=0)
+    total_usuarios_sin_foto = models.PositiveIntegerField(default=0)
+    total_incidencias = models.PositiveIntegerField(default=0)
+    mensaje_error = models.TextField(blank=True)
+    fecha_solicitud = models.DateTimeField(auto_now_add=True)
+    fecha_inicio = models.DateTimeField(blank=True, null=True)
+    fecha_fin = models.DateTimeField(blank=True, null=True)
+
+    def __str__(self):
+        return f"Descarga de carnets #{self.pk} - {self.get_estado_display()}"
+
+    class Meta:
+        ordering = ['-fecha_solicitud']
+        indexes = [
+            models.Index(fields=['estado']),
+            models.Index(fields=['solicitado_por', 'fecha_solicitud']),
+        ]
+
 class ConfiguracionSistema(models.Model):
     logo = models.ImageField(
         upload_to='logos/',

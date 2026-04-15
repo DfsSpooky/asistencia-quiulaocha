@@ -11,7 +11,7 @@ from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_POST
 from django.utils.decorators import method_decorator
 from django.core.paginator import Paginator
-from django.http import HttpResponse, JsonResponse, FileResponse
+from django.http import HttpResponse, JsonResponse, FileResponse, Http404
 from django.views.decorators.cache import cache_page
 from django.views import View
 from django.db.models import Q, Count
@@ -22,7 +22,7 @@ import openpyxl # Changed from `from openpyxl import Workbook` to `import openpy
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from io import BytesIO
-from .models import Usuario, Asistencia, Ubicacion, Evento, LogAccion, ConfiguracionSistema, Justificacion, HistorialCarnet
+from .models import Usuario, Asistencia, Ubicacion, Evento, LogAccion, ConfiguracionSistema, Justificacion, HistorialCarnet, SolicitudDescargaCarnets
 from .forms import FiltroAsistenciaForm, ImportarUsuariosForm, BuscarUsuarioForm, UsuarioRegistroForm, JustificacionForm, AdminJustificacionForm, CarnetForm, AdminCarnetForm
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -49,6 +49,7 @@ import json
 import os
 import subprocess
 import shutil
+import sys
 import tarfile
 import zipfile
 from django.db.migrations.executor import MigrationExecutor
@@ -129,6 +130,228 @@ def _build_carnet_payload_sin_foto_permitida(usuario):
         'foto_base64': None,
         'qr_base64': qr_base64,
     }, None
+
+
+def _get_recent_carnet_download_requests(user, limit=5):
+    return list(
+        SolicitudDescargaCarnets.objects.filter(solicitado_por=user)
+        .order_by('-fecha_solicitud')[:limit]
+    )
+
+
+def _launch_carnets_generation_job(solicitud_id):
+    manage_py = os.path.join(settings.BASE_DIR, 'manage.py')
+    command = [
+        sys.executable,
+        manage_py,
+        'procesar_descarga_carnets',
+        str(solicitud_id),
+    ]
+    with open(os.devnull, 'ab') as devnull:
+        subprocess.Popen(
+            command,
+            cwd=settings.BASE_DIR,
+            stdout=devnull,
+            stderr=devnull,
+            start_new_session=True,
+            close_fds=True,
+        )
+
+
+def _generate_carnets_zip_payload():
+    import gc
+    import time
+    from .utils.reports import get_logo_base64
+    started_perf = time.perf_counter()
+
+    try:
+        from weasyprint import HTML
+    except ImportError as exc:
+        raise RuntimeError("WeasyPrint no está instalado.") from exc
+
+    try:
+        from pypdf import PdfWriter, PdfReader
+    except ImportError as exc:
+        raise RuntimeError("pypdf no está instalado. Añade 'pypdf' a requirements.txt") from exc
+
+    started_at = timezone.localtime()
+    current_date = started_at.strftime('%d/%m/%Y %H:%M')
+    timestamp = started_at.strftime('%Y%m%d_%H%M%S')
+    zip_filename = f'carnets_y_pendientes_{timestamp}.zip'
+
+    filtro_sin_foto = Q(foto_perfil__isnull=True) | Q(foto_perfil='')
+    base_queryset = Usuario.objects.order_by('apellido', 'nombre').only(
+        'id', 'nombre', 'apellido', 'dni', 'estado', 'foto_perfil', 'qr_code'
+    )
+    usuarios_con_foto_qs = base_queryset.exclude(filtro_sin_foto)
+    usuarios_sin_foto_qs = base_queryset.filter(filtro_sin_foto)
+
+    reporte_sin_foto = [
+        _crear_incidencia_carnet(usuario, 'Falta fotografía.')
+        for usuario in usuarios_sin_foto_qs
+    ]
+    incidencias = []
+
+    logo = get_logo_base64()
+    sys_config = ConfiguracionSistema.objects.first()
+    zip_buffer = io.BytesIO()
+    zip_members = []
+    total_carnets_con_foto = 0
+    total_carnets_sin_foto = 0
+
+    with zipfile.ZipFile(zip_buffer, mode='w', compression=zipfile.ZIP_DEFLATED) as zip_file:
+        def generar_pdf_vacio(nombre_archivo, titulo, mensaje):
+            html_vacio = f"""
+            <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <style>
+                        @page {{ size: A4 landscape; margin: 18mm; }}
+                        body {{ font-family: Helvetica, Arial, sans-serif; color: #1f2937; }}
+                        h1 {{ color: #92400e; margin-bottom: 8px; }}
+                        p {{ font-size: 12px; line-height: 1.5; }}
+                    </style>
+                </head>
+                <body>
+                    <h1>{titulo}</h1>
+                    <p>{mensaje}</p>
+                    <p>Generado el {current_date}.</p>
+                </body>
+            </html>
+            """
+            pdf_vacio = HTML(string=html_vacio).write_pdf()
+            zip_file.writestr(nombre_archivo, pdf_vacio)
+            zip_members.append(nombre_archivo)
+
+        def generar_pdf_carnets(queryset, build_payload, zip_entry_name, titulo_vacio, mensaje_vacio, modo_sin_foto=False):
+            total_carnets = 0
+            total_queryset = queryset.count()
+            if not total_queryset:
+                generar_pdf_vacio(zip_entry_name, titulo_vacio, mensaje_vacio)
+                return total_carnets
+
+            chunk_size = 10
+            writer = PdfWriter()
+
+            for batch_number, chunk_users in enumerate(
+                _iter_queryset_in_chunks(queryset, chunk_size),
+                start=1,
+            ):
+                usuarios_data = []
+                usuarios_validos_chunk = []
+                for u in chunk_users:
+                    carnet_payload, incidencia = build_payload(u)
+                    if incidencia:
+                        incidencias.append(incidencia)
+                        continue
+                    usuarios_data.append(carnet_payload)
+                    usuarios_validos_chunk.append(u)
+
+                if not usuarios_data:
+                    gc.collect()
+                    continue
+
+                context = {
+                    'usuarios': usuarios_data,
+                    'logo_base64': logo,
+                    'current_date': current_date,
+                    'total_usuarios': len(usuarios_data),
+                    'sistema_config': sys_config,
+                    'modo_sin_foto': modo_sin_foto,
+                }
+
+                try:
+                    html_string = render_to_string('asistencia/reporte_todos_carnets.html', context)
+                    pdf_bytes = HTML(string=html_string).write_pdf()
+
+                    reader = PdfReader(io.BytesIO(pdf_bytes))
+                    for page in reader.pages:
+                        writer.add_page(page)
+                    total_carnets += len(usuarios_data)
+                except Exception as exc:
+                    logger.exception("Error al generar el lote %s de %s", batch_number, zip_entry_name)
+                    for u in usuarios_validos_chunk:
+                        incidencias.append(
+                            _crear_incidencia_carnet(
+                                u,
+                                f'Error al generar carnet: {exc.__class__.__name__}.'
+                            )
+                        )
+                    html_string = None
+                    pdf_bytes = None
+                    reader = None
+
+                del pdf_bytes, reader, html_string, usuarios_data, usuarios_validos_chunk, context
+                gc.collect()
+
+                processed = min(batch_number * chunk_size, total_queryset)
+                logger.info(
+                    "Carnets progreso %s: %s/%s procesados",
+                    zip_entry_name,
+                    processed,
+                    total_queryset,
+                )
+
+            if total_carnets:
+                output_buffer = io.BytesIO()
+                writer.write(output_buffer)
+                final_pdf = output_buffer.getvalue()
+                output_buffer.close()
+
+                zip_file.writestr(zip_entry_name, final_pdf)
+                zip_members.append(zip_entry_name)
+
+            del writer
+            gc.collect()
+            return total_carnets
+
+        total_carnets_con_foto = generar_pdf_carnets(
+            usuarios_con_foto_qs,
+            _build_carnet_payload,
+            'carnets_con_foto.pdf',
+            'Carnets con foto',
+            'No se encontraron usuarios con fotografia disponible para generar carnets en este lote.',
+        )
+        total_carnets_sin_foto = generar_pdf_carnets(
+            usuarios_sin_foto_qs,
+            _build_carnet_payload_sin_foto_permitida,
+            'carnets_sin_foto.pdf',
+            'Carnets sin foto',
+            'No se encontraron usuarios sin fotografia pendientes en este lote.',
+            modo_sin_foto=True,
+        )
+
+        context_sin_foto = {
+            'usuarios': reporte_sin_foto,
+            'logo_base64': logo,
+            'current_date': current_date,
+            'sistema_config': sys_config,
+        }
+        html_sin_foto = render_to_string(
+            'asistencia/reporte_sin_foto.html',
+            context_sin_foto
+        )
+        pdf_sin_foto = HTML(string=html_sin_foto).write_pdf()
+        zip_file.writestr('reporte_usuarios_sin_foto.pdf', pdf_sin_foto)
+        zip_members.append('reporte_usuarios_sin_foto.pdf')
+
+        del html_sin_foto, pdf_sin_foto, context_sin_foto
+        gc.collect()
+
+    zip_bytes = zip_buffer.getvalue()
+    zip_buffer.close()
+    duration_seconds = time.perf_counter() - started_perf
+
+    return {
+        'zip_bytes': zip_bytes,
+        'zip_filename': zip_filename,
+        'zip_members': zip_members,
+        'total_carnets_con_foto': total_carnets_con_foto,
+        'total_carnets_sin_foto': total_carnets_sin_foto,
+        'total_usuarios_sin_foto': len(reporte_sin_foto),
+        'total_incidencias': len(incidencias),
+        'duration_seconds': duration_seconds,
+    }
 
 def landing_page(request):
     """
@@ -296,6 +519,7 @@ def lista_usuarios(request):
         'usuarios_activos': usuarios_activos,
         'usuarios_pasivos': usuarios_pasivos,
         'usuarios_exonerados': usuarios_exonerados,
+        'solicitudes_descarga_carnets': _get_recent_carnet_download_requests(request.user),
     }
     if request.headers.get('HX-Request') and ('page' in request.GET or request.GET.get('query') or request.GET.get('estado') or request.GET.get('ordenar_por')):
         return render(request, 'asistencia/partials/user_list.html', context)
@@ -1820,234 +2044,126 @@ def actualizar_foto_rapida(request, dni):
 
 @login_required
 @permission_required('asistencia.can_manage_users', raise_exception=True)
+@require_POST
+def solicitar_descarga_carnets(request):
+    activa = SolicitudDescargaCarnets.objects.filter(
+        solicitado_por=request.user,
+        estado__in=[
+            SolicitudDescargaCarnets.ESTADO_PENDIENTE,
+            SolicitudDescargaCarnets.ESTADO_PROCESANDO,
+        ],
+    ).first()
+    if activa:
+        return JsonResponse(
+            {
+                'ok': False,
+                'message': 'Ya tienes una generación en curso. Espera a que termine para lanzar otra.',
+                'solicitud_id': activa.id,
+            },
+            status=409,
+        )
+
+    solicitud = SolicitudDescargaCarnets.objects.create(solicitado_por=request.user)
+    try:
+        _launch_carnets_generation_job(solicitud.id)
+    except Exception as exc:
+        logger.exception("No se pudo lanzar la generación asíncrona de carnets")
+        solicitud.estado = SolicitudDescargaCarnets.ESTADO_ERROR
+        solicitud.mensaje_error = str(exc)
+        solicitud.fecha_fin = timezone.now()
+        solicitud.save(update_fields=['estado', 'mensaje_error', 'fecha_fin'])
+        return JsonResponse(
+            {
+                'ok': False,
+                'message': 'No se pudo iniciar la generación del archivo.',
+            },
+            status=500,
+        )
+
+    LogAccion.objects.create(
+        usuario=request.user,
+        accion="Solicitar descarga carnets",
+        descripcion=(
+            f"{request.user.username} solicitó la generación asíncrona "
+            f"del ZIP de carnets #{solicitud.id}."
+        )
+    )
+    return JsonResponse(
+        {
+            'ok': True,
+            'message': 'La generación empezó en segundo plano. Te avisaremos aquí mismo cuando el ZIP esté listo.',
+            'solicitud_id': solicitud.id,
+        }
+    )
+
+
+@login_required
+@permission_required('asistencia.can_manage_users', raise_exception=True)
+def estado_descargas_carnets(request):
+    context = {
+        'solicitudes_descarga_carnets': _get_recent_carnet_download_requests(request.user, limit=8),
+    }
+    return render(request, 'asistencia/partials/download_jobs.html', context)
+
+
+@login_required
+@permission_required('asistencia.can_manage_users', raise_exception=True)
+def descargar_archivo_carnets(request, solicitud_id):
+    solicitud = get_object_or_404(
+        SolicitudDescargaCarnets,
+        pk=solicitud_id,
+        solicitado_por=request.user,
+    )
+    if solicitud.estado != SolicitudDescargaCarnets.ESTADO_LISTO or not solicitud.archivo_zip:
+        raise Http404("El archivo solicitado todavía no está disponible.")
+    if not solicitud.archivo_zip.storage.exists(solicitud.archivo_zip.name):
+        raise Http404("El archivo ZIP ya no existe en el servidor.")
+
+    LogAccion.objects.create(
+        usuario=request.user,
+        accion="Descargar ZIP carnets listo",
+        descripcion=(
+            f"{request.user.username} descargó el archivo preparado "
+            f"para la solicitud #{solicitud.id}."
+        )
+    )
+    return FileResponse(
+        solicitud.archivo_zip.open('rb'),
+        as_attachment=True,
+        filename=solicitud.nombre_archivo or os.path.basename(solicitud.archivo_zip.name),
+        content_type='application/zip',
+    )
+
+
+@login_required
+@permission_required('asistencia.can_manage_users', raise_exception=True)
 def descargar_todos_carnets_pdf(request):
     """
-    Genera un archivo ZIP con:
-    - Un PDF de carnets para usuarios con foto.
-    - Un PDF de carnets para usuarios sin foto.
-    - Un PDF de reporte para usuarios a quienes les falta foto.
-
-    Para evitar Out Of Memory (OOM), los carnets se procesan en lotes pequeños
-    y los PDFs parciales se combinan con pypdf.
+    Respaldo síncrono de la descarga completa.
+    La UI principal usa la versión asíncrona para evitar timeouts.
     """
-    import gc
-    import time
-    from .utils.reports import get_logo_base64
-
-    try:
-        from weasyprint import HTML
-    except ImportError:
-        return HttpResponse("WeasyPrint no está instalado.", status=500)
-
-    try:
-        from pypdf import PdfWriter, PdfReader
-    except ImportError:
-        return HttpResponse("pypdf no está instalado. Añade 'pypdf' a requirements.txt", status=500)
-
-    started_at = timezone.localtime()
-    started_perf = time.perf_counter()
-    current_date = started_at.strftime('%d/%m/%Y %H:%M')
-    timestamp = started_at.strftime('%Y%m%d_%H%M%S')
-    zip_filename = f'carnets_y_pendientes_{timestamp}.zip'
-
-    filtro_sin_foto = Q(foto_perfil__isnull=True) | Q(foto_perfil='')
-    base_queryset = Usuario.objects.order_by('apellido', 'nombre').only(
-        'id', 'nombre', 'apellido', 'dni', 'estado', 'foto_perfil', 'qr_code'
-    )
-    usuarios_con_foto_qs = base_queryset.exclude(filtro_sin_foto)
-    usuarios_sin_foto_qs = base_queryset.filter(filtro_sin_foto)
-
-    total_con_foto = usuarios_con_foto_qs.count()
-    total_sin_foto = usuarios_sin_foto_qs.count()
-    total_usuarios = total_con_foto + total_sin_foto
-    reporte_sin_foto = [
-        _crear_incidencia_carnet(usuario, 'Falta fotografía.')
-        for usuario in usuarios_sin_foto_qs
-    ]
-    incidencias = []
+    payload = _generate_carnets_zip_payload()
 
     LogAccion.objects.create(
         usuario=request.user,
-        accion="Descargar carnets ZIP",
-        descripcion=(
-            f"{request.user.username} inició la descarga de {total_usuarios} usuarios "
-            f"en ZIP: {total_con_foto} con foto y {total_sin_foto} sin foto."
-        )
-    )
-
-    logo = get_logo_base64()
-    sys_config = ConfiguracionSistema.objects.first()
-    zip_buffer = io.BytesIO()
-    zip_members = []
-    total_carnets_con_foto = 0
-    total_carnets_sin_foto = 0
-
-    with zipfile.ZipFile(zip_buffer, mode='w', compression=zipfile.ZIP_DEFLATED) as zip_file:
-        def generar_pdf_vacio(nombre_archivo, titulo, mensaje):
-            html_vacio = f"""
-            <html>
-                <head>
-                    <meta charset="UTF-8">
-                    <style>
-                        @page {{ size: A4 landscape; margin: 18mm; }}
-                        body {{ font-family: Helvetica, Arial, sans-serif; color: #1f2937; }}
-                        h1 {{ color: #92400e; margin-bottom: 8px; }}
-                        p {{ font-size: 12px; line-height: 1.5; }}
-                    </style>
-                </head>
-                <body>
-                    <h1>{titulo}</h1>
-                    <p>{mensaje}</p>
-                    <p>Generado el {current_date}.</p>
-                </body>
-            </html>
-            """
-            pdf_vacio = HTML(string=html_vacio).write_pdf()
-            zip_file.writestr(nombre_archivo, pdf_vacio)
-            zip_members.append(nombre_archivo)
-
-        def generar_pdf_carnets(queryset, build_payload, zip_entry_name, titulo_vacio, mensaje_vacio, modo_sin_foto=False):
-            total_carnets = 0
-            total_queryset = queryset.count()
-            if not total_queryset:
-                generar_pdf_vacio(zip_entry_name, titulo_vacio, mensaje_vacio)
-                return total_carnets
-
-            # Procesar en lotes pequeños para evitar OOM.
-            # Cada lote se renderiza con WeasyPrint y se libera de memoria inmediatamente.
-            chunk_size = 10
-            writer = PdfWriter()
-
-            for batch_number, chunk_users in enumerate(
-                _iter_queryset_in_chunks(queryset, chunk_size),
-                start=1,
-            ):
-                usuarios_data = []
-                usuarios_validos_chunk = []
-                for u in chunk_users:
-                    carnet_payload, incidencia = build_payload(u)
-                    if incidencia:
-                        incidencias.append(incidencia)
-                        continue
-                    usuarios_data.append(carnet_payload)
-                    usuarios_validos_chunk.append(u)
-
-                if not usuarios_data:
-                    gc.collect()
-                    continue
-
-                context = {
-                    'usuarios': usuarios_data,
-                    'logo_base64': logo,
-                    'current_date': current_date,
-                    'total_usuarios': len(usuarios_data),
-                    'sistema_config': sys_config,
-                    'modo_sin_foto': modo_sin_foto,
-                }
-
-                try:
-                    html_string = render_to_string('asistencia/reporte_todos_carnets.html', context)
-                    pdf_bytes = HTML(string=html_string).write_pdf()
-
-                    reader = PdfReader(io.BytesIO(pdf_bytes))
-                    for page in reader.pages:
-                        writer.add_page(page)
-                    total_carnets += len(usuarios_data)
-                except Exception as exc:
-                    logger.exception("Error al generar el lote %s de %s", batch_number, zip_entry_name)
-                    for u in usuarios_validos_chunk:
-                        incidencias.append(
-                            _crear_incidencia_carnet(
-                                u,
-                                f'Error al generar carnet: {exc.__class__.__name__}.'
-                            )
-                        )
-                    html_string = None
-                    pdf_bytes = None
-                    reader = None
-
-                del pdf_bytes, reader, html_string, usuarios_data, usuarios_validos_chunk, context
-                gc.collect()
-
-                processed = min(batch_number * chunk_size, total_queryset)
-                logger.info(
-                    "Carnets progreso %s: %s/%s procesados",
-                    zip_entry_name,
-                    processed,
-                    total_queryset,
-                )
-
-            if total_carnets:
-                output_buffer = io.BytesIO()
-                writer.write(output_buffer)
-                final_pdf = output_buffer.getvalue()
-                output_buffer.close()
-
-                zip_file.writestr(zip_entry_name, final_pdf)
-                zip_members.append(zip_entry_name)
-
-                del final_pdf
-
-            del writer
-            gc.collect()
-            return total_carnets
-
-        total_carnets_con_foto = generar_pdf_carnets(
-            usuarios_con_foto_qs,
-            _build_carnet_payload,
-            'carnets_con_foto.pdf',
-            'Carnets con foto',
-            'No se encontraron usuarios con fotografia disponible para generar carnets en este lote.',
-        )
-        total_carnets_sin_foto = generar_pdf_carnets(
-            usuarios_sin_foto_qs,
-            _build_carnet_payload_sin_foto_permitida,
-            'carnets_sin_foto.pdf',
-            'Carnets sin foto',
-            'No se encontraron usuarios sin fotografia pendientes en este lote.',
-            modo_sin_foto=True,
-        )
-
-        context_sin_foto = {
-            'usuarios': reporte_sin_foto,
-            'logo_base64': logo,
-            'current_date': current_date,
-            'sistema_config': sys_config,
-        }
-        html_sin_foto = render_to_string(
-            'asistencia/reporte_sin_foto.html',
-            context_sin_foto
-        )
-        pdf_sin_foto = HTML(string=html_sin_foto).write_pdf()
-        zip_file.writestr('reporte_usuarios_sin_foto.pdf', pdf_sin_foto)
-        zip_members.append('reporte_usuarios_sin_foto.pdf')
-
-        del html_sin_foto, pdf_sin_foto, context_sin_foto
-        gc.collect()
-
-    zip_bytes = zip_buffer.getvalue()
-    zip_buffer.close()
-    duration_seconds = time.perf_counter() - started_perf
-
-    LogAccion.objects.create(
-        usuario=request.user,
-        accion="Descarga carnets ZIP exitosa",
+        accion="Descarga carnets ZIP síncrona",
         descripcion=(
             f"{request.user.username} finalizó la descarga ZIP con "
-            f"{total_carnets_con_foto} carnets con foto, "
-            f"{total_carnets_sin_foto} carnets sin foto, "
-            f"{len(reporte_sin_foto)} en reporte sin foto, "
-            f"{len(incidencias)} incidencias técnicas registradas, archivos {', '.join(zip_members) or 'ninguno'} "
-            f"en {duration_seconds:.2f}s."
+            f"{payload['total_carnets_con_foto']} carnets con foto, "
+            f"{payload['total_carnets_sin_foto']} carnets sin foto, "
+            f"{payload['total_usuarios_sin_foto']} en reporte sin foto, "
+            f"{payload['total_incidencias']} incidencias técnicas registradas, "
+            f"archivos {', '.join(payload['zip_members']) or 'ninguno'} "
+            f"en {payload['duration_seconds']:.2f}s."
         )
     )
 
-    response = HttpResponse(zip_bytes, content_type='application/zip')
+    response = HttpResponse(payload['zip_bytes'], content_type='application/zip')
     response['Content-Disposition'] = (
-        f'attachment; filename="{zip_filename}"; '
-        f"filename*=UTF-8''{quote(zip_filename)}"
+        f'attachment; filename="{payload["zip_filename"]}"; '
+        f"filename*=UTF-8''{quote(payload['zip_filename'])}"
     )
-    response['Content-Length'] = len(zip_bytes)
+    response['Content-Length'] = len(payload['zip_bytes'])
     return response
 
 @login_required

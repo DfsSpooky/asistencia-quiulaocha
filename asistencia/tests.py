@@ -10,13 +10,14 @@ from unittest import mock
 
 from django.conf import settings
 from django.contrib.auth.models import Permission, User
+from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, Client
 from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
 
-from .models import Asistencia, ConfiguracionSistema, Evento, HistorialCarnet, Justificacion, LogAccion, Usuario
+from .models import Asistencia, ConfiguracionSistema, Evento, HistorialCarnet, Justificacion, LogAccion, SolicitudDescargaCarnets, Usuario
 from .services import AsistenciaService
 from .forms import CargaMasivaFotosForm, FiltroAsistenciaForm
 from .utils.reports import generate_attendance_csv, get_filtered_attendance_data
@@ -610,8 +611,11 @@ class CarnetsZipDownloadTests(TestCase):
                 self.string = string
 
             def write_pdf(self):
-                if 'incidencias' in self.string.lower():
+                normalized = self.string.lower()
+                if 'usuarios sin foto' in normalized or 'pendientes de fotograf' in normalized:
                     return b'INCIDENTES_PDF'
+                if 'no se encontraron usuarios' in normalized:
+                    return b'PDF_VACIO'
                 return b'CARNETS_PDF'
 
         class FakePdfReader:
@@ -633,7 +637,7 @@ class CarnetsZipDownloadTests(TestCase):
             types.SimpleNamespace(PdfReader=FakePdfReader, PdfWriter=FakePdfWriter),
         )
 
-    def test_descarga_zip_mixta_incluye_carnets_y_reporte_de_incidencias(self):
+    def test_descarga_zip_mixta_incluye_tres_archivos_esperados(self):
         Usuario.objects.create(
             nombre='Ana',
             apellido='ConFoto',
@@ -660,12 +664,13 @@ class CarnetsZipDownloadTests(TestCase):
         with zipfile.ZipFile(BytesIO(response.content)) as zip_file:
             self.assertEqual(
                 sorted(zip_file.namelist()),
-                ['carnets_generados.pdf', 'usuarios_sin_foto_notificar.pdf'],
+                ['carnets_con_foto.pdf', 'carnets_sin_foto.pdf', 'reporte_usuarios_sin_foto.pdf'],
             )
-            self.assertEqual(zip_file.read('carnets_generados.pdf'), b'CARNETS_PDF')
-            self.assertEqual(zip_file.read('usuarios_sin_foto_notificar.pdf'), b'INCIDENTES_PDF')
+            self.assertEqual(zip_file.read('carnets_con_foto.pdf'), b'CARNETS_PDF')
+            self.assertEqual(zip_file.read('carnets_sin_foto.pdf'), b'CARNETS_PDF')
+            self.assertEqual(zip_file.read('reporte_usuarios_sin_foto.pdf'), b'INCIDENTES_PDF')
 
-    def test_descarga_zip_solo_con_foto_genera_unico_pdf(self):
+    def test_descarga_zip_solo_con_foto_genera_placeholders_restantes(self):
         Usuario.objects.create(
             nombre='Rosa',
             apellido='Valida',
@@ -679,7 +684,10 @@ class CarnetsZipDownloadTests(TestCase):
             response = self.client.get(reverse('descargar_todos_carnets_pdf'))
 
         with zipfile.ZipFile(BytesIO(response.content)) as zip_file:
-            self.assertEqual(zip_file.namelist(), ['carnets_generados.pdf'])
+            self.assertEqual(
+                sorted(zip_file.namelist()),
+                ['carnets_con_foto.pdf', 'carnets_sin_foto.pdf', 'reporte_usuarios_sin_foto.pdf'],
+            )
 
     def test_descarga_zip_reporta_archivo_foto_faltante_como_incidencia(self):
         usuario = Usuario.objects.create(
@@ -696,7 +704,48 @@ class CarnetsZipDownloadTests(TestCase):
             response = self.client.get(reverse('descargar_todos_carnets_pdf'))
 
         with zipfile.ZipFile(BytesIO(response.content)) as zip_file:
-            self.assertEqual(zip_file.namelist(), ['usuarios_sin_foto_notificar.pdf'])
+            self.assertEqual(
+                sorted(zip_file.namelist()),
+                ['carnets_sin_foto.pdf', 'reporte_usuarios_sin_foto.pdf'],
+            )
+
+    @mock.patch('asistencia.views._launch_carnets_generation_job')
+    def test_solicitar_descarga_carnets_crea_solicitud_pendiente(self, launch_job):
+        response = self.client.post(reverse('solicitar_descarga_carnets'))
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload['ok'])
+
+        solicitud = SolicitudDescargaCarnets.objects.get()
+        self.assertEqual(solicitud.solicitado_por, self.user)
+        self.assertEqual(solicitud.estado, SolicitudDescargaCarnets.ESTADO_PENDIENTE)
+        launch_job.assert_called_once_with(solicitud.id)
+
+    def test_solicitar_descarga_carnets_bloquea_si_hay_otra_activa(self):
+        SolicitudDescargaCarnets.objects.create(
+            solicitado_por=self.user,
+            estado=SolicitudDescargaCarnets.ESTADO_PROCESANDO,
+        )
+
+        response = self.client.post(reverse('solicitar_descarga_carnets'))
+
+        self.assertEqual(response.status_code, 409)
+        payload = response.json()
+        self.assertFalse(payload['ok'])
+
+    def test_descargar_archivo_carnets_listo_devuelve_zip(self):
+        solicitud = SolicitudDescargaCarnets.objects.create(
+            solicitado_por=self.user,
+            estado=SolicitudDescargaCarnets.ESTADO_LISTO,
+            nombre_archivo='carnets_demo.zip',
+        )
+        solicitud.archivo_zip.save('carnets_demo.zip', ContentFile(b'ZIPDATA'), save=True)
+
+        response = self.client.get(reverse('descargar_archivo_carnets', args=[solicitud.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/zip')
 
 
 class GestionCarnetsModuleTests(TestCase):

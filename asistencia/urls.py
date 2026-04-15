@@ -9,7 +9,8 @@ from .views import (
     ListEventosActivos, ListUbicaciones, ListDentroEvento, buscar_usuario_dni, SystemConfigView,
     descargar_todos_carnets_pdf, descargar_reporte_global_pdf, descargar_reporte_filtrado_pdf,
     exportar_reporte_global_excel, descargar_backup, restaurar_backup, cerrar_evento, panel_salud,
-    actualizar_foto_rapida, entregar_carnet, modulo_gestion_carnets, healthcheck
+    actualizar_foto_rapida, entregar_carnet, modulo_gestion_carnets, healthcheck,
+    solicitar_descarga_carnets, estado_descargas_carnets, descargar_archivo_carnets
 )
 from rest_framework.authtoken.views import obtain_auth_token
 
@@ -43,6 +44,9 @@ urlpatterns = [
     path('confirmar-asistencia/<int:asistencia_id>/', confirmar_asistencia, name='confirmar_asistencia'),
     path('descargar-reporte-usuario/<str:dni>/', descargar_reporte_usuario_pdf, name='descargar_reporte_usuario_pdf'),
     path('descargar-todos-carnets/', descargar_todos_carnets_pdf, name='descargar_todos_carnets_pdf'),
+    path('descargar-todos-carnets/solicitar/', solicitar_descarga_carnets, name='solicitar_descarga_carnets'),
+    path('descargar-todos-carnets/estado/', estado_descargas_carnets, name='estado_descargas_carnets'),
+    path('descargar-todos-carnets/archivo/<int:solicitud_id>/', descargar_archivo_carnets, name='descargar_archivo_carnets'),
     path('descargar-reporte-global/', descargar_reporte_global_pdf, name='descargar_reporte_global_pdf'),
     path('exportar-reporte-global-excel/', exportar_reporte_global_excel, name='exportar_reporte_global_excel'),
     path('descargar-reporte-filtrado/', descargar_reporte_filtrado_pdf, name='descargar_reporte_filtrado_pdf'),
