@@ -114,6 +114,22 @@ def _build_carnet_payload(usuario):
         'qr_base64': qr_base64,
     }, None
 
+
+def _build_carnet_payload_sin_foto_permitida(usuario):
+    qr_base64, qr_error = _read_image_field_base64(usuario.qr_code, 'código QR')
+    if qr_error:
+        return None, _crear_incidencia_carnet(usuario, qr_error)
+
+    return {
+        'nombre': usuario.nombre,
+        'apellido': usuario.apellido,
+        'dni': usuario.dni,
+        'estado': usuario.get_estado_display(),
+        'id': usuario.id,
+        'foto_base64': None,
+        'qr_base64': qr_base64,
+    }, None
+
 def landing_page(request):
     """
     Landing page pública para el sistema de asistencia de Quiulacocha.
@@ -1808,7 +1824,8 @@ def descargar_todos_carnets_pdf(request):
     """
     Genera un archivo ZIP con:
     - Un PDF de carnets para usuarios con foto.
-    - Un PDF de notificación para usuarios sin foto.
+    - Un PDF de carnets para usuarios sin foto.
+    - Un PDF de reporte para usuarios a quienes les falta foto.
 
     Para evitar Out Of Memory (OOM), los carnets se procesan en lotes pequeños
     y los PDFs parciales se combinan con pypdf.
@@ -1843,10 +1860,11 @@ def descargar_todos_carnets_pdf(request):
     total_con_foto = usuarios_con_foto_qs.count()
     total_sin_foto = usuarios_sin_foto_qs.count()
     total_usuarios = total_con_foto + total_sin_foto
-    incidencias = [
+    reporte_sin_foto = [
         _crear_incidencia_carnet(usuario, 'Falta fotografía.')
         for usuario in usuarios_sin_foto_qs
     ]
+    incidencias = []
 
     LogAccion.objects.create(
         usuario=request.user,
@@ -1861,23 +1879,53 @@ def descargar_todos_carnets_pdf(request):
     sys_config = ConfiguracionSistema.objects.first()
     zip_buffer = io.BytesIO()
     zip_members = []
-    total_carnets_generados = 0
+    total_carnets_con_foto = 0
+    total_carnets_sin_foto = 0
 
     with zipfile.ZipFile(zip_buffer, mode='w', compression=zipfile.ZIP_DEFLATED) as zip_file:
-        if total_con_foto:
+        def generar_pdf_vacio(nombre_archivo, titulo, mensaje):
+            html_vacio = f"""
+            <html>
+                <head>
+                    <meta charset="UTF-8">
+                    <style>
+                        @page {{ size: A4 landscape; margin: 18mm; }}
+                        body {{ font-family: Helvetica, Arial, sans-serif; color: #1f2937; }}
+                        h1 {{ color: #92400e; margin-bottom: 8px; }}
+                        p {{ font-size: 12px; line-height: 1.5; }}
+                    </style>
+                </head>
+                <body>
+                    <h1>{titulo}</h1>
+                    <p>{mensaje}</p>
+                    <p>Generado el {current_date}.</p>
+                </body>
+            </html>
+            """
+            pdf_vacio = HTML(string=html_vacio).write_pdf()
+            zip_file.writestr(nombre_archivo, pdf_vacio)
+            zip_members.append(nombre_archivo)
+
+        def generar_pdf_carnets(queryset, build_payload, zip_entry_name, titulo_vacio, mensaje_vacio, modo_sin_foto=False):
+            total_carnets = 0
+            total_queryset = queryset.count()
+            if not total_queryset:
+                generar_pdf_vacio(zip_entry_name, titulo_vacio, mensaje_vacio)
+                return total_carnets
+
             # Procesar en lotes pequeños para evitar OOM.
             # Cada lote se renderiza con WeasyPrint y se libera de memoria inmediatamente.
-            CHUNK_SIZE = 10
+            chunk_size = 10
             writer = PdfWriter()
 
             for batch_number, chunk_users in enumerate(
-                _iter_queryset_in_chunks(usuarios_con_foto_qs, CHUNK_SIZE),
+                _iter_queryset_in_chunks(queryset, chunk_size),
                 start=1,
             ):
                 usuarios_data = []
                 usuarios_validos_chunk = []
                 for u in chunk_users:
-                    carnet_payload, incidencia = _build_carnet_payload(u)
+                    carnet_payload, incidencia = build_payload(u)
                     if incidencia:
                         incidencias.append(incidencia)
                         continue
@@ -1893,7 +1941,8 @@ def descargar_todos_carnets_pdf(request):
                     'logo_base64': logo,
                     'current_date': current_date,
                     'total_usuarios': len(usuarios_data),
-                    'sistema_config': sys_config
+                    'sistema_config': sys_config,
+                    'modo_sin_foto': modo_sin_foto,
                 }
 
                 try:
@@ -1903,9 +1952,9 @@ def descargar_todos_carnets_pdf(request):
                     reader = PdfReader(io.BytesIO(pdf_bytes))
                     for page in reader.pages:
                         writer.add_page(page)
-                    total_carnets_generados += len(usuarios_data)
+                    total_carnets += len(usuarios_data)
                 except Exception as exc:
-                    logger.exception("Error al generar el lote %s de carnets", batch_number)
+                    logger.exception("Error al generar el lote %s de %s", batch_number, zip_entry_name)
                     for u in usuarios_validos_chunk:
                         incidencias.append(
                             _crear_incidencia_carnet(
@@ -1920,44 +1969,61 @@ def descargar_todos_carnets_pdf(request):
                 del pdf_bytes, reader, html_string, usuarios_data, usuarios_validos_chunk, context
                 gc.collect()
 
-                processed = min(batch_number * CHUNK_SIZE, total_con_foto)
+                processed = min(batch_number * chunk_size, total_queryset)
                 logger.info(
-                    "Carnets progreso: %s/%s candidatos con foto procesados",
+                    "Carnets progreso %s: %s/%s procesados",
+                    zip_entry_name,
                     processed,
-                    total_con_foto,
+                    total_queryset,
                 )
 
-            if total_carnets_generados:
+            if total_carnets:
                 output_buffer = io.BytesIO()
                 writer.write(output_buffer)
                 final_pdf = output_buffer.getvalue()
                 output_buffer.close()
 
-                zip_file.writestr('carnets_generados.pdf', final_pdf)
-                zip_members.append('carnets_generados.pdf')
+                zip_file.writestr(zip_entry_name, final_pdf)
+                zip_members.append(zip_entry_name)
 
                 del final_pdf
 
             del writer
             gc.collect()
+            return total_carnets
 
-        if incidencias:
-            context_sin_foto = {
-                'usuarios': incidencias,
-                'logo_base64': logo,
-                'current_date': current_date,
-                'sistema_config': sys_config,
-            }
-            html_sin_foto = render_to_string(
-                'asistencia/reporte_sin_foto.html',
-                context_sin_foto
-            )
-            pdf_sin_foto = HTML(string=html_sin_foto).write_pdf()
-            zip_file.writestr('usuarios_sin_foto_notificar.pdf', pdf_sin_foto)
-            zip_members.append('usuarios_sin_foto_notificar.pdf')
+        total_carnets_con_foto = generar_pdf_carnets(
+            usuarios_con_foto_qs,
+            _build_carnet_payload,
+            'carnets_con_foto.pdf',
+            'Carnets con foto',
+            'No se encontraron usuarios con fotografia disponible para generar carnets en este lote.',
+        )
+        total_carnets_sin_foto = generar_pdf_carnets(
+            usuarios_sin_foto_qs,
+            _build_carnet_payload_sin_foto_permitida,
+            'carnets_sin_foto.pdf',
+            'Carnets sin foto',
+            'No se encontraron usuarios sin fotografia pendientes en este lote.',
+            modo_sin_foto=True,
+        )
 
-            del html_sin_foto, pdf_sin_foto, context_sin_foto
-            gc.collect()
+        context_sin_foto = {
+            'usuarios': reporte_sin_foto,
+            'logo_base64': logo,
+            'current_date': current_date,
+            'sistema_config': sys_config,
+        }
+        html_sin_foto = render_to_string(
+            'asistencia/reporte_sin_foto.html',
+            context_sin_foto
+        )
+        pdf_sin_foto = HTML(string=html_sin_foto).write_pdf()
+        zip_file.writestr('reporte_usuarios_sin_foto.pdf', pdf_sin_foto)
+        zip_members.append('reporte_usuarios_sin_foto.pdf')
+
+        del html_sin_foto, pdf_sin_foto, context_sin_foto
+        gc.collect()
 
     zip_bytes = zip_buffer.getvalue()
     zip_buffer.close()
@@ -1968,8 +2034,10 @@ def descargar_todos_carnets_pdf(request):
         accion="Descarga carnets ZIP exitosa",
         descripcion=(
             f"{request.user.username} finalizó la descarga ZIP con "
-            f"{total_carnets_generados} carnets generados, "
-            f"{len(incidencias)} incidencias, archivos {', '.join(zip_members) or 'ninguno'} "
+            f"{total_carnets_con_foto} carnets con foto, "
+            f"{total_carnets_sin_foto} carnets sin foto, "
+            f"{len(reporte_sin_foto)} en reporte sin foto, "
+            f"{len(incidencias)} incidencias técnicas registradas, archivos {', '.join(zip_members) or 'ninguno'} "
             f"en {duration_seconds:.2f}s."
         )
     )

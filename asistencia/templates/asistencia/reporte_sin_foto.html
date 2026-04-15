@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Usuarios con incidencias de carnet</title>
+    <title>Reporte de usuarios sin foto</title>
     <style>
         @page {
             size: A4 landscape;
@@ -189,7 +189,7 @@
                 </div>
             {% endif %}
             <h1>{{ sistema_config.nombre_institucion|default:"QUIULACOCHA" }}</h1>
-            <p class="subtitle">Reporte de usuarios con incidencias en la generación de carnets</p>
+            <p class="subtitle">Reporte de usuarios pendientes de fotografía para la generación de carnets</p>
         </div>
         <div class="header-right">
             <p class="subtitle"><strong>Fecha:</strong> {{ current_date }}</p>
@@ -198,7 +198,7 @@
     </div>
 
     <div class="summary">
-        Se identificaron usuarios con incidencias que impidieron generar su carnet. La causa principal es la falta de fotografía, aunque también puede incluir archivos no encontrados o recursos inválidos.
+        Se identificaron usuarios que todavía no cuentan con fotografía de perfil. Este reporte sirve para ubicar rápidamente qué carnets faltan completar antes de su emisión final.
     </div>
 
     <table>
@@ -235,7 +235,7 @@
             </tr>
             {% empty %}
             <tr>
-                <td colspan="5">No se encontraron usuarios con incidencias para esta generación.</td>
+                <td colspan="5">No se encontraron usuarios pendientes de fotografía en esta generación.</td>
             </tr>
             {% endfor %}
         </tbody>
