@@ -50,6 +50,8 @@
                     <div class="flex items-center">
                         {% if solicitud.estado == 'LISTO' and solicitud.archivo_zip %}
                             <a href="{% url 'descargar_archivo_carnets' solicitud.id %}"
+                               hx-boost="false"
+                               download
                                class="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-lg shadow-emerald-600/20 transition-all">
                                 <i class="bi bi-download"></i>
                                 <span>Descargar ZIP</span>
