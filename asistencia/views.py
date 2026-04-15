@@ -2269,6 +2269,7 @@ def modulo_gestion_carnets(request):
                     usuario=usuario,
                     motivo=motivo,
                     estado='Activo',
+                    estado_entrega=HistorialCarnet.ESTADO_ENTREGA_PENDIENTE,
                     entregado_por=request.user,
                 )
                 nuevo_carnet.save()

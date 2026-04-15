@@ -467,18 +467,43 @@ class HistorialCarnet(models.Model):
         ('Activo', 'Activo'),
         ('Inactivo/Anulado', 'Inactivo/Anulado'),
     ]
+    ESTADO_ENTREGA_PENDIENTE = 'PENDIENTE_ENTREGA'
+    ESTADO_ENTREGA_ENTREGADO = 'ENTREGADO'
+    ESTADO_ENTREGA_DEVUELTO = 'DEVUELTO_OFICINA'
+    ESTADO_ENTREGA_CUSTODIA = 'EN_CUSTODIA'
+    ESTADO_ENTREGA_RECOJO = 'RECOJO_PROGRAMADO'
+    ESTADO_ENTREGA_CHOICES = [
+        (ESTADO_ENTREGA_PENDIENTE, 'Pendiente de entrega'),
+        (ESTADO_ENTREGA_ENTREGADO, 'Entregado'),
+        (ESTADO_ENTREGA_DEVUELTO, 'Devuelto a oficina'),
+        (ESTADO_ENTREGA_CUSTODIA, 'En custodia'),
+        (ESTADO_ENTREGA_RECOJO, 'Recojo programado'),
+    ]
 
     usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name='historial_carnets')
     fecha_emision = models.DateTimeField(default=timezone.now)
     fecha_vencimiento = models.DateField(null=True, blank=True)
     motivo = models.CharField(max_length=50, choices=MOTIVO_CHOICES)
     estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='Activo')
+    estado_entrega = models.CharField(
+        max_length=24,
+        choices=ESTADO_ENTREGA_CHOICES,
+        default=ESTADO_ENTREGA_PENDIENTE,
+    )
+    fecha_entrega = models.DateTimeField(null=True, blank=True)
+    fecha_devolucion = models.DateTimeField(null=True, blank=True)
+    entregado_a = models.CharField(max_length=150, blank=True)
+    observaciones_entrega = models.TextField(blank=True, null=True)
     observaciones = models.TextField(blank=True, null=True)
     entregado_por = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
 
     def save(self, *args, **kwargs):
         if self.estado == 'Activo':
             HistorialCarnet.objects.filter(usuario=self.usuario, estado='Activo').exclude(pk=self.pk).update(estado='Inactivo/Anulado')
+        if self.estado_entrega == self.ESTADO_ENTREGA_ENTREGADO and not self.fecha_entrega:
+            self.fecha_entrega = timezone.now()
+        if self.estado_entrega == self.ESTADO_ENTREGA_DEVUELTO and not self.fecha_devolucion:
+            self.fecha_devolucion = timezone.now()
         super().save(*args, **kwargs)
 
     def __str__(self):

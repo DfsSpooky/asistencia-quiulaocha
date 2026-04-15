@@ -7,7 +7,7 @@ from django.urls import reverse, path
 from django.template.response import TemplateResponse
 from django.shortcuts import redirect
 from django.http import JsonResponse
-from .models import Usuario, Asistencia, Ubicacion, Evento, LogAccion, ConfiguracionSistema, Justificacion
+from .models import Usuario, Asistencia, Ubicacion, Evento, LogAccion, ConfiguracionSistema, Justificacion, HistorialCarnet
 from .audit import log_critical_change
 from .forms import CargaMasivaFotosForm
 
@@ -52,6 +52,50 @@ class EventoAdminForm(forms.ModelForm):
                 }
             ),
             'descripcion': forms.Textarea(
+                attrs={
+                    'rows': 3,
+                    'style': 'padding: 10px; border-radius: 6px; border: 1px solid #cbd5e1; width: 80%; font-family: inherit; font-size: 14px; outline: none;'
+                }
+            ),
+        }
+
+
+class HistorialCarnetAdminForm(forms.ModelForm):
+    class Meta:
+        model = HistorialCarnet
+        fields = '__all__'
+        widgets = {
+            'fecha_vencimiento': forms.DateInput(
+                format='%Y-%m-%d',
+                attrs={
+                    'type': 'date',
+                    'style': 'padding: 8px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 14px; width: 200px; outline: none; cursor: pointer;'
+                }
+            ),
+            'fecha_entrega': forms.DateTimeInput(
+                attrs={
+                    'type': 'datetime-local',
+                    'style': 'padding: 8px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 14px; width: 260px; outline: none; cursor: pointer;'
+                }
+            ),
+            'fecha_devolucion': forms.DateTimeInput(
+                attrs={
+                    'type': 'datetime-local',
+                    'style': 'padding: 8px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 14px; width: 260px; outline: none; cursor: pointer;'
+                }
+            ),
+            'entregado_a': forms.TextInput(
+                attrs={
+                    'style': 'padding: 8px 12px; border-radius: 6px; border: 1px solid #cbd5e1; font-size: 14px; width: min(100%, 320px);'
+                }
+            ),
+            'observaciones_entrega': forms.Textarea(
+                attrs={
+                    'rows': 3,
+                    'style': 'padding: 10px; border-radius: 6px; border: 1px solid #cbd5e1; width: 80%; font-family: inherit; font-size: 14px; outline: none;'
+                }
+            ),
+            'observaciones': forms.Textarea(
                 attrs={
                     'rows': 3,
                     'style': 'padding: 10px; border-radius: 6px; border: 1px solid #cbd5e1; width: 80%; font-family: inherit; font-size: 14px; outline: none;'
@@ -598,3 +642,106 @@ class JustificacionAdmin(admin.ModelAdmin):
                     after,
                     action_label='Actualizacion justificacion',
                 )
+
+
+@admin.register(HistorialCarnet)
+class HistorialCarnetAdmin(admin.ModelAdmin):
+    form = HistorialCarnetAdminForm
+    list_display = (
+        'usuario',
+        'motivo',
+        'estado_badge_carnet',
+        'estado_entrega_badge',
+        'fecha_emision',
+        'fecha_entrega',
+        'fecha_devolucion',
+        'entregado_a',
+    )
+    list_filter = ('estado', 'estado_entrega', 'motivo', 'fecha_emision')
+    search_fields = ('usuario__nombre', 'usuario__apellido', 'usuario__dni', 'entregado_a', 'observaciones', 'observaciones_entrega')
+    autocomplete_fields = ('usuario', 'entregado_por')
+    actions = [
+        'marcar_pendiente_entrega',
+        'marcar_entregado',
+        'marcar_devuelto_oficina',
+        'marcar_en_custodia',
+        'marcar_recojo_programado',
+    ]
+    fieldsets = (
+        ('Carnet', {
+            'fields': ('usuario', 'motivo', 'estado', 'fecha_emision', 'fecha_vencimiento')
+        }),
+        ('Entrega y Custodia', {
+            'fields': ('estado_entrega', 'fecha_entrega', 'fecha_devolucion', 'entregado_a', 'observaciones_entrega')
+        }),
+        ('Auditoria', {
+            'fields': ('entregado_por', 'observaciones')
+        }),
+    )
+
+    def estado_badge_carnet(self, obj):
+        if obj.estado == 'Activo':
+            bg, text, border, dot = '#ecfdf5', '#047857', '#a7f3d0', '#10b981'
+        else:
+            bg, text, border, dot = '#fef2f2', '#b91c1c', '#fecaca', '#ef4444'
+        return format_html(
+            '<span style="display:inline-flex; align-items:center; gap:8px; padding:6px 12px; '
+            'border-radius:999px; background:{}; color:{}; border:1px solid {}; '
+            'font-size:12px; font-weight:700;">'
+            '<span style="width:8px; height:8px; border-radius:999px; background:{};"></span>{}</span>',
+            bg, text, border, dot, obj.estado
+        )
+    estado_badge_carnet.short_description = 'Estado carnet'
+
+    def estado_entrega_badge(self, obj):
+        estilos = {
+            HistorialCarnet.ESTADO_ENTREGA_PENDIENTE: ('#fff7ed', '#c2410c', '#fdba74', '#f97316'),
+            HistorialCarnet.ESTADO_ENTREGA_ENTREGADO: ('#ecfdf5', '#047857', '#a7f3d0', '#10b981'),
+            HistorialCarnet.ESTADO_ENTREGA_DEVUELTO: ('#eff6ff', '#1d4ed8', '#bfdbfe', '#3b82f6'),
+            HistorialCarnet.ESTADO_ENTREGA_CUSTODIA: ('#f8fafc', '#475569', '#cbd5e1', '#64748b'),
+            HistorialCarnet.ESTADO_ENTREGA_RECOJO: ('#fefce8', '#a16207', '#fde68a', '#eab308'),
+        }
+        bg, text, border, dot = estilos.get(
+            obj.estado_entrega,
+            ('#f8fafc', '#475569', '#cbd5e1', '#64748b')
+        )
+        return format_html(
+            '<span style="display:inline-flex; align-items:center; gap:8px; padding:6px 12px; '
+            'border-radius:999px; background:{}; color:{}; border:1px solid {}; '
+            'font-size:12px; font-weight:700;">'
+            '<span style="width:8px; height:8px; border-radius:999px; background:{};"></span>{}</span>',
+            bg, text, border, dot, obj.get_estado_entrega_display()
+        )
+    estado_entrega_badge.short_description = 'Entrega'
+
+    def _actualizar_estado_entrega(self, request, queryset, nuevo_estado, mensaje):
+        total = 0
+        for obj in queryset:
+            obj.estado_entrega = nuevo_estado
+            if nuevo_estado == HistorialCarnet.ESTADO_ENTREGA_ENTREGADO and not obj.fecha_entrega:
+                obj.fecha_entrega = None
+            if nuevo_estado == HistorialCarnet.ESTADO_ENTREGA_DEVUELTO and not obj.fecha_devolucion:
+                obj.fecha_devolucion = None
+            obj.save()
+            total += 1
+        self.message_user(request, f'{total} carnet(es) actualizado(s) a "{mensaje}".', level=messages.SUCCESS)
+
+    def marcar_pendiente_entrega(self, request, queryset):
+        self._actualizar_estado_entrega(request, queryset, HistorialCarnet.ESTADO_ENTREGA_PENDIENTE, 'Pendiente de entrega')
+    marcar_pendiente_entrega.short_description = 'Marcar como pendiente de entrega'
+
+    def marcar_entregado(self, request, queryset):
+        self._actualizar_estado_entrega(request, queryset, HistorialCarnet.ESTADO_ENTREGA_ENTREGADO, 'Entregado')
+    marcar_entregado.short_description = 'Marcar como entregado'
+
+    def marcar_devuelto_oficina(self, request, queryset):
+        self._actualizar_estado_entrega(request, queryset, HistorialCarnet.ESTADO_ENTREGA_DEVUELTO, 'Devuelto a oficina')
+    marcar_devuelto_oficina.short_description = 'Marcar como devuelto a oficina'
+
+    def marcar_en_custodia(self, request, queryset):
+        self._actualizar_estado_entrega(request, queryset, HistorialCarnet.ESTADO_ENTREGA_CUSTODIA, 'En custodia')
+    marcar_en_custodia.short_description = 'Marcar como en custodia'
+
+    def marcar_recojo_programado(self, request, queryset):
+        self._actualizar_estado_entrega(request, queryset, HistorialCarnet.ESTADO_ENTREGA_RECOJO, 'Recojo programado')
+    marcar_recojo_programado.short_description = 'Marcar como recojo programado'

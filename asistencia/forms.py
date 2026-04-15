@@ -155,10 +155,20 @@ class UsuarioRegistroForm(forms.ModelForm):
 class CarnetForm(forms.ModelForm):
     class Meta:
         model = HistorialCarnet
-        fields = ['motivo', 'fecha_vencimiento', 'observaciones']
+        fields = [
+            'motivo',
+            'fecha_vencimiento',
+            'estado_entrega',
+            'entregado_a',
+            'observaciones_entrega',
+            'observaciones',
+        ]
         widgets = {
             'motivo': forms.Select(attrs={'class': 'form-control w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white'}),
             'fecha_vencimiento': forms.DateInput(attrs={'type': 'date', 'class': 'form-control w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white'}),
+            'estado_entrega': forms.Select(attrs={'class': 'form-control w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white'}),
+            'entregado_a': forms.TextInput(attrs={'class': 'form-control w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white', 'placeholder': 'Ej. Titular, familiar o responsable'}),
+            'observaciones_entrega': forms.Textarea(attrs={'class': 'form-control w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white', 'rows': 3}),
             'observaciones': forms.Textarea(attrs={'class': 'form-control w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white', 'rows': 3}),
         }
 

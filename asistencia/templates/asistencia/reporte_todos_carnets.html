@@ -224,12 +224,6 @@
             /* amber-100 */
         }
 
-        .role-badge.warning {
-            color: #991b1b;
-            border-color: #fecaca;
-            background-color: #fee2e2;
-        }
-
         /* Detalles Inferiores */
         .stats {
             display: flex;
@@ -359,11 +353,7 @@
                         <div class="user-info">
                             <h4 class="name-main">{{ item.nombre }}</h4>
                             <h4 class="name-sub">{{ item.apellido }}</h4>
-                            {% if modo_sin_foto %}
-                            <div class="role-badge warning">Pendiente de foto</div>
-                            {% else %}
                             <div class="role-badge">Socio Comunitario</div>
-                            {% endif %}
 
                             <div class="stats">
                                 <div class="stat-item">
