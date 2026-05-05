@@ -1,8 +1,8 @@
-{% extends 'asistencia/base.html' %}
+{% extends "asistencia/base.html" %}
 
 {% load static %}
 
-{% block title %}Credencial de {{ usuario.nombre }} - Quiulacocha{% endblock %}
+{% block title %}Credencial de {{ usuario.nombre }} - Quiulacocha{% endblock title %}
 {% block content %}
     <div class="max-w-4xl mx-auto animate-fade-in py-10 px-4">
         <div class="text-center mb-10 space-y-2">
@@ -12,15 +12,12 @@
         <div class="flex justify-center w-full">
             <div id="carnet-container" class="relative">
                 <div id="carnet"
-                     class="relative w-[600px] h-[378px] rounded-[2rem] p-8 shadow-2xl overflow-hidden border flex flex-col justify-between mx-auto transition-colors duration-300 bg-white text-slate-900 border-slate-200"
-                     style="background-color: white">
+                     class="relative w-[600px] h-[378px] rounded-[2rem] p-8 shadow-2xl overflow-hidden border flex flex-col justify-between mx-auto transition-colors duration-300 bg-white text-slate-900 border-slate-200">
                     <div class="absolute top-0 right-0 w-64 h-64 bg-primary-500/20 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none">
                     </div>
                     <div class="absolute bottom-0 left-0 w-48 h-48 bg-primary-400/20 rounded-full blur-3xl -ml-10 -mb-10 pointer-events-none">
                     </div>
-                    <div class="absolute inset-0 opacity-10 pointer-events-none"
-                         style="background-image: radial-gradient(circle, currentColor 1px, transparent 1px);
-                                background-size: 20px 20px"></div>
+                    <div class="absolute inset-0 opacity-10 pointer-events-none carnet-pattern"></div>
                     <div class="relative h-full flex flex-col justify-between z-10">
                         <div class="flex justify-between items-start">
                             <div class="space-y-1">
@@ -51,8 +48,8 @@
                             </div>
                             <div class="flex-1 min-w-0 space-y-2">
                                 <div>
-                                    <h4 class="text-3xl font-black tracking-tight leading-none truncate pb-1">{{ usuario.nombre }}</h4>
-                                    <h4 class="text-xl font-bold tracking-tight leading-none opacity-60 truncate">{{ usuario.apellido }}</h4>
+                                    <h4 class="text-3xl font-black tracking-tight leading-tight pb-1">{{ usuario.nombre }}</h4>
+                                    <h4 class="text-xl font-bold tracking-tight leading-tight opacity-60">{{ usuario.apellido }}</h4>
                                     <div class="mt-2 inline-block px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest border border-slate-300 text-slate-500 bg-slate-100">
                                         Socio Comunitario
                                     </div>
@@ -99,7 +96,20 @@
         </div>
     </div>
     <style>
+        .carnet-pattern {
+            background-image: radial-gradient(circle, currentColor 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
         @media print {
+            html,
+            body {
+                width: 100%;
+                height: 100%;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+
             body * {
                 visibility: hidden;
             }
@@ -110,23 +120,31 @@
             }
 
             #carnet-container {
-                position: absolute;
-                left: 50%;
-                top: 50%;
-                transform: translate(-50%, -50%);
-                width: 600px;
-                height: 378px;
+                position: fixed;
+                inset: 0;
+                width: 297mm;
+                height: 210mm;
+                margin: 0;
+                padding: 0;
+                overflow: hidden;
             }
 
             #carnet {
-                border: none !important;
+                position: absolute;
+                left: 50%;
+                top: 50%;
+                width: 600px !important;
+                height: 378px !important;
+                transform: translate(-50%, -50%) scale(1.87);
+                transform-origin: center center;
+                border: 1px solid #e2e8f0 !important;
                 box-shadow: none !important;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
             }
 
             @page {
-                size: landscape;
+                size: A4 landscape;
                 margin: 0;
             }
         }
@@ -136,4 +154,4 @@
             window.print();
         }
     </script>
-{% endblock %}
+{% endblock content %}

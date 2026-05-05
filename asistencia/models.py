@@ -7,6 +7,7 @@ from io import BytesIO
 import base64
 import re
 from django.contrib.auth.models import User
+from django.utils import timezone
 from PIL import Image
 from datetime import date, datetime
 
@@ -21,6 +22,7 @@ class Evento(models.Model):
     nombre = models.CharField(max_length=100)
     fecha = models.DateField()
     descripcion = models.TextField(blank=True)
+    hora_ingreso = models.TimeField(default='08:00', help_text="Hora de ingreso programada")
     activo = models.BooleanField(default=True)
 
     def save(self, *args, **kwargs):
@@ -123,14 +125,29 @@ class Usuario(models.Model):
         ]
 
 class Asistencia(models.Model):
+    PUNTUALIDAD_PUNTUAL = 'PUNTUAL'
+    PUNTUALIDAD_TARDE = 'TARDE'
+    PUNTUALIDAD_NO_APLICA = 'NO_APLICA'
+    PUNTUALIDAD_CHOICES = [
+        (PUNTUALIDAD_PUNTUAL, 'Puntual'),
+        (PUNTUALIDAD_TARDE, 'Tardanza'),
+        (PUNTUALIDAD_NO_APLICA, 'No aplica'),
+    ]
+
     usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE)
-    fecha = models.DateField(auto_now_add=True)
+    fecha = models.DateField(default=timezone.localdate)
     hora_ingreso = models.TimeField(null=True, blank=True)
     hora_salida = models.TimeField(null=True, blank=True)
     ubicacion = models.ForeignKey(Ubicacion, on_delete=models.SET_NULL, null=True, blank=True)
     evento = models.ForeignKey(Evento, on_delete=models.SET_NULL, null=True, blank=True)
     confirmada = models.BooleanField(default=False)
     es_justificada = models.BooleanField(default=False, help_text="Indica si la inasistencia fue justificada")
+    puntualidad = models.CharField(
+        max_length=12,
+        choices=PUNTUALIDAD_CHOICES,
+        default=PUNTUALIDAD_NO_APLICA,
+        help_text="Clasifica si el ingreso fue puntual o con tardanza.",
+    )
 
     def __str__(self):
         ingreso = self.hora_ingreso.strftime('%H:%M:%S') if self.hora_ingreso else 'No registrado'
@@ -142,6 +159,13 @@ class Asistencia(models.Model):
             models.Index(fields=['fecha']),
             models.Index(fields=['usuario']),
             models.Index(fields=['evento']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['usuario', 'evento', 'fecha'],
+                condition=models.Q(evento__isnull=False),
+                name='uniq_asistencia_usuario_evento_fecha',
+            ),
         ]
 
 class Justificacion(models.Model):
@@ -157,7 +181,7 @@ class Justificacion(models.Model):
     usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name='justificaciones')
     evento = models.ForeignKey(Evento, on_delete=models.CASCADE, related_name='justificaciones')
     motivo = models.TextField(verbose_name="Motivo de la inasistencia")
-    evidencia = models.ImageField(
+    evidencia = models.FileField(
         upload_to='justificaciones/', 
         blank=True, 
         null=True, 
@@ -199,6 +223,14 @@ class Justificacion(models.Model):
                 asistencia.es_justificada = False
                 asistencia.save()
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['usuario', 'evento'],
+                name='uniq_justificacion_usuario_evento',
+            ),
+        ]
+
 class LogAccion(models.Model):
     usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     accion = models.CharField(max_length=100)
@@ -220,6 +252,10 @@ class ConfiguracionSistema(models.Model):
         max_length=100,
         default='QUIULACOCHA',
         help_text="Nombre de la institución (se mostrará en toda la aplicación)"
+    )
+    tolerancia_minutos = models.PositiveIntegerField(
+        default=15,
+        help_text="Tiempo de tolerancia en minutos para el ingreso antes de considerarse tardanza (si aplica)"
     )
 
     def save(self, *args, **kwargs):
