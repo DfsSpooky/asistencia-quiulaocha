@@ -6,21 +6,35 @@ class ApiService {
   // Update this with your server URL.
   // For Android Emulator, 10.0.2.2 usually points to localhost.
   // Using the ngrok URL from settings.py would be more reliable if available.
-  static const String baseUrl =
-      'https://oversophisticated-dedra-overgross.ngrok-free.dev';
+  static const String baseUrl = 'https://quiulacocha.theworkpc.com';
 
   Future<String?> login(String username, String password) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/api/login/'),
-      body: {'username': username, 'password': password},
-    );
+    print('--- LOGIN ATTEMPT ---');
+    print('URL: $baseUrl/api/login/');
+    print('Username: $username');
 
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      final token = data['token'];
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('token', token);
-      return token;
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/login/'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'username': username, 'password': password}),
+      );
+
+      print('Response Status: ${response.statusCode}');
+      print('Response Body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final token = data['token'];
+        print('✅ LOGIN SUCCESS. Token: $token');
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('token', token);
+        return token;
+      } else {
+        print('❌ LOGIN FAILED');
+      }
+    } catch (e) {
+      print('🔥 EXCEPTION DURING LOGIN: $e');
     }
     return null;
   }

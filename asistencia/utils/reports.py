@@ -50,29 +50,69 @@ def get_filtered_attendance_data(filters):
     usuarios_no_asistentes = None
     
     # Lógica de estado: asistieron vs faltaron
+    # Lógica de estado: asistieron vs faltaron
     if estado == 'faltaron':
         # Solo mostrar inasistentes, limpiar asistencias
         asistencias = asistencias.none()
-        # Si hay evento, calcular inasistentes de ese evento
+        
+        # Estrategia para calcular faltas:
+        # 1. Si hay Evento seleccionado -> Inasistentes a ESE evento.
+        # 2. Si no hay Evento, pero hay Fecha (Inicio == Fin) -> Inasistentes a CUALQUIER evento de ese día.
+        # 3. Si es un rango de fechas -> Es complejo (¿faltó a 1 o a todos?), por ahora pedimos Evento o Día único.
+        
+        target_events = None
         if evento:
-            # Usar subquery SQL en lugar de evaluar a lista de Python
-            asistentes_subquery = Asistencia.objects.filter(evento=evento).values('usuario__id')
-            usuarios_no_asistentes = Usuario.objects.filter(estado=Usuario.ESTADO_ACTIVO).exclude(id__in=asistentes_subquery)
+            target_events = [evento]
+        elif fecha_inicio and fecha_fin and fecha_inicio == fecha_fin:
+            # Buscar eventos en ese día específico
+            target_events = list(Evento.objects.filter(fecha=fecha_inicio))
+        
+        if target_events:
+            # Buscamos usuarios que NO tengan asistencia en ninguno de los eventos target
+            asistentes_ids = Asistencia.objects.filter(
+                evento__in=target_events
+            ).values_list('usuario_id', flat=True)
+            
+            # Excluimos a los que sí fueron
+            usuarios_no_asistentes = Usuario.objects.filter(
+                estado=Usuario.ESTADO_ACTIVO
+            ).exclude(id__in=asistentes_ids)
+            
             if dni:
                 usuarios_no_asistentes = usuarios_no_asistentes.filter(dni__icontains=dni)
-            usuarios_no_asistentes = usuarios_no_asistentes.order_by('apellido', 'nombre')
+            
+            usuarios_no_asistentes = usuarios_no_asistentes.distinct().order_by('apellido', 'nombre')
+        else:
+            # Si no hay evento ni día específico, devolver vacío para evitar reporte gigante "faltaron todos"
+            usuarios_no_asistentes = Usuario.objects.none()
+
     elif estado == 'asistieron':
-        # Solo mostrar asistentes, no calcular inasistentes
+        # Solo mostrar asistentes
         usuarios_no_asistentes = None
     else:
-        # Sin filtro de estado: mostrar ambos si hay evento
+        # "Todos" (Asistieron + Faltaron)
+        # Solo calculamos faltaron si hay un contexto claro (Evento o Día Único)
+        target_events = None
         if evento:
-            # Usar subquery SQL en lugar de evaluar a lista de Python
-            asistentes_subquery = Asistencia.objects.filter(evento=evento).values('usuario__id')
-            usuarios_no_asistentes = Usuario.objects.filter(estado=Usuario.ESTADO_ACTIVO).exclude(id__in=asistentes_subquery)
+            target_events = [evento]
+        elif fecha_inicio and fecha_fin and fecha_inicio == fecha_fin:
+            target_events = list(Evento.objects.filter(fecha=fecha_inicio))
+            
+        if target_events:
+            asistentes_ids = Asistencia.objects.filter(
+                evento__in=target_events
+            ).values_list('usuario_id', flat=True)
+            
+            usuarios_no_asistentes = Usuario.objects.filter(
+                estado=Usuario.ESTADO_ACTIVO
+            ).exclude(id__in=asistentes_ids)
+            
             if dni:
                 usuarios_no_asistentes = usuarios_no_asistentes.filter(dni__icontains=dni)
-            usuarios_no_asistentes = usuarios_no_asistentes.order_by('apellido', 'nombre')
+            
+            usuarios_no_asistentes = usuarios_no_asistentes.distinct().order_by('apellido', 'nombre')
+        else:
+            usuarios_no_asistentes = None
 
     # Adjuntar URLs de evidencia si es necesario
     event_ids = {a.evento_id for a in asistencias if a.evento_id}
@@ -88,37 +128,51 @@ def get_filtered_attendance_data(filters):
         'usuarios_no_asistentes': usuarios_no_asistentes,
     }
 
-def generate_attendance_csv(asistencias, usuarios_no_asistentes=None):
+def generate_attendance_csv(unified_list):
+    """
+    Genera CSV desde la lista unificada de ReportItem.
+    Distingue entre asistencias y faltas usando is_absent.
+    """
     response = HttpResponse(content_type='text/csv')
-    response['Content-Disposition'] = 'attachment; filename="asistencias.csv"'
-    writer = csv.writer(response)
+    response['Content-Disposition'] = 'attachment; filename="reporte_asistencias.csv"'
     
-    writer.writerow([
-        'Usuario', 'DNI', 'Fecha', 'Hora de Ingreso', 
-        'Hora de Salida', 'Ubicación', 'Evento', 'Confirmada'
-    ])
-
-    if usuarios_no_asistentes:
-        writer.writerow([])
-        writer.writerow(['Usuarios que no asistieron'])
-        writer.writerow(['Nombre', 'Apellido', 'DNI'])
-        for usuario in usuarios_no_asistentes:
-            writer.writerow([usuario.nombre, usuario.apellido, usuario.dni])
-    else:
-        for a in asistencias:
+    writer = csv.writer(response)
+    writer.writerow(['Socio', 'DNI', 'Fecha', 'Ingreso', 'Salida', 'Lugar', 'Evento', 'Estado', 'Confirmada'])
+    
+    for item in unified_list:
+        if item.is_absent:
+            # Registro de falta
             writer.writerow([
-                f"{a.usuario.nombre} {a.usuario.apellido}",
-                a.usuario.dni,
-                a.fecha,
-                a.hora_ingreso if a.hora_ingreso else 'No registrado',
-                a.hora_salida if a.hora_salida else 'No registrado',
-                a.ubicacion.nombre if a.ubicacion else 'Sin ubicación',
-                a.evento.nombre if a.evento else 'Sin evento',
-                'Sí' if a.confirmada else 'No'
+                f"{item.usuario.nombre} {item.usuario.apellido}",
+                item.usuario.dni,
+                item.fecha.strftime('%d/%m/%Y') if item.fecha else '',
+                'AUSENTE',
+                'AUSENTE',
+                item.ubicacion.nombre if item.ubicacion else 'N/A',
+                item.evento.nombre if item.evento else 'Sin evento',
+                'FALTA',
+                'N/A'
+            ])
+        else:
+            # Registro de asistencia
+            writer.writerow([
+                f"{item.usuario.nombre} {item.usuario.apellido}",
+                item.usuario.dni,
+                item.fecha.strftime('%d/%m/%Y') if item.fecha else '',
+                item.hora_ingreso.strftime('%H:%M') if item.hora_ingreso else 'No registrado',
+                item.hora_salida.strftime('%H:%M') if item.hora_salida else 'No registrado',
+                item.ubicacion.nombre if item.ubicacion else 'Sin ubicación',
+                item.evento.nombre if item.evento else 'Sin evento',
+                'ASISTIÓ',
+                'Sí' if item.confirmada else 'No'
             ])
     return response
 
-def generate_attendance_excel(asistencias, usuarios_no_asistentes=None, filename="asistencias.xlsx"):
+def generate_attendance_excel(unified_list, filename="asistencias.xlsx"):
+    """
+    Genera Excel desde la lista unificada de ReportItem.
+    Distingue entre asistencias y faltas con colores diferentes.
+    """
     wb = Workbook()
     ws = wb.active
     ws.title = "Reporte de Asistencias"
@@ -126,6 +180,7 @@ def generate_attendance_excel(asistencias, usuarios_no_asistentes=None, filename
     # Estilos
     header_font = Font(bold=True, color="FFFFFF")
     header_fill = PatternFill(start_color="4F46E5", end_color="4F46E5", fill_type="solid")
+    absent_fill = PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid")
     align_center = Alignment(horizontal="center", vertical="center")
     border_thin = Border(
         left=Side(style='thin'), 
@@ -135,7 +190,7 @@ def generate_attendance_excel(asistencias, usuarios_no_asistentes=None, filename
     )
 
     # Encabezados
-    headers = ['Socio', 'DNI', 'Fecha', 'Ingreso', 'Salida', 'Lugar', 'Evento', 'Confirmada']
+    headers = ['Socio', 'DNI', 'Fecha', 'Ingreso', 'Salida', 'Lugar', 'Evento', 'Estado', 'Confirmada']
     for col, header in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col, value=header)
         cell.font = header_font
@@ -143,42 +198,47 @@ def generate_attendance_excel(asistencias, usuarios_no_asistentes=None, filename
         cell.alignment = align_center
         cell.border = border_thin
 
-    # Datos de asistencias
-    for row, a in enumerate(asistencias, 2):
-        data = [
-            f"{a.usuario.nombre} {a.usuario.apellido}",
-            a.usuario.dni,
-            a.fecha.strftime('%d/%m/%Y') if a.fecha else '',
-            a.hora_ingreso.strftime('%H:%M') if a.hora_ingreso else '--',
-            a.hora_salida.strftime('%H:%M') if a.hora_salida else '--',
-            a.ubicacion.nombre if a.ubicacion else 'General',
-            a.evento.nombre if a.evento else 'Sin evento',
-            'SÍ' if a.confirmada else 'NO'
-        ]
-        for col, value in enumerate(data, 1):
-            cell = ws.cell(row=row, column=col, value=value)
-            cell.border = border_thin
-            if col in [3, 4, 5, 8]: # Centrar columnas de fecha, horas y confirmada
-                cell.alignment = align_center
-
-    # Agregar inasistentes si existen
-    if usuarios_no_asistentes:
-        start_row = len(asistencias) + 4
-        ws.cell(row=start_row, column=1, value="SOCIOS QUE NO ASISTIERON").font = Font(bold=True, color="FF0000")
-        
-        headers_no = ['Nombre', 'Apellido', 'DNI', 'Estado']
-        for col, header in enumerate(headers_no, 1):
-            cell = ws.cell(row=start_row + 1, column=col, value=header)
-            cell.font = header_font
-            cell.fill = PatternFill(start_color="EF4444", end_color="EF4444", fill_type="solid")
-            cell.alignment = align_center
-            cell.border = border_thin
-
-        for row, u in enumerate(usuarios_no_asistentes, start_row + 2):
-            data_no = [u.nombre, u.apellido, u.dni, u.get_estado_display()]
-            for col, value in enumerate(data_no, 1):
-                cell = ws.cell(row=row, column=col, value=value)
+    # Datos unificados
+    for row_idx, item in enumerate(unified_list, 2):
+        if item.is_absent:
+            # Registro de falta
+            data = [
+                f"{item.usuario.nombre} {item.usuario.apellido}",
+                item.usuario.dni,
+                item.fecha.strftime('%d/%m/%Y') if item.fecha else '',
+                'AUSENTE',
+                'AUSENTE',
+                item.ubicacion.nombre if item.ubicacion else 'N/A',
+                item.evento.nombre if item.evento else 'Sin evento',
+                'FALTA',
+                'N/A'
+            ]
+            for col, value in enumerate(data, 1):
+                cell = ws.cell(row=row_idx, column=col, value=value)
                 cell.border = border_thin
+                cell.fill = absent_fill  # Fondo rojo para faltas
+                if col in [3, 4, 5, 8, 9]:
+                    cell.alignment = align_center
+                if col == 8:  # "FALTA"
+                    cell.font = Font(bold=True, color="DC2626")
+        else:
+            # Registro de asistencia
+            data = [
+                f"{item.usuario.nombre} {item.usuario.apellido}",
+                item.usuario.dni,
+                item.fecha.strftime('%d/%m/%Y') if item.fecha else '',
+                item.hora_ingreso.strftime('%H:%M') if item.hora_ingreso else '--',
+                item.hora_salida.strftime('%H:%M') if item.hora_salida else '--',
+                item.ubicacion.nombre if item.ubicacion else 'General',
+                item.evento.nombre if item.evento else 'Sin evento',
+                'ASISTIÓ',
+                'SÍ' if item.confirmada else 'NO'
+            ]
+            for col, value in enumerate(data, 1):
+                cell = ws.cell(row=row_idx, column=col, value=value)
+                cell.border = border_thin
+                if col in [3, 4, 5, 8, 9]:
+                    cell.alignment = align_center
 
     # Ajustar ancho de columnas
     for column_cells in ws.columns:

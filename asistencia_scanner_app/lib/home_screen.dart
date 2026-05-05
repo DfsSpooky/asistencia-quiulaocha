@@ -6,6 +6,9 @@ import 'providers/attendance_provider.dart';
 import 'scanner_screen.dart';
 import 'login_screen.dart';
 
+import 'package:get_it/get_it.dart';
+import 'repositories/auth_repository.dart';
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -21,11 +24,29 @@ class _HomeScreenState extends State<HomeScreen> {
   int _sessionCount = 0;
   bool _isSyncing = false;
   List<dynamic> _dentroEvento = [];
+  String? _logoUrl;
+  String _institutionName = 'Quiulacocha';
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _loadConfig();
+  }
+
+  Future<void> _loadConfig() async {
+    try {
+      final repo = GetIt.instance<AuthRepository>();
+      final config = await repo.getSystemConfig();
+      if (config != null && mounted) {
+        setState(() {
+          if (config['logo_url'] != null) _logoUrl = config['logo_url'];
+          if (config['nombre_institucion'] != null) {
+            _institutionName = config['nombre_institucion'];
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   void _loadData() async {
@@ -162,10 +183,18 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Image.asset('assets/images/logo.png', height: 40),
+            if (_logoUrl != null)
+              Image.network(
+                _logoUrl!,
+                height: 40,
+                errorBuilder: (_, __, ___) =>
+                    Image.asset('assets/images/logo.png', height: 40),
+              )
+            else
+              Image.asset('assets/images/logo.png', height: 40),
             const SizedBox(width: 12),
             Text(
-              'Quiulacocha',
+              _institutionName,
               style: GoogleFonts.outfit(
                 fontWeight: FontWeight.bold,
                 color: Colors.white,

@@ -29,7 +29,7 @@ class FiltroAsistenciaForm(forms.Form):
     dni = forms.CharField(required=False, label='DNI')
     fecha_inicio = forms.DateField(required=False, label='Fecha Inicio', widget=forms.DateInput(attrs={'type': 'date'}))
     fecha_fin = forms.DateField(required=False, label='Fecha Fin', widget=forms.DateInput(attrs={'type': 'date'}))
-    evento = forms.ModelChoiceField(queryset=Evento.objects.all(), required=False, label='Evento')
+    evento = forms.ModelChoiceField(queryset=Evento.objects.all().order_by('-fecha'), required=False, label='Evento')
     ubicacion = forms.ModelChoiceField(queryset=Ubicacion.objects.all(), required=False, label='Ubicación')
     confirmada = forms.ChoiceField(
         choices=[('', 'Todos'), ('true', 'Confirmada'), ('false', 'No Confirmada')],
