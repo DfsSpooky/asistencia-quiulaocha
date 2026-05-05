@@ -55,7 +55,7 @@ class AsistenciaService:
         else:
             # Escaneo en tiempo real
             from django.utils import timezone
-            now = timezone.now()
+            now = timezone.localtime(timezone.now())
             today = now.date()
             current_time = now.time()
         
@@ -128,7 +128,7 @@ class AsistenciaService:
         else:
             # Escaneo en tiempo real
             from django.utils import timezone
-            now = timezone.now()
+            now = timezone.localtime(timezone.now())
             today = now.date()
             current_time = now.time()
         
@@ -155,8 +155,9 @@ class AsistenciaService:
             usuario
         )
         
-        # Registrar salida
+        # Registrar salida y validar automáticamente
         existing_asistencia.hora_salida = current_time
+        existing_asistencia.confirmada = True  # Auto-validación al salida
         existing_asistencia.save()
         
         # Registrar log si se proporciona el usuario que realiza la acción
