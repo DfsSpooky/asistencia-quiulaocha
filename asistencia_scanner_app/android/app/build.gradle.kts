@@ -20,6 +20,8 @@ android {
         jvmTarget = JavaVersion.VERSION_17.toString()
     }
 
+
+
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.asistencia_scanner_app"

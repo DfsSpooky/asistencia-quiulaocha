@@ -1,0 +1,9 @@
+services:
+  web:
+    # Para desarrollo local usamos runserver para tener hot-reload (recarga automática al cambiar código)
+    command: python manage.py runserver 0.0.0.0:8000
+    environment:
+      - DEBUG=True
+    # Mapeamos el puerto para verlo en http://localhost:8000
+    ports:
+      - "8000:8000"
