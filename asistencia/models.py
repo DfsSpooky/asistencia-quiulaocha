@@ -7,6 +7,7 @@ from io import BytesIO
 import base64
 import re
 from django.contrib.auth.models import User
+from django.utils import timezone
 from PIL import Image
 from datetime import date, datetime
 
@@ -21,6 +22,7 @@ class Evento(models.Model):
     nombre = models.CharField(max_length=100)
     fecha = models.DateField()
     descripcion = models.TextField(blank=True)
+    hora_ingreso = models.TimeField(default='08:00', help_text="Hora de ingreso programada")
     activo = models.BooleanField(default=True)
 
     def save(self, *args, **kwargs):
@@ -124,7 +126,7 @@ class Usuario(models.Model):
 
 class Asistencia(models.Model):
     usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE)
-    fecha = models.DateField(auto_now_add=True)
+    fecha = models.DateField(default=timezone.localdate)
     hora_ingreso = models.TimeField(null=True, blank=True)
     hora_salida = models.TimeField(null=True, blank=True)
     ubicacion = models.ForeignKey(Ubicacion, on_delete=models.SET_NULL, null=True, blank=True)
@@ -220,6 +222,10 @@ class ConfiguracionSistema(models.Model):
         max_length=100,
         default='QUIULACOCHA',
         help_text="Nombre de la institución (se mostrará en toda la aplicación)"
+    )
+    tolerancia_minutos = models.PositiveIntegerField(
+        default=15,
+        help_text="Tiempo de tolerancia en minutos para el ingreso antes de considerarse tardanza (si aplica)"
     )
 
     def save(self, *args, **kwargs):

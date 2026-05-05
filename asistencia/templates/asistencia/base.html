@@ -218,9 +218,15 @@
                     <div class="flex h-20 items-center justify-between">
                         <!-- Brand Section -->
                         <a href="{% url 'dashboard' %}" class="flex items-center gap-3 group">
-                            <div class="h-11 w-11 bg-primary-500 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/20 group-hover:rotate-6 transition-transform">
-                                <i class="bi bi-shield-check text-slate-900 text-2xl"></i>
-                            </div>
+                            {% if sistema_config.logo %}
+                                <div class="h-11 w-11 bg-white rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/20 group-hover:rotate-6 transition-transform overflow-hidden">
+                                     <img src="{{ sistema_config.logo.url }}" class="h-full w-full object-cover" alt="Logo">
+                                </div>
+                            {% else %}
+                                <div class="h-11 w-11 bg-primary-500 rounded-2xl flex items-center justify-center shadow-lg shadow-primary-500/20 group-hover:rotate-6 transition-transform">
+                                    <i class="bi bi-shield-check text-slate-900 text-2xl"></i>
+                                </div>
+                            {% endif %}
                             <div class="flex flex-col">
                                 <span class="text-xl font-extrabold tracking-tight text-slate-900 leading-none">{{ sistema_config.nombre_institucion|default:"QUIULACOCHA" }}</span>
                                 <span class="text-[10px] font-bold text-slate-400 tracking-widest uppercase mt-1">SISTEMA
@@ -380,7 +386,10 @@
         </div>
         <!-- Scripts -->
         <script>
-            // Smooth scroll implementation for hash links if any
+            /* 
+             * Configuración HTMX
+             */
+            // Smooth scroll implementation for hash links
             document.querySelectorAll('a[href^="#"]').forEach(anchor => {
                 anchor.addEventListener('click', function(e) {
                     e.preventDefault();
@@ -390,11 +399,7 @@
                 });
             });
 
-            // HTMX behavior adjustment
-            document.body.addEventListener('htmx:beforeRequest', function(evt) {
-                // Optional: Handle pre-request logic
-            });
-
+            // Re-procesar contenido HTMX si es necesario (ej: iconos, select2)
             document.body.addEventListener('htmx:afterSettle', function(evt) {
                 // Scroll to top only on full page (body) navigation
                 if (evt.detail.target === document.body) {
@@ -405,12 +410,10 @@
                 }
             });
 
-            // Ensure Alpine.js re-initializes content swapped by HTMX
+            // Forzar inicialización de Alpine.js en contenido nuevo
             document.body.addEventListener('htmx:afterSwap', function(evt) {
-                if (window.Alpine && evt.detail.target) {
-                    Alpine.discoverUninitializedComponents((el) => {
-                        Alpine.initializeComponent(el);
-                    });
+                if (window.Alpine) {
+                    window.Alpine.initTree(evt.detail.target);
                 }
             });
         </script>
