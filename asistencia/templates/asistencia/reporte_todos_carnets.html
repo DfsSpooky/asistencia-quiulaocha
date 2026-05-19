@@ -46,6 +46,20 @@
             transform-origin: center center;
         }
 
+        /* Guía de corte para impresión */
+        .cut-guide {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            bottom: -8px;
+            left: -8px;
+            border: 1px dashed #111827;
+            border-radius: 36px;
+            box-sizing: border-box;
+            pointer-events: none;
+            z-index: 20;
+        }
+
         /* Estilos base del carnet (Copia exacta de detalle_usuario.html con correcciones de color) */
         .carnet {
             position: relative;
@@ -317,6 +331,7 @@
     {% for item in usuarios %}
     <div class="page-wrapper">
         <div class="scaling-container">
+            <div class="cut-guide"></div>
             <div class="carnet">
                 <!-- Capas decorativas -->
                 <div class="blob-top"></div>
@@ -353,7 +368,7 @@
                         <div class="user-info">
                             <h4 class="name-main">{{ item.nombre }}</h4>
                             <h4 class="name-sub">{{ item.apellido }}</h4>
-                            <div class="role-badge">Socio Comunitario</div>
+                            <div class="role-badge">COMUNERO</div>
 
                             <div class="stats">
                                 <div class="stat-item">

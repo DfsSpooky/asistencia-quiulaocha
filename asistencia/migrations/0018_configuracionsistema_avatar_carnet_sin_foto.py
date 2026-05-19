@@ -5,7 +5,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('asistencia', '0017_rename_asistencia__estado_c49725_idx_asistencia__estado_4b510d_idx_and_more'),
+        ('asistencia', '0016_historialcarnet_entrega_fields'),
     ]
 
     operations = [
