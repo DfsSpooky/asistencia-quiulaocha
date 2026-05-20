@@ -51,7 +51,7 @@
                                     <h4 class="text-3xl font-black tracking-tight leading-tight pb-1">{{ usuario.nombre }}</h4>
                                     <h4 class="text-xl font-bold tracking-tight leading-tight opacity-60">{{ usuario.apellido }}</h4>
                                     <div class="mt-2 inline-block px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest border border-slate-300 text-slate-500 bg-slate-100">
-                                        Socio Comunitario
+                                        COMUNERO
                                     </div>
                                 </div>
                                 <div class="grid grid-cols-2 gap-2 border-t pt-3 mt-1 border-slate-200">
@@ -166,6 +166,11 @@
             max-height: 164px;
         }
 
+        #carnet-container::after {
+            content: "";
+            display: none;
+        }
+
         @media print {
             html,
             body {
@@ -192,6 +197,24 @@
                 margin: 0;
                 padding: 0;
                 overflow: hidden;
+            }
+
+            #carnet-container::after {
+                content: "";
+                display: block;
+                visibility: visible;
+                position: absolute;
+                left: 50%;
+                top: 50%;
+                width: 616px;
+                height: 394px;
+                transform: translate(-50%, -50%) scale(1.87);
+                transform-origin: center center;
+                border: 3px dashed #111827;
+                border-radius: 40px;
+                box-sizing: border-box;
+                pointer-events: none;
+                z-index: 50;
             }
 
             #carnet {
