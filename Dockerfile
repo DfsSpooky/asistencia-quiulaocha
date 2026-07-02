@@ -42,4 +42,4 @@ COPY . /app/
 EXPOSE 8020
 
 # Command to run the application
-CMD ["gunicorn", "qr_asistencia.wsgi:application", "--bind", "0.0.0.0:8020"]
+CMD ["/bin/sh", "/app/scripts/start-web.sh"]
