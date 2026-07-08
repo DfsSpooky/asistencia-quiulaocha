@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Reporte de usuarios sin foto</title>
+    <style>
+        @page {
+            size: A4 landscape;
+            margin: 10mm 10mm 12mm 10mm;
+        }
+
+        body {
+            font-family: Helvetica, Arial, sans-serif;
+            font-size: 10px;
+            color: #1f2937;
+            margin: 0;
+        }
+
+        .header {
+            width: 100%;
+            margin-bottom: 12px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #d97706;
+            overflow: hidden;
+        }
+
+        .header-left {
+            float: left;
+            width: 68%;
+        }
+
+        .header-right {
+            float: right;
+            width: 30%;
+            text-align: right;
+        }
+
+        .header::after {
+            content: "";
+            display: block;
+            clear: both;
+        }
+
+        .logo-box {
+            float: left;
+            width: 54px;
+            height: 54px;
+            padding: 5px;
+            margin-right: 12px;
+            border: 1px solid #f3d3a1;
+            border-radius: 10px;
+            background: #fffaf0;
+            box-sizing: border-box;
+        }
+
+        .logo-box img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        h1 {
+            margin: 0 0 4px 0;
+            font-size: 18px;
+            color: #92400e;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+        }
+
+        .subtitle {
+            margin: 0;
+            font-size: 9px;
+            color: #6b7280;
+            line-height: 1.3;
+        }
+
+        .summary {
+            margin: 10px 0 12px 0;
+            padding: 8px 10px;
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            border-radius: 8px;
+            color: #92400e;
+            font-size: 9px;
+            line-height: 1.35;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: auto;
+            max-width: 100%;
+        }
+
+        th,
+        td {
+            box-sizing: border-box;
+        }
+
+        thead th {
+            background: #92400e;
+            color: #ffffff;
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            padding: 7px 6px;
+            text-align: left;
+            line-height: 1.2;
+        }
+
+        tbody td {
+            padding: 6px 6px;
+            border-bottom: 1px solid #e5e7eb;
+            vertical-align: top;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            line-height: 1.2;
+        }
+
+        tbody tr:nth-child(even) {
+            background: #fffaf5;
+        }
+
+        .col-nro {
+            width: 5%;
+            text-align: center;
+        }
+
+        .col-dni {
+            width: 12%;
+        }
+
+        .col-nombre {
+            width: 36%;
+        }
+
+        .col-estado {
+            width: 15%;
+        }
+
+        .col-observacion {
+            width: 32%;
+        }
+
+        .estado-tag {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 999px;
+            font-size: 8px;
+            font-weight: bold;
+            border: 1px solid #d1d5db;
+            background: #f9fafb;
+            color: #374151;
+        }
+
+        .incidencia-texto {
+            color: #991b1b;
+            font-weight: bold;
+        }
+
+        .footer {
+            margin-top: 10px;
+            font-size: 8px;
+            color: #6b7280;
+            text-align: right;
+        }
+
+        .nowrap {
+            white-space: nowrap;
+        }
+
+        .cell-name {
+            font-size: 9px;
+        }
+
+        .cell-observacion {
+            font-size: 9px;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-left">
+            {% if logo_base64 %}
+                <div class="logo-box">
+                    <img src="{{ logo_base64 }}" alt="Logo institucional">
+                </div>
+            {% endif %}
+            <h1>{{ sistema_config.nombre_institucion|default:"QUIULACOCHA" }}</h1>
+            <p class="subtitle">Reporte de usuarios pendientes de fotografía para la generación de carnets</p>
+        </div>
+        <div class="header-right">
+            <p class="subtitle"><strong>Fecha:</strong> {{ current_date }}</p>
+            <p class="subtitle"><strong>Total:</strong> {{ usuarios|length }} usuarios</p>
+        </div>
+    </div>
+
+    <div class="summary">
+        Se identificaron usuarios que todavía no cuentan con fotografía de perfil. Este reporte sirve para ubicar rápidamente qué carnets faltan completar antes de su emisión final.
+    </div>
+
+    <table>
+        <colgroup>
+            <col style="width: 5%;">
+            <col style="width: 12%;">
+            <col style="width: 36%;">
+            <col style="width: 15%;">
+            <col style="width: 32%;">
+        </colgroup>
+        <thead>
+            <tr>
+                <th class="col-nro">N°</th>
+                <th class="col-dni">DNI</th>
+                <th class="col-nombre">Apellidos y Nombres</th>
+                <th class="col-estado">Estado actual</th>
+                <th class="col-observacion">Observación</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for usuario in usuarios %}
+            <tr>
+                <td class="col-nro">{{ forloop.counter }}</td>
+                <td class="col-dni nowrap">{{ usuario.dni }}</td>
+                <td class="col-nombre cell-name">{{ usuario.apellido }}, {{ usuario.nombre }}</td>
+                <td class="col-estado">
+                    <span class="estado-tag">{{ usuario.estado_actual }}</span>
+                </td>
+                <td class="col-observacion cell-observacion">
+                    {% if usuario.motivo %}
+                    <span class="incidencia-texto">{{ usuario.motivo }}</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5">No se encontraron usuarios pendientes de fotografía en esta generación.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div class="footer">
+        Documento generado automáticamente por el sistema de asistencia.
+    </div>
+</body>
+</html>

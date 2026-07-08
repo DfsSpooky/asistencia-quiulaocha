@@ -1,0 +1,13 @@
+services:
+  web:
+    # En local mantenemos el mismo flujo que despliegue (espera DB + migrate + collectstatic + gunicorn).
+    command: /bin/sh /app/scripts/start-web.sh
+    env_file:
+      - ./.env
+    volumes:
+      - .:/app
+      - ./staticfiles:/app/staticfiles
+      - ./media:/app/media
+  db:
+    env_file:
+      - ./.env

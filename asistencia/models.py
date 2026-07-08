@@ -2,13 +2,59 @@ from django.db import models
 from django.core.files.base import ContentFile
 from django.core.exceptions import ValidationError
 from django.core.validators import FileExtensionValidator
+from django.templatetags.static import static
 import qrcode
 from io import BytesIO
-import base64
 import re
+import uuid
 from django.contrib.auth.models import User
-from PIL import Image
+from django.utils import timezone
+from django.db.models.fields.files import FieldFile
+from PIL import Image, ImageOps
 from datetime import date, datetime
+from .qr_security import build_qr_encoded_payload
+
+
+def validate_file_size(value):
+    max_size = 5 * 1024 * 1024
+    if value and getattr(value, 'size', 0) > max_size:
+        raise ValidationError(f'El archivo no puede superar los {max_size // (1024 * 1024)} MB.')
+
+
+def validate_image_content(value):
+    if not value:
+        return
+    try:
+        value.seek(0)
+        with Image.open(value) as img:
+            img.verify()
+        value.seek(0)
+    except Exception as exc:
+        raise ValidationError('La imagen subida es inválida o está dañada.') from exc
+
+
+def validate_supporting_document_content(value):
+    if not value:
+        return
+
+    name = (getattr(value, 'name', '') or '').lower()
+    try:
+        value.seek(0)
+        header = value.read(16)
+        value.seek(0)
+    except Exception as exc:
+        raise ValidationError('No se pudo validar el archivo adjunto.') from exc
+
+    if name.endswith('.pdf'):
+        if not header.startswith(b'%PDF'):
+            raise ValidationError('El PDF adjunto no es válido.')
+        return
+
+    if name.endswith(('.jpg', '.jpeg', '.png')):
+        validate_image_content(value)
+        return
+
+    raise ValidationError('Tipo de archivo no permitido.')
 
 class Ubicacion(models.Model):
     nombre = models.CharField(max_length=100)
@@ -21,6 +67,7 @@ class Evento(models.Model):
     nombre = models.CharField(max_length=100)
     fecha = models.DateField()
     descripcion = models.TextField(blank=True)
+    hora_ingreso = models.TimeField(default='08:00', help_text="Hora de ingreso programada")
     activo = models.BooleanField(default=True)
 
     def save(self, *args, **kwargs):
@@ -51,6 +98,8 @@ class Evento(models.Model):
         return f"{self.nombre} ({self.fecha})"
 
 class Usuario(models.Model):
+    FOTO_PERFIL_SIZE = (320, 320)
+    FOTO_PERFIL_QUALITY = 72
     ESTADO_ACTIVO = 'ACTIVO'
     ESTADO_PASIVO = 'PASIVO'
     ESTADO_EXONERADO = 'EXONERADO'
@@ -66,8 +115,25 @@ class Usuario(models.Model):
     dni = models.CharField(max_length=8, unique=True)
     fecha_nacimiento = models.DateField(null=True, blank=True)
     estado = models.CharField(max_length=10, choices=ESTADOS, default=ESTADO_ACTIVO)
+    qr_uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    qr_version = models.PositiveIntegerField(default=1)
     qr_code = models.ImageField(upload_to='qr_codes/', blank=True)
-    foto_perfil = models.ImageField(upload_to='perfil_fotos/', blank=True, null=True)
+    foto_perfil = models.ImageField(
+        upload_to='perfil_fotos/',
+        blank=True,
+        null=True,
+        validators=[validate_file_size, validate_image_content],
+    )
+
+    @property
+    def foto_perfil_url(self):
+        if self.foto_perfil:
+            try:
+                if self.foto_perfil.storage.exists(self.foto_perfil.name):
+                    return self.foto_perfil.url
+            except (OSError, ValueError):
+                pass
+        return static('images/default_avatar.svg')
 
     def clean(self):
         if not self.dni.isdigit() or len(self.dni) != 8:
@@ -78,37 +144,83 @@ class Usuario(models.Model):
             raise ValidationError({'apellido': 'El apellido solo puede contener letras y espacios.'})
 
     def save(self, *args, **kwargs):
+        update_fields = kwargs.get('update_fields')
+        if update_fields is not None:
+            update_fields = set(update_fields)
+
+        is_new = self.pk is None
+        original_dni = None
+        original_qr_version = None
+        original_foto_perfil = None
+        if not is_new:
+            original_dni, original_qr_version, original_foto_perfil = (
+                Usuario.objects.filter(pk=self.pk).values_list('dni', 'qr_version', 'foto_perfil').first()
+            )
+        dni_changed = (original_dni is not None and original_dni != self.dni)
+        qr_version_changed = (original_qr_version is not None and original_qr_version != self.qr_version)
+        replacing_photo = bool(
+            self.foto_perfil and (
+                is_new or
+                not isinstance(self.foto_perfil, FieldFile) or
+                self.foto_perfil.name != (original_foto_perfil or '')
+            )
+        )
+
         self.full_clean()
 
         if self.foto_perfil:
             try:
                 img = Image.open(self.foto_perfil)
-                img = img.convert('RGB')
-                img = img.resize((200, 200), Image.Resampling.LANCZOS)
+                img = ImageOps.exif_transpose(img).convert('RGB')
+                # Genera un recorte centrado optimizado para avatar y reduce el peso final.
+                img = ImageOps.fit(img, self.FOTO_PERFIL_SIZE, Image.Resampling.LANCZOS)
                 buffer = BytesIO()
-                img.save(buffer, format='JPEG', quality=70)
+                img.save(
+                    buffer,
+                    format='JPEG',
+                    quality=self.FOTO_PERFIL_QUALITY,
+                    optimize=True,
+                    progressive=True,
+                )
                 buffer.seek(0)
+                target_photo_name = f'perfil_{self.dni}.jpg'
+                if replacing_photo and original_foto_perfil:
+                    self.foto_perfil.storage.delete(original_foto_perfil)
                 self.foto_perfil.save(
-                    f'perfil_{self.dni}.jpg',
+                    target_photo_name,
                     ContentFile(buffer.getvalue()),
                     save=False
                 )
-            except Exception as e:
-                self.foto_perfil = 'images/default_avatar.png'
+                if update_fields is not None:
+                    update_fields.add('foto_perfil')
+            except Exception:
+                self.foto_perfil = None
 
         if not self.foto_perfil:
-            self.foto_perfil = 'images/default_avatar.png'
+            self.foto_perfil = None
 
-        qr = qrcode.QRCode(version=1, box_size=5, border=2)
-        encoded_dni = base64.b64encode(self.dni.encode()).decode()
-        qr.add_data(encoded_dni)
-        qr.make(fit=True)
-        img = qr.make_image(fill='black', back_color='white')
-        buffer = BytesIO()
-        img.save(buffer, format='PNG', quality=70)
-        self.qr_code.save(f'qr_{self.dni}.png', ContentFile(buffer.getvalue()), save=False)
+        qr_needs_refresh = is_new or qr_version_changed or not self.qr_code
+        if qr_needs_refresh:
+            qr = qrcode.QRCode(version=1, box_size=5, border=2)
+            # Firma estable entre servidores con clave dedicada y payload versionado.
+            encoded_qr_payload = build_qr_encoded_payload(self.qr_uid, self.qr_version)
+            qr.add_data(encoded_qr_payload)
+            qr.make(fit=True)
+            img = qr.make_image(fill='black', back_color='white')
+            buffer = BytesIO()
+            img.save(buffer, format='PNG', quality=70)
+            self.qr_code.save(f'qr_{self.qr_uid}_v{self.qr_version}.png', ContentFile(buffer.getvalue()), save=False)
+            if update_fields is not None:
+                update_fields.add('qr_code')
+
+        if update_fields is not None:
+            kwargs['update_fields'] = list(update_fields)
 
         super().save(*args, **kwargs)
+
+    def rotate_qr(self):
+        self.qr_version += 1
+        self.save(update_fields=['qr_version'])
 
     def __str__(self):
         return f"{self.nombre} {self.apellido} ({self.dni})"
@@ -123,14 +235,29 @@ class Usuario(models.Model):
         ]
 
 class Asistencia(models.Model):
+    PUNTUALIDAD_PUNTUAL = 'PUNTUAL'
+    PUNTUALIDAD_TARDE = 'TARDE'
+    PUNTUALIDAD_NO_APLICA = 'NO_APLICA'
+    PUNTUALIDAD_CHOICES = [
+        (PUNTUALIDAD_PUNTUAL, 'Puntual'),
+        (PUNTUALIDAD_TARDE, 'Tardanza'),
+        (PUNTUALIDAD_NO_APLICA, 'No aplica'),
+    ]
+
     usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE)
-    fecha = models.DateField(auto_now_add=True)
+    fecha = models.DateField(default=timezone.localdate)
     hora_ingreso = models.TimeField(null=True, blank=True)
     hora_salida = models.TimeField(null=True, blank=True)
     ubicacion = models.ForeignKey(Ubicacion, on_delete=models.SET_NULL, null=True, blank=True)
     evento = models.ForeignKey(Evento, on_delete=models.SET_NULL, null=True, blank=True)
     confirmada = models.BooleanField(default=False)
     es_justificada = models.BooleanField(default=False, help_text="Indica si la inasistencia fue justificada")
+    puntualidad = models.CharField(
+        max_length=12,
+        choices=PUNTUALIDAD_CHOICES,
+        default=PUNTUALIDAD_NO_APLICA,
+        help_text="Clasifica si el ingreso fue puntual o con tardanza.",
+    )
 
     def __str__(self):
         ingreso = self.hora_ingreso.strftime('%H:%M:%S') if self.hora_ingreso else 'No registrado'
@@ -142,6 +269,13 @@ class Asistencia(models.Model):
             models.Index(fields=['fecha']),
             models.Index(fields=['usuario']),
             models.Index(fields=['evento']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['usuario', 'evento', 'fecha'],
+                condition=models.Q(evento__isnull=False),
+                name='uniq_asistencia_usuario_evento_fecha',
+            ),
         ]
 
 class Justificacion(models.Model):
@@ -157,12 +291,16 @@ class Justificacion(models.Model):
     usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name='justificaciones')
     evento = models.ForeignKey(Evento, on_delete=models.CASCADE, related_name='justificaciones')
     motivo = models.TextField(verbose_name="Motivo de la inasistencia")
-    evidencia = models.ImageField(
+    evidencia = models.FileField(
         upload_to='justificaciones/', 
         blank=True, 
         null=True, 
         verbose_name="Evidencia (Foto/Documento)",
-        validators=[FileExtensionValidator(allowed_extensions=['pdf', 'jpg', 'jpeg', 'png'])]
+        validators=[
+            FileExtensionValidator(allowed_extensions=['pdf', 'jpg', 'jpeg', 'png']),
+            validate_file_size,
+            validate_supporting_document_content,
+        ]
     )
     estado = models.CharField(max_length=10, choices=ESTADOS, default=ESTADO_PENDIENTE)
     fecha_creacion = models.DateTimeField(auto_now_add=True)
@@ -192,12 +330,26 @@ class Justificacion(models.Model):
                 asistencia.confirmada = True
                 asistencia.save()
         
-        # Si se rechaza y antes estaba aprobada, quitar el flag de justificada (opcional)
+        # Si deja de estar aprobada (ej. RECHAZADA), debe volver a computar como falta real.
         elif self.estado != self.ESTADO_APROBADO and old_estado == self.ESTADO_APROBADO:
             asistencia = Asistencia.objects.filter(usuario=self.usuario, evento=self.evento).first()
             if asistencia:
-                asistencia.es_justificada = False
-                asistencia.save()
+                # Si el registro fue creado automáticamente por la aprobación de justificación
+                # (sin ingreso/salida reales), lo eliminamos para que reportes lo cuenten como FALTA.
+                if not asistencia.hora_ingreso and not asistencia.hora_salida:
+                    asistencia.delete()
+                else:
+                    # Si hubo asistencia real, solo retiramos el estado de justificada.
+                    asistencia.es_justificada = False
+                    asistencia.save(update_fields=['es_justificada'])
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['usuario', 'evento'],
+                name='uniq_justificacion_usuario_evento',
+            ),
+        ]
 
 class LogAccion(models.Model):
     usuario = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
@@ -214,12 +366,73 @@ class LogAccion(models.Model):
             models.Index(fields=['usuario']),
         ]
 
+
+class SolicitudDescargaCarnets(models.Model):
+    ESTADO_PENDIENTE = 'PENDIENTE'
+    ESTADO_PROCESANDO = 'PROCESANDO'
+    ESTADO_LISTO = 'LISTO'
+    ESTADO_ERROR = 'ERROR'
+    ESTADOS = [
+        (ESTADO_PENDIENTE, 'Pendiente'),
+        (ESTADO_PROCESANDO, 'Procesando'),
+        (ESTADO_LISTO, 'Listo'),
+        (ESTADO_ERROR, 'Error'),
+    ]
+
+    solicitado_por = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='solicitudes_descarga_carnets',
+    )
+    estado = models.CharField(max_length=12, choices=ESTADOS, default=ESTADO_PENDIENTE)
+    archivo_zip = models.FileField(upload_to='descargas_carnets/', blank=True, null=True)
+    nombre_archivo = models.CharField(max_length=255, blank=True)
+    total_carnets_con_foto = models.PositiveIntegerField(default=0)
+    total_carnets_sin_foto = models.PositiveIntegerField(default=0)
+    total_usuarios_sin_foto = models.PositiveIntegerField(default=0)
+    total_incidencias = models.PositiveIntegerField(default=0)
+    mensaje_error = models.TextField(blank=True)
+    fecha_solicitud = models.DateTimeField(auto_now_add=True)
+    fecha_inicio = models.DateTimeField(blank=True, null=True)
+    fecha_fin = models.DateTimeField(blank=True, null=True)
+
+    def __str__(self):
+        return f"Descarga de carnets #{self.pk} - {self.get_estado_display()}"
+
+    class Meta:
+        ordering = ['-fecha_solicitud']
+        indexes = [
+            models.Index(fields=['estado']),
+            models.Index(fields=['solicitado_por', 'fecha_solicitud']),
+        ]
+
 class ConfiguracionSistema(models.Model):
-    logo = models.ImageField(upload_to='logos/', blank=True, null=True, help_text="Logo del sistema (se mostrará en la barra de navegación, login y reportes)")
+    logo = models.ImageField(
+        upload_to='logos/',
+        blank=True,
+        null=True,
+        help_text="Logo del sistema (se mostrará en la barra de navegación, login y reportes)",
+        validators=[validate_file_size, validate_image_content],
+    )
+    avatar_carnet_sin_foto = models.ImageField(
+        upload_to='logos/',
+        blank=True,
+        null=True,
+        help_text="Avatar por defecto solo para imprimir carnets sin foto real. No reemplaza la fotografía del socio en el sistema.",
+        validators=[validate_file_size, validate_image_content],
+    )
     nombre_institucion = models.CharField(
         max_length=100,
         default='QUIULACOCHA',
         help_text="Nombre de la institución (se mostrará en toda la aplicación)"
+    )
+    tardanza_activa = models.BooleanField(
+        default=True,
+        help_text="Activa el control de tardanzas para marcar faltas cuando se supera el límite."
+    )
+    tolerancia_minutos = models.PositiveIntegerField(
+        default=15,
+        help_text="Tiempo de tolerancia en minutos para el ingreso antes de considerarse tardanza (si aplica)"
     )
 
     def save(self, *args, **kwargs):
@@ -243,9 +456,85 @@ class ConfiguracionSistema(models.Model):
             except Exception as e:
                 print(f"Error al procesar el logo: {e}")
 
+        if self.avatar_carnet_sin_foto:
+            try:
+                img = Image.open(self.avatar_carnet_sin_foto)
+                img = ImageOps.exif_transpose(img).convert('RGB')
+                img = ImageOps.fit(img, Usuario.FOTO_PERFIL_SIZE, Image.Resampling.LANCZOS)
+                buffer = BytesIO()
+                img.save(
+                    buffer,
+                    format='JPEG',
+                    quality=Usuario.FOTO_PERFIL_QUALITY,
+                    optimize=True,
+                    progressive=True,
+                )
+                buffer.seek(0)
+                self.avatar_carnet_sin_foto.save(
+                    'avatar_carnet_sin_foto.jpg',
+                    ContentFile(buffer.getvalue()),
+                    save=False
+                )
+                super().save(*args, **kwargs)
+            except Exception as e:
+                print(f"Error al procesar avatar de carnet por defecto: {e}")
+
     def __str__(self):
         return "Configuración del Sistema"
 
     class Meta:
         verbose_name = "Configuración del Sistema"
         verbose_name_plural = "Configuración del Sistema"
+
+class HistorialCarnet(models.Model):
+    MOTIVO_CHOICES = [
+        ('Primer Carnet', 'Primer Carnet'),
+        ('Renovación por Vencimiento', 'Renovación por Vencimiento'),
+        ('Reposición por Pérdida/Robo', 'Reposición por Pérdida/Robo'),
+        ('Reposición por Deterioro', 'Reposición por Deterioro'),
+    ]
+    ESTADO_CHOICES = [
+        ('Activo', 'Activo'),
+        ('Inactivo/Anulado', 'Inactivo/Anulado'),
+    ]
+    ESTADO_ENTREGA_PENDIENTE = 'PENDIENTE_ENTREGA'
+    ESTADO_ENTREGA_ENTREGADO = 'ENTREGADO'
+    ESTADO_ENTREGA_DEVUELTO = 'DEVUELTO_OFICINA'
+    ESTADO_ENTREGA_CUSTODIA = 'EN_CUSTODIA'
+    ESTADO_ENTREGA_RECOJO = 'RECOJO_PROGRAMADO'
+    ESTADO_ENTREGA_CHOICES = [
+        (ESTADO_ENTREGA_PENDIENTE, 'Pendiente de entrega'),
+        (ESTADO_ENTREGA_ENTREGADO, 'Entregado'),
+        (ESTADO_ENTREGA_DEVUELTO, 'Devuelto a oficina'),
+        (ESTADO_ENTREGA_CUSTODIA, 'En custodia'),
+        (ESTADO_ENTREGA_RECOJO, 'Recojo programado'),
+    ]
+
+    usuario = models.ForeignKey(Usuario, on_delete=models.CASCADE, related_name='historial_carnets')
+    fecha_emision = models.DateTimeField(default=timezone.now)
+    fecha_vencimiento = models.DateField(null=True, blank=True)
+    motivo = models.CharField(max_length=50, choices=MOTIVO_CHOICES)
+    estado = models.CharField(max_length=20, choices=ESTADO_CHOICES, default='Activo')
+    estado_entrega = models.CharField(
+        max_length=24,
+        choices=ESTADO_ENTREGA_CHOICES,
+        default=ESTADO_ENTREGA_PENDIENTE,
+    )
+    fecha_entrega = models.DateTimeField(null=True, blank=True)
+    fecha_devolucion = models.DateTimeField(null=True, blank=True)
+    entregado_a = models.CharField(max_length=150, blank=True)
+    observaciones_entrega = models.TextField(blank=True, null=True)
+    observaciones = models.TextField(blank=True, null=True)
+    entregado_por = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+
+    def save(self, *args, **kwargs):
+        if self.estado == 'Activo':
+            HistorialCarnet.objects.filter(usuario=self.usuario, estado='Activo').exclude(pk=self.pk).update(estado='Inactivo/Anulado')
+        if self.estado_entrega == self.ESTADO_ENTREGA_ENTREGADO and not self.fecha_entrega:
+            self.fecha_entrega = timezone.now()
+        if self.estado_entrega == self.ESTADO_ENTREGA_DEVUELTO and not self.fecha_devolucion:
+            self.fecha_devolucion = timezone.now()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"Carnet {self.motivo} - {self.usuario} ({self.estado})"

@@ -1,0 +1,175 @@
+
+<div id="attendance-content-area" class="relative min-h-[400px]">
+    <div class="htmx-indicator absolute inset-0 bg-white/60 backdrop-blur-md z-30 flex items-center justify-center rounded-[3rem]">
+        <div class="w-16 h-16 border-4 border-primary-100 border-t-primary-600 rounded-full animate-spin"></div>
+    </div>
+    
+    <div class="bg-white rounded-[3rem] shadow-premium overflow-hidden border border-slate-100">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-slate-50/50">
+                        <th class="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Socio</th>
+                        <th class="px-6 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Actividad</th>
+                        <th class="px-6 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Horario</th>
+                        <th class="px-6 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Estado</th>
+                        <th class="px-10 py-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Acción</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-50">
+                    {% for item in page_obj %}
+                        <tr class="group transition-colors {% if item.is_absent %}bg-red-50/20{% endif %}">
+                            <td class="px-10 py-6">
+                                <div class="flex items-center gap-4">
+                                    <div class="h-10 w-10 rounded-xl flex items-center justify-center font-bold
+                                        {% if item.is_absent %}bg-red-100 text-red-600{% else %}bg-slate-100 text-slate-500{% endif %}">
+                                        {% if item.usuario %}
+                                            {{ item.usuario.nombre|first|upper }}
+                                        {% else %}
+                                            {{ item.nombre|first|upper }}
+                                        {% endif %}
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-black text-slate-900">
+                                            {% if item.usuario %}
+                                                {{ item.usuario.nombre }} {{ item.usuario.apellido }}
+                                            {% else %}
+                                                {{ item.nombre }} {{ item.apellido }}
+                                            {% endif %}
+                                        </p>
+                                        <p class="text-[10px] font-mono text-slate-400">
+                                            {% if item.usuario %}
+                                                {{ item.usuario.dni }}
+                                            {% else %}
+                                                {{ item.dni }}
+                                            {% endif %}
+                                        </p>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-6 py-6">
+                                <div class="flex flex-col">
+                                    <span class="text-xs font-bold text-slate-700">{{ item.evento.nombre|default:"General" }}</span>
+                                    <span class="text-[9px] font-black text-primary-500 uppercase tracking-widest">{{ item.fecha|date:"d M Y" }}</span>
+                                </div>
+                            </td>
+                            <td class="px-6 py-6 text-center">
+                                {% if item.is_absent %}
+                                    {% if item.is_late_absent %}
+                                        <p class="text-xs font-black text-slate-700">{{ item.hora_ingreso|date:"H:i"|default:"--" }}</p>
+                                        <p class="text-[9px] font-bold text-slate-400">Salida: {{ item.hora_salida|date:"H:i"|default:"--" }}</p>
+                                        <p class="text-[9px] font-black text-amber-600">TARDE</p>
+                                    {% elif item.es_justificada %}
+                                         <span class="text-[10px] font-black text-indigo-400">JUSTIFICADA</span>
+                                         {% if item.justificacion_obs %}
+                                             <p class="mt-1 text-[9px] text-indigo-500 max-w-[220px] mx-auto truncate" title="{{ item.justificacion_obs }}">
+                                                 {{ item.justificacion_obs }}
+                                             </p>
+                                         {% endif %}
+                                    {% else %}
+                                         <span class="text-[10px] font-black text-red-400">SIN REGISTRO</span>
+                                    {% endif %}
+                                {% else %}
+                                    <p class="text-xs font-black text-slate-700">{{ item.hora_ingreso|date:"H:i"|default:"--" }}</p>
+                                    <p class="text-[9px] font-bold text-slate-400">Salida: {{ item.hora_salida|date:"H:i"|default:"--" }}</p>
+                                    <p class="text-[9px] font-black {% if item.puntualidad == 'TARDE' %}text-amber-600{% else %}text-emerald-600{% endif %}">
+                                        {{ item.get_puntualidad_display|default:"No aplica" }}
+                                    </p>
+                                {% endif %}
+                            </td>
+                            <td class="px-6 py-6 text-center">
+                                {% if item.is_absent %}
+                                     {% if item.is_late_absent %}
+                                        <div class="flex flex-col items-center gap-1">
+                                            <span class="px-4 py-1.5 rounded-xl bg-red-100 text-red-600 text-[9px] font-black uppercase tracking-widest border border-red-200">
+                                                FALTÓ
+                                            </span>
+                                            <span class="px-4 py-1.5 rounded-xl bg-amber-100 text-amber-600 text-[9px] font-black uppercase tracking-widest border border-amber-200">
+                                                TARDE
+                                            </span>
+                                        </div>
+                                     {% elif item.es_justificada %}
+                                        <span class="px-4 py-1.5 rounded-xl bg-indigo-100 text-indigo-600 text-[9px] font-black uppercase tracking-widest border border-indigo-200">
+                                            JUSTIFICADA
+                                        </span>
+                                     {% else %}
+                                        <span class="px-4 py-1.5 rounded-xl bg-red-100 text-red-600 text-[9px] font-black uppercase tracking-widest border border-red-200">
+                                            FALTÓ
+                                        </span>
+                                     {% endif %}
+                                {% elif item.es_justificada %}
+                                    <span class="px-4 py-1.5 rounded-xl bg-indigo-100 text-indigo-600 text-[9px] font-black uppercase tracking-widest border border-indigo-200">
+                                        PRESENTE (J)
+                                    </span>
+                                {% elif item.confirmada %}
+                                    <span class="px-4 py-1.5 rounded-xl bg-emerald-100 text-emerald-600 text-[9px] font-black uppercase tracking-widest border border-emerald-200">
+                                        PRESENTE
+                                    </span>
+                                {% else %}
+                                    <span class="px-4 py-1.5 rounded-xl bg-amber-100 text-amber-600 text-[9px] font-black uppercase tracking-widest border border-amber-200 animate-pulse">
+                                        PENDIENTE
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td class="px-10 py-6 text-right">
+                                <div class="flex items-center justify-end gap-2">
+                                    {% if not item.is_absent and not item.confirmada %}
+                                        <a href="{% url 'confirmar_asistencia' item.id %}" 
+                                           class="h-9 px-4 bg-slate-900 text-white rounded-lg text-[10px] font-black flex items-center hover:bg-emerald-600 transition-colors">
+                                            VALIDAR
+                                        </a>
+                                    {% endif %}
+                                    {% if item.usuario %}
+                                        <a href="{% url 'descargar_reporte_usuario_pdf' item.usuario.dni %}" target="_blank"
+                                           hx-disable
+                                           class="h-9 w-9 flex items-center justify-center bg-slate-100 text-slate-400 rounded-lg hover:bg-primary-600 hover:text-white transition-all">
+                                            <i class="bi bi-file-earmark-pdf"></i>
+                                        </a>
+                                    {% else %}
+                                        <a href="{% url 'descargar_reporte_usuario_pdf' item.dni %}" target="_blank"
+                                           hx-disable
+                                           class="h-9 w-9 flex items-center justify-center bg-slate-100 text-slate-400 rounded-lg hover:bg-primary-600 hover:text-white transition-all">
+                                            <i class="bi bi-file-earmark-pdf"></i>
+                                        </a>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="5" class="px-10 py-20 text-center">
+                                <p class="text-slate-400 font-bold italic">No se encontraron registros para esta selección.</p>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if page_obj.has_other_pages %}
+            <div class="px-10 py-6 bg-slate-50 flex items-center justify-between">
+                <span class="text-[10px] font-black text-slate-400 uppercase">Página {{ page_obj.number }} de {{ page_obj.paginator.num_pages }}</span>
+                <div class="flex gap-2">
+                    {% if page_obj.has_previous %}
+                        <a href="?page={{ page_obj.previous_page_number }}&dni={{ form.dni.value|default:'' }}&fecha_inicio={{ form.fecha_inicio.value|default:'' }}&fecha_fin={{ form.fecha_fin.value|default:'' }}&evento={{ form.evento.value|default:'' }}&ubicacion={{ form.ubicacion.value|default:'' }}&confirmada={{ form.confirmada.value|default:'' }}&estado={{ form.estado.value|default:'' }}&ordenar_por={{ form.ordenar_por.value|default:'' }}"
+                           hx-get="?page={{ page_obj.previous_page_number }}&dni={{ form.dni.value|default:'' }}&fecha_inicio={{ form.fecha_inicio.value|default:'' }}&fecha_fin={{ form.fecha_fin.value|default:'' }}&evento={{ form.evento.value|default:'' }}&ubicacion={{ form.ubicacion.value|default:'' }}&confirmada={{ form.confirmada.value|default:'' }}&estado={{ form.estado.value|default:'' }}&ordenar_por={{ form.ordenar_por.value|default:'' }}"
+                           hx-target="#attendance-content-area"
+                           hx-swap="outerHTML"
+                           hx-push-url="true"
+                           class="px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-50 cursor-pointer">Anterior</a>
+                    {% endif %}
+                    {% if page_obj.has_next %}
+                        <a href="?page={{ page_obj.next_page_number }}&dni={{ form.dni.value|default:'' }}&fecha_inicio={{ form.fecha_inicio.value|default:'' }}&fecha_fin={{ form.fecha_fin.value|default:'' }}&evento={{ form.evento.value|default:'' }}&ubicacion={{ form.ubicacion.value|default:'' }}&confirmada={{ form.confirmada.value|default:'' }}&estado={{ form.estado.value|default:'' }}&ordenar_por={{ form.ordenar_por.value|default:'' }}"
+                           hx-get="?page={{ page_obj.next_page_number }}&dni={{ form.dni.value|default:'' }}&fecha_inicio={{ form.fecha_inicio.value|default:'' }}&fecha_fin={{ form.fecha_fin.value|default:'' }}&evento={{ form.evento.value|default:'' }}&ubicacion={{ form.ubicacion.value|default:'' }}&confirmada={{ form.confirmada.value|default:'' }}&estado={{ form.estado.value|default:'' }}&ordenar_por={{ form.ordenar_por.value|default:'' }}"
+                           hx-target="#attendance-content-area"
+                           hx-swap="outerHTML"
+                           hx-push-url="true"
+                           class="px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold hover:bg-slate-50 cursor-pointer">Siguiente</a>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% include 'asistencia/partials/stats_metrics.html' with hx_oob=True %}

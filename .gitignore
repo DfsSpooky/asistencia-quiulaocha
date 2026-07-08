@@ -1,4 +1,7 @@
 
+# Docker override (solo desarrollo local, NO subir al servidor)
+docker-compose.override.yml
+
 # Python
 *.pyc
 __pycache__/
@@ -6,6 +9,8 @@ local_settings.py
 db.sqlite3
 db.sqlite3-journal
 media/
+backups/
+*.log
 staticfiles/
 venv/
 .venv/

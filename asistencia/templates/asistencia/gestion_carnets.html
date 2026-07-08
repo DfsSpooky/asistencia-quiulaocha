@@ -1,0 +1,517 @@
+{% extends "asistencia/base.html" %}
+
+{% block title %}Emisión de Credenciales - Quiulacocha{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto space-y-8 animate-fade-in py-8 px-4 sm:px-6 lg:px-8">
+    
+    <div class="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-2">
+        <div class="space-y-1">
+            <h2 class="text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight flex items-center gap-3">
+                <i class="bi bi-person-badge text-primary-600"></i> Emisión de Credenciales
+            </h2>
+            <p class="text-slate-500 font-medium text-lg">Busca un socio para generar o reponer su carnet físico</p>
+        </div>
+    </div>
+
+    {% if messages %}
+        <div class="space-y-4 mb-8 animate-slide-up">
+            {% for message in messages %}
+                <div class="bg-emerald-50 border border-emerald-200 text-emerald-800 px-6 py-4 rounded-2xl flex items-center gap-4 shadow-sm">
+                    <div class="bg-emerald-100 rounded-full p-2">
+                        <i class="bi bi-check-lg text-emerald-600 text-xl"></i>
+                    </div>
+                    <p class="font-bold text-sm">{{ message }}</p>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 relative overflow-hidden group hover:border-primary-300 transition-colors">
+        <div class="absolute top-0 left-0 w-1 h-full bg-primary-500"></div>
+        <form method="get" id="searchForm" class="relative z-10 flex flex-col md:flex-row gap-4 items-center">
+            <div class="w-full relative flex-grow search-container">
+                <label for="id_usuario" class="block text-xs font-black text-slate-500 tracking-widest uppercase mb-2">
+                    <i class="bi bi-search mr-1"></i> Buscar Socio por DNI o Nombres
+                </label>
+                {{ form.usuario }}
+                <div id="loadingSpinner" class="hidden absolute right-4 top-9">
+                    <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600"></div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-12 gap-8">
+        
+        <div class="xl:col-span-5 flex flex-col gap-6">
+            {% if usuario_seleccionado %}
+                <div class="bg-white rounded-3xl p-6 shadow-sm border border-slate-200 flex-grow animate-fade-in-up">
+                    
+                    <div class="flex items-start gap-5 mb-6">
+                        {% if usuario_seleccionado.foto_perfil %}
+                            <img src="{{ usuario_seleccionado.foto_perfil.url }}" class="w-20 h-20 rounded-2xl object-cover shadow-md border border-slate-100" alt="Foto">
+                        {% else %}
+                            <div class="w-20 h-20 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-3xl font-black text-slate-400 shadow-inner">
+                                {{ usuario_seleccionado.nombre|first }}{{ usuario_seleccionado.apellido|first }}
+                            </div>
+                        {% endif %}
+                        <div>
+                            <h3 class="text-xl font-extrabold text-slate-900 leading-tight">{{ usuario_seleccionado.nombre }} <br> <span class="text-slate-600">{{ usuario_seleccionado.apellido }}</span></h3>
+                            <div class="flex items-center gap-2 mt-2">
+                                <span class="px-2.5 py-1 bg-slate-100 rounded-md text-xs font-mono font-bold text-slate-600 border border-slate-200">
+                                    <i class="bi bi-person-vcard mr-1 text-slate-400"></i>{{ usuario_seleccionado.dni }}
+                                </span>
+                                <span class="inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider 
+                                    {% if usuario_seleccionado.estado == 'ACTIVO' %}bg-emerald-50 text-emerald-600 border border-emerald-200
+                                    {% elif usuario_seleccionado.estado == 'PASIVO' %}bg-amber-50 text-amber-600 border border-amber-200
+                                    {% elif usuario_seleccionado.estado == 'EXONERADO' %}bg-blue-50 text-blue-700 border border-blue-200
+                                    {% else %}bg-slate-50 text-slate-500 border border-slate-200{% endif %}">
+                                    {{ usuario_seleccionado.get_estado_display }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    {% if usuario_seleccionado.estado == 'EXONERADO' %}
+                        <div class="mb-6 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+                            <p class="text-[10px] font-black uppercase tracking-widest text-blue-700 mb-1">Alerta Operativa</p>
+                            <p class="text-xs font-bold text-blue-800">Socio EXONERADO: no se penaliza tardanza en reportes de asistencia.</p>
+                        </div>
+                    {% endif %}
+
+                    <div class="mb-6">
+                        <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                            Estado de la Credencial <div class="h-px bg-slate-200 flex-grow"></div>
+                        </h4>
+                        
+                        {% if carnet_activo %}
+                            <div class="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 p-5 shadow-lg border border-slate-700 transform transition hover:scale-[1.02] duration-300">
+                                <div class="absolute -right-6 -top-6 w-32 h-32 bg-white/5 rounded-full blur-2xl"></div>
+                                <div class="flex justify-between items-start mb-3 relative z-10">
+                                    <div>
+                                        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1 text-emerald-400">Credencial Activa</p>
+                                        <h4 class="text-white font-black text-sm">{{ usuario_seleccionado.nombre }}</h4>
+                                    </div>
+                                    <i class="bi bi-qr-code text-white/20 text-3xl"></i>
+                                </div>
+                                <div class="mt-4 pt-3 border-t border-slate-700/50 flex justify-between items-center relative z-10">
+                                    <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                        <i class="bi bi-check-circle-fill"></i> Vigente
+                                    </span>
+                                    <div class="text-right">
+                                        <p class="text-[9px] text-slate-400 uppercase tracking-widest">Emitido el</p>
+                                        <p class="text-xs text-slate-200 font-mono">{{ carnet_activo.fecha_emision|date:"d M Y" }}</p>
+                                    </div>
+                                </div>
+                                <div class="mt-3 relative z-10">
+                                    <span class="inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider
+                                        {% if carnet_activo.estado_entrega == 'ENTREGADO' %}bg-emerald-500/20 text-emerald-300 border border-emerald-500/30
+                                        {% elif carnet_activo.estado_entrega == 'PENDIENTE_ENTREGA' %}bg-amber-500/20 text-amber-200 border border-amber-500/30
+                                        {% elif carnet_activo.estado_entrega == 'DEVUELTO_OFICINA' %}bg-sky-500/20 text-sky-200 border border-sky-500/30
+                                        {% elif carnet_activo.estado_entrega == 'EN_CUSTODIA' %}bg-slate-500/20 text-slate-200 border border-slate-500/30
+                                        {% elif carnet_activo.estado_entrega == 'RECOJO_PROGRAMADO' %}bg-yellow-500/20 text-yellow-200 border border-yellow-500/30
+                                        {% else %}bg-white/10 text-slate-200 border border-white/20{% endif %}">
+                                        {{ carnet_activo.get_estado_entrega_display }}
+                                    </span>
+                                </div>
+                            </div>
+                        {% else %}
+                            <div class="relative overflow-hidden rounded-2xl bg-slate-50 p-5 border-2 border-dashed border-slate-300 flex items-center justify-center flex-col gap-2 py-8">
+                                <div class="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center text-slate-400 mb-2">
+                                    <i class="bi bi-credit-card text-xl"></i>
+                                </div>
+                                <p class="text-sm font-bold text-slate-600">No cuenta con credencial física</p>
+                                <p class="text-xs text-slate-400 text-center px-4">El socio requiere la impresión y entrega de su primer carnet.</p>
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <form method="post" action="{% url 'modulo_gestion_carnets' %}" id="actionForm" class="mt-auto">
+                        {% csrf_token %}
+                        <input type="hidden" name="usuario_id" value="{{ usuario_seleccionado.id }}">
+                        <input type="hidden" name="accion" id="accionInput" value="">
+                        
+                        <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                            Acciones Disponibles <div class="h-px bg-slate-200 flex-grow"></div>
+                        </h4>
+
+                        {% if not carnet_activo %}
+                            <button type="button" onclick="submitAction(event, 'primer_carnet')" class="w-full py-4 bg-primary-600 text-white rounded-xl font-bold uppercase text-xs tracking-widest hover:bg-primary-700 transition-all shadow-lg shadow-primary-600/30 active:scale-[0.98] flex justify-center items-center gap-2 group">
+                                <i class="bi bi-printer-fill text-lg group-hover:animate-bounce"></i>
+                                Emitir Primer Carnet Físico
+                            </button>
+                        {% else %}
+                            <div class="space-y-3">
+                                <div class="grid grid-cols-2 gap-3">
+                                    <button type="button" onclick="submitAction(event, 'reposicion_perdida')" class="p-3 bg-amber-50 text-amber-700 border border-amber-200 rounded-xl font-bold text-[11px] tracking-wide hover:bg-amber-100 transition-all active:scale-[0.98] flex flex-col items-center justify-center gap-1">
+                                        <i class="bi bi-question-circle-fill text-lg text-amber-500"></i>
+                                        <span>Pérdida/Robo</span>
+                                    </button>
+                                    
+                                    <button type="button" onclick="submitAction(event, 'reposicion_deterioro')" class="p-3 bg-orange-50 text-orange-700 border border-orange-200 rounded-xl font-bold text-[11px] tracking-wide hover:bg-orange-100 transition-all active:scale-[0.98] flex flex-col items-center justify-center gap-1">
+                                        <i class="bi bi-bandaid-fill text-lg text-orange-500"></i>
+                                        <span>Deterioro</span>
+                                    </button>
+                                </div>
+                                
+                                <button type="button" onclick="submitAction(event, 'renovacion')" class="w-full py-3 bg-slate-100 text-slate-700 border border-slate-300 rounded-xl font-bold uppercase text-[11px] tracking-widest hover:bg-slate-200 transition-all active:scale-[0.98] flex justify-center items-center gap-2">
+                                    <i class="bi bi-arrow-repeat text-slate-500"></i>
+                                    Renovación por Vencimiento
+                                </button>
+                            </div>
+                        {% endif %}
+                    </form>
+                </div>
+            {% else %}
+                <div class="bg-gradient-to-b from-white to-slate-50 rounded-3xl p-10 shadow-sm border border-slate-200 h-full flex flex-col items-center justify-center text-center">
+                    <div class="w-24 h-24 bg-primary-50 rounded-full flex items-center justify-center mb-6 shadow-inner relative">
+                        <i class="bi bi-person-bounding-box text-4xl text-primary-400"></i>
+                        <div class="absolute -bottom-2 -right-2 bg-white rounded-full p-1.5 shadow-sm">
+                            <i class="bi bi-search text-slate-400 text-sm"></i>
+                        </div>
+                    </div>
+                    <h3 class="text-xl font-bold text-slate-800 mb-2">Comienza tu gestión</h3>
+                    <p class="text-sm text-slate-500 max-w-xs mx-auto leading-relaxed">
+                        Utiliza la barra de búsqueda superior para encontrar a un socio. Podrás ver el estado de su carnet y registrar entregas o reposiciones rápidamente.
+                    </p>
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="xl:col-span-7 flex flex-col">
+            <div class="bg-white rounded-3xl shadow-sm border border-slate-200 p-6 flex-grow flex flex-col">
+                <!-- Custom Tabs Navigation -->
+                <div class="flex items-center gap-6 mb-6 pb-2 border-b border-slate-100 overflow-x-auto hide-scrollbar">
+                    <button type="button" onclick="switchMainTab('tab-emisiones')" id="btn-tab-emisiones" class="pb-2 font-bold text-sm tracking-tight border-b-2 border-primary-500 text-slate-900 transition-colors flex items-center gap-2 whitespace-nowrap">
+                        <i class="bi bi-clock-history text-primary-500"></i> Últimas Emisiones
+                        <span class="inline-flex items-center justify-center bg-emerald-100 text-emerald-700 text-xs font-black px-2.5 py-0.5 rounded-full border border-emerald-300 shadow-sm ml-1" title="Total de socios con carnet físico activo">
+                            {{ carnets_activos_count }} EN TOTAL
+                        </span>
+                    </button>
+                    <button type="button" onclick="switchMainTab('tab-pendientes')" id="btn-tab-pendientes" class="pb-2 font-bold text-sm tracking-tight border-b-2 border-transparent text-slate-400 hover:text-slate-600 transition-colors flex items-center gap-2 whitespace-nowrap">
+                        <i class="bi bi-person-bounding-box"></i> Pendientes de Foto 
+                        <span class="inline-flex items-center justify-center bg-rose-50 text-rose-600 text-[10px] font-black px-2 py-0.5 rounded-full border border-rose-200">{{ count_sin_foto }}</span>
+                    </button>
+                    <button type="button" onclick="switchMainTab('tab-recoger')" id="btn-tab-recoger" class="pb-2 font-bold text-sm tracking-tight border-b-2 border-transparent text-slate-400 hover:text-slate-600 transition-colors flex items-center gap-2 whitespace-nowrap">
+                        <i class="bi bi-person-check font-bold"></i> Entregas Pendientes 
+                        <span class="inline-flex items-center justify-center bg-amber-50 text-amber-600 text-[10px] font-black px-2 py-0.5 rounded-full border border-amber-200">{{ count_sin_recoger }}</span>
+                    </button>
+                </div>
+
+                <!-- Tab 1: Historial de Emisiones -->
+                <div id="tab-emisiones" class="flex-grow flex flex-col transition-opacity duration-300">
+
+                {% if ultimos_carnets %}
+                    <div class="overflow-x-auto flex-grow">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr>
+                                    <th class="pb-3 px-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-200">Fecha / Hora</th>
+                                    <th class="pb-3 px-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-200">Socio</th>
+                                    <th class="pb-3 px-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-200">Trámite</th>
+                                    <th class="pb-3 px-2 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-200">Entrega</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100">
+                                {% for carnet in ultimos_carnets %}
+                                <tr class="hover:bg-slate-50 transition-colors group">
+                                    <td class="py-3 px-2">
+                                        <p class="text-xs font-bold text-slate-700">{{ carnet.fecha_emision|date:"d M Y" }}</p>
+                                        <p class="text-[10px] text-slate-400 font-mono">{{ carnet.fecha_emision|date:"H:i" }}</p>
+                                    </td>
+                                    <td class="py-3 px-2">
+                                        <div class="flex items-center gap-2">
+                                            <div class="w-6 h-6 rounded-full bg-slate-200 flex-shrink-0 overflow-hidden flex items-center justify-center">
+                                                {% if carnet.usuario.foto_perfil %}
+                                                    <img src="{{ carnet.usuario.foto_perfil.url }}" class="w-full h-full object-cover">
+                                                {% else %}
+                                                    <span class="text-[9px] font-bold text-slate-500">{{ carnet.usuario.nombre|first }}</span>
+                                                {% endif %}
+                                            </div>
+                                            <div>
+                                                <p class="font-bold text-slate-800 text-xs truncate max-w-[150px] sm:max-w-[200px]" title="{{ carnet.usuario.nombre }} {{ carnet.usuario.apellido }}">{{ carnet.usuario.nombre }} {{ carnet.usuario.apellido }}</p>
+                                                <p class="text-[10px] text-slate-400 font-mono">{{ carnet.usuario.dni }}</p>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="py-3 px-2">
+                                        <span class="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold tracking-wide
+                                            {% if 'Primer' in carnet.motivo %}bg-primary-50 text-primary-700 border border-primary-100
+                                            {% elif 'Pérdida' in carnet.motivo %}bg-amber-50 text-amber-700 border border-amber-100
+                                            {% elif 'Deterioro' in carnet.motivo %}bg-orange-50 text-orange-700 border border-orange-100
+                                            {% else %}bg-slate-100 text-slate-600 border border-slate-200{% endif %}">
+                                            {{ carnet.motivo }}
+                                        </span>
+                                    </td>
+                                    <td class="py-3 px-2">
+                                        <span class="inline-flex items-center px-2 py-1 rounded-md text-[10px] font-bold tracking-wide
+                                            {% if carnet.estado_entrega == 'ENTREGADO' %}bg-emerald-50 text-emerald-700 border border-emerald-100
+                                            {% elif carnet.estado_entrega == 'PENDIENTE_ENTREGA' %}bg-amber-50 text-amber-700 border border-amber-100
+                                            {% elif carnet.estado_entrega == 'DEVUELTO_OFICINA' %}bg-sky-50 text-sky-700 border border-sky-100
+                                            {% elif carnet.estado_entrega == 'EN_CUSTODIA' %}bg-slate-100 text-slate-700 border border-slate-200
+                                            {% elif carnet.estado_entrega == 'RECOJO_PROGRAMADO' %}bg-yellow-50 text-yellow-700 border border-yellow-100
+                                            {% else %}bg-slate-100 text-slate-600 border border-slate-200{% endif %}">
+                                            {{ carnet.get_estado_entrega_display }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {% if ultimos_carnets.has_other_pages %}
+                    <div class="mt-8 flex justify-center pb-2">
+                        <nav class="inline-flex rounded-full shadow-sm bg-white border border-slate-200 overflow-hidden" aria-label="Pagination">
+                            {% if ultimos_carnets.has_previous %}
+                                <a href="?page_emisiones={{ ultimos_carnets.previous_page_number }}{% if request.GET.usuario_id %}&usuario_id={{ request.GET.usuario_id }}{% endif %}" class="px-4 py-2 text-sm font-medium text-slate-500 hover:bg-slate-50 border-r border-slate-200 transition-colors">
+                                    <i class="bi bi-chevron-left mr-1"></i> Anterior
+                                </a>
+                            {% else %}
+                                <span class="px-4 py-2 text-sm font-medium text-slate-300 border-r border-slate-200 cursor-not-allowed bg-slate-50/50">
+                                    <i class="bi bi-chevron-left mr-1"></i> Anterior
+                                </span>
+                            {% endif %}
+                            
+                            <span class="px-4 py-2 text-sm font-bold text-slate-700 bg-slate-50 border-r border-slate-200 flex items-center justify-center min-w-[5rem]">
+                                {{ ultimos_carnets.number }} / {{ ultimos_carnets.paginator.num_pages }}
+                            </span>
+
+                            {% if ultimos_carnets.has_next %}
+                                <a href="?page_emisiones={{ ultimos_carnets.next_page_number }}{% if request.GET.usuario_id %}&usuario_id={{ request.GET.usuario_id }}{% endif %}" class="px-4 py-2 text-sm font-medium text-slate-500 hover:bg-slate-50 transition-colors">
+                                    Siguiente <i class="bi bi-chevron-right ml-1"></i>
+                                </a>
+                            {% else %}
+                                <span class="px-4 py-2 text-sm font-medium text-slate-300 cursor-not-allowed bg-slate-50/50">
+                                    Siguiente <i class="bi bi-chevron-right ml-1"></i>
+                                </span>
+                            {% endif %}
+                        </nav>
+                    </div>
+                    {% endif %}
+                {% else %}
+                    <div class="flex-grow flex flex-col items-center justify-center text-center p-8 border-2 border-dashed border-slate-100 rounded-2xl bg-slate-50/50">
+                        <div class="bg-white p-4 rounded-full shadow-sm mb-3 border border-slate-100">
+                            <i class="bi bi-inbox text-3xl text-slate-300"></i>
+                        </div>
+                        <h4 class="text-sm font-bold text-slate-600">Aún no hay emisiones</h4>
+                        <p class="text-xs text-slate-400 mt-1 max-w-xs">Los carnets físicos que vayas emitiendo irán apareciendo en este registro histórico.</p>
+                    </div>
+                {% endif %}
+                </div>
+
+                <!-- Tab 2: Pendientes de Foto (Fast-track) -->
+                <div id="tab-pendientes" class="hidden flex-grow flex flex-col animate-fade-in-up">
+                    <div class="mb-4">
+                        <h4 class="text-xs font-black text-slate-400 uppercase tracking-widest">Atención Requerida</h4>
+                        <p class="text-sm text-slate-500 mt-1">Sube la fotografía directamente tocando el ícono de la cámara. Mostrando {{ usuarios_sin_foto|length }} de {{ count_sin_foto }} socios pendientes.</p>
+                    </div>
+
+                    {% if usuarios_sin_foto %}
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
+                            {% for usuario in usuarios_sin_foto %}
+                                <div class="p-4 rounded-2xl border border-slate-100 bg-white hover:bg-slate-50 hover:border-primary-200 hover:shadow-md transition-all shadow-sm">
+                                    <div class="flex items-center gap-3">
+                                        <!-- HTMX Fast Track Avatar -->
+                                        <div class="relative group h-12 w-12 shrink-0" id="avatar-container-{{ usuario.dni }}">
+                                            <div class="h-12 w-12 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-200 text-slate-500 flex items-center justify-center font-black text-sm border border-slate-200">
+                                                {{ usuario.nombre|first }}{{ usuario.apellido|first }}
+                                            </div>
+                                            <form hx-post="{% url 'actualizar_foto_rapida' usuario.dni %}"
+                                                  hx-encoding="multipart/form-data"
+                                                  hx-target="#avatar-container-{{ usuario.dni }}"
+                                                  hx-swap="outerHTML"
+                                                  class="absolute inset-0 z-10">
+                                                <label class="absolute inset-0 bg-slate-900/60 rounded-2xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer ring-2 ring-primary-500 ring-offset-1 ring-offset-white" title="Subir foto">
+                                                    <i class="bi bi-camera-fill text-white text-lg drop-shadow-md"></i>
+                                                    <input type="file" name="foto" accept="image/*" hx-trigger="change" class="hidden"
+                                                           onchange="if (this.files && this.files.length) this.form.requestSubmit();">
+                                                </label>
+                                            </form>
+                                        </div>
+                                        <div class="flex-grow min-w-0">
+                                            <h5 class="text-xs font-bold text-slate-800 truncate" title="{{ usuario.nombre }} {{ usuario.apellido }}">{{ usuario.nombre }} {{ usuario.apellido }}</h5>
+                                            <p class="text-[10px] text-slate-500 font-mono mt-0.5"><i class="bi bi-person-vcard"></i> {{ usuario.dni }}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+
+                        {% if usuarios_sin_foto.has_other_pages %}
+                        <div class="mt-8 flex justify-center pb-2">
+                            <nav class="inline-flex rounded-full shadow-sm bg-white border border-slate-200 overflow-hidden" aria-label="Pagination">
+                                {% if usuarios_sin_foto.has_previous %}
+                                    <a href="?page={{ usuarios_sin_foto.previous_page_number }}{% if request.GET.usuario_id %}&usuario_id={{ request.GET.usuario_id }}{% endif %}" class="px-4 py-2 text-sm font-medium text-slate-500 hover:bg-slate-50 border-r border-slate-200 transition-colors">
+                                        <i class="bi bi-chevron-left mr-1"></i> Anterior
+                                    </a>
+                                {% else %}
+                                    <span class="px-4 py-2 text-sm font-medium text-slate-300 border-r border-slate-200 cursor-not-allowed bg-slate-50/50">
+                                        <i class="bi bi-chevron-left mr-1"></i> Anterior
+                                    </span>
+                                {% endif %}
+                                
+                                <span class="px-4 py-2 text-sm font-bold text-slate-700 bg-slate-50 border-r border-slate-200 flex items-center justify-center min-w-[5rem]">
+                                    {{ usuarios_sin_foto.number }} / {{ usuarios_sin_foto.paginator.num_pages }}
+                                </span>
+
+                                {% if usuarios_sin_foto.has_next %}
+                                    <a href="?page={{ usuarios_sin_foto.next_page_number }}{% if request.GET.usuario_id %}&usuario_id={{ request.GET.usuario_id }}{% endif %}" class="px-4 py-2 text-sm font-medium text-slate-500 hover:bg-slate-50 transition-colors">
+                                        Siguiente <i class="bi bi-chevron-right ml-1"></i>
+                                    </a>
+                                {% else %}
+                                    <span class="px-4 py-2 text-sm font-medium text-slate-300 cursor-not-allowed bg-slate-50/50">
+                                        Siguiente <i class="bi bi-chevron-right ml-1"></i>
+                                    </span>
+                                {% endif %}
+                            </nav>
+                        </div>
+                        {% endif %}
+                    {% else %}
+                        <div class="h-full flex-grow flex flex-col items-center justify-center text-center p-8 border-2 border-dashed border-emerald-200 rounded-2xl bg-emerald-50/50">
+                            <div class="bg-white p-4 rounded-full shadow-sm mb-3 border border-emerald-100">
+                                <i class="bi bi-check-circle text-3xl text-emerald-400"></i>
+                            </div>
+                            <h4 class="text-sm font-bold text-emerald-700">¡Todo al día!</h4>
+                            <p class="text-xs text-emerald-600 mt-1 max-w-xs">Todos los socios en la base de datos cuentan con fotografía de perfil.</p>
+                        </div>
+                    {% endif %}
+                </div>
+
+                <!-- Tab 3: Entregas Pendientes -->
+                <div id="tab-recoger" class="hidden flex-grow flex flex-col animate-fade-in-up">
+                    <div class="mb-4">
+                        <h4 class="text-xs font-black text-slate-400 uppercase tracking-widest">Listos para Imprimir / Entregar</h4>
+                        <p class="text-sm text-slate-500 mt-1">Estos socios ya cuentan con fotografía y faltan emitir su carnet físico. Haz clic en un perfil para iniciar la emisión. Mostrando {{ usuarios_sin_recoger|length }} de {{ count_sin_recoger }} socios listos.</p>
+                    </div>
+
+                    {% if usuarios_sin_recoger %}
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-4">
+                            {% for usuario in usuarios_sin_recoger %}
+                                <div onclick="window.location.href='?usuario_id={{ usuario.id }}'" class="cursor-pointer p-4 rounded-2xl border border-slate-100 bg-white hover:bg-slate-50 hover:border-primary-200 hover:shadow-md transition-all shadow-sm">
+                                    <div class="flex items-center gap-3">
+                                        <div class="h-12 w-12 shrink-0 rounded-2xl bg-slate-100 text-slate-500 flex items-center justify-center font-black text-sm border border-slate-200 overflow-hidden relative">
+                                            {% if usuario.foto_perfil %}
+                                                <img src="{{ usuario.foto_perfil.url }}" alt="Foto" class="absolute inset-0 w-full h-full object-cover">
+                                            {% else %}
+                                                {{ usuario.nombre|first }}{{ usuario.apellido|first }}
+                                            {% endif %}
+                                        </div>
+                                        <div class="flex-grow min-w-0">
+                                            <h5 class="text-xs font-bold text-slate-800 truncate" title="{{ usuario.nombre }} {{ usuario.apellido }}">{{ usuario.nombre }} {{ usuario.apellido }}</h5>
+                                            <p class="text-[10px] text-slate-500 font-mono mt-0.5"><i class="bi bi-person-vcard"></i> {{ usuario.dni }}</p>
+                                        </div>
+                                        <div>
+                                            <i class="bi bi-arrow-right-short text-slate-400 text-xl"></i>
+                                        </div>
+                                    </div>
+                                </div>
+                            {% endfor %}
+                        </div>
+
+                        {% if usuarios_sin_recoger.has_other_pages %}
+                        <div class="mt-8 flex justify-center pb-2">
+                            <nav class="inline-flex rounded-full shadow-sm bg-white border border-slate-200 overflow-hidden" aria-label="Pagination">
+                                {% if usuarios_sin_recoger.has_previous %}
+                                    <a href="?page_recoger={{ usuarios_sin_recoger.previous_page_number }}{% if request.GET.usuario_id %}&usuario_id={{ request.GET.usuario_id }}{% endif %}" class="px-4 py-2 text-sm font-medium text-slate-500 hover:bg-slate-50 border-r border-slate-200 transition-colors">
+                                        <i class="bi bi-chevron-left mr-1"></i> Anterior
+                                    </a>
+                                {% else %}
+                                    <span class="px-4 py-2 text-sm font-medium text-slate-300 border-r border-slate-200 cursor-not-allowed bg-slate-50/50">
+                                        <i class="bi bi-chevron-left mr-1"></i> Anterior
+                                    </span>
+                                {% endif %}
+                                
+                                <span class="px-4 py-2 text-sm font-bold text-slate-700 bg-slate-50 border-r border-slate-200 flex items-center justify-center min-w-[5rem]">
+                                    {{ usuarios_sin_recoger.number }} / {{ usuarios_sin_recoger.paginator.num_pages }}
+                                </span>
+
+                                {% if usuarios_sin_recoger.has_next %}
+                                    <a href="?page_recoger={{ usuarios_sin_recoger.next_page_number }}{% if request.GET.usuario_id %}&usuario_id={{ request.GET.usuario_id }}{% endif %}" class="px-4 py-2 text-sm font-medium text-slate-500 hover:bg-slate-50 transition-colors">
+                                        Siguiente <i class="bi bi-chevron-right ml-1"></i>
+                                    </a>
+                                {% else %}
+                                    <span class="px-4 py-2 text-sm font-medium text-slate-300 cursor-not-allowed bg-slate-50/50">
+                                        Siguiente <i class="bi bi-chevron-right ml-1"></i>
+                                    </span>
+                                {% endif %}
+                            </nav>
+                        </div>
+                        {% endif %}
+                    {% else %}
+                        <div class="h-full flex-grow flex flex-col items-center justify-center text-center p-8 border-2 border-dashed border-emerald-200 rounded-2xl bg-emerald-50/50">
+                            <div class="bg-white p-4 rounded-full shadow-sm mb-3 border border-emerald-100">
+                                <i class="bi bi-check-circle text-3xl text-emerald-400"></i>
+                            </div>
+                            <h4 class="text-sm font-bold text-emerald-700">¡Todo entregado!</h4>
+                            <p class="text-xs text-emerald-600 mt-1 max-w-xs">No hay socios con fotografía que estén pendientes de emisión de carnet.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock content %}
+
+{% block extra_js %}
+<script>
+    $(document).ready(function() {
+        // Inicializar el tab correcto si venimos de usar la paginación
+        switchMainTab("{% if active_tab == 'pendientes' %}tab-pendientes{% elif active_tab == 'recoger' %}tab-recoger{% else %}tab-emisiones{% endif %}");
+
+        // Mejoramos la experiencia de Select2 y añadimos feedback visual de carga
+        $('#id_usuario').on('change', function() {
+            var userId = $(this).val();
+            if(userId) {
+                // Mostrar spinner de carga y atenuar el buscador para indicar que está procesando
+                $('#loadingSpinner').removeClass('hidden');
+                $('.search-container').addClass('opacity-70 pointer-events-none');
+                
+                // Redireccionar
+                window.location.href = "?usuario_id=" + userId;
+            }
+        });
+    });
+
+    function submitAction(event, accion) {
+        // Evitar doble clic
+        const btn = event.currentTarget;
+        btn.classList.add('opacity-75', 'pointer-events-none');
+        const originalContent = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-hourglass-split animate-spin"></i> Procesando...';
+
+        document.getElementById('accionInput').value = accion;
+        document.getElementById('actionForm').submit();
+    }
+
+    function switchMainTab(tabId) {
+        document.getElementById('tab-emisiones').classList.add('hidden');
+        document.getElementById('tab-pendientes').classList.add('hidden');
+        const tabRecoger = document.getElementById('tab-recoger');
+        if (tabRecoger) tabRecoger.classList.add('hidden');
+
+        document.getElementById(tabId).classList.remove('hidden');
+
+        const btnEmisiones = document.getElementById('btn-tab-emisiones');
+        const btnPendientes = document.getElementById('btn-tab-pendientes');
+        const btnRecoger = document.getElementById('btn-tab-recoger');
+        
+        // Reset all to inactive state
+        [btnEmisiones, btnPendientes, btnRecoger].forEach(btn => {
+            if(!btn) return;
+            btn.classList.remove('border-primary-500', 'text-slate-900');
+            btn.classList.add('border-transparent', 'text-slate-400');
+            if(btn.querySelector('i')) btn.querySelector('i').classList.remove('text-primary-500');
+        });
+
+        // Set active state for the selected tab
+        const activeBtn = document.getElementById('btn-' + tabId);
+        if(activeBtn) {
+            activeBtn.classList.replace('border-transparent', 'border-primary-500');
+            activeBtn.classList.replace('text-slate-400', 'text-slate-900');
+            if(activeBtn.querySelector('i')) activeBtn.querySelector('i').classList.add('text-primary-500');
+        }
+    }
+</script>
+{% endblock %}
