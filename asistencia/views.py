@@ -1051,11 +1051,19 @@ def historial_asistencias(request):
         .distinct()
     )
 
+    total_pendientes_global = Asistencia.objects.filter(
+        hora_ingreso__isnull=False,
+        hora_salida__isnull=True,
+        evento__isnull=False,
+        es_justificada=False,
+    ).exclude(usuario__estado=Usuario.ESTADO_EXONERADO).count()
+
     context = {
         'page_obj': page_obj,
         'form': form,
         'report_years': report_years,
         'can_scan_qr': request.user.has_perm('asistencia.can_scan_qr'),
+        'total_pendientes_global': total_pendientes_global,
         'stats': {
             'total': total_registros,
             'confirmadas': confirmadas,
@@ -1762,6 +1770,8 @@ def confirmar_asistencia(request, asistencia_id):
     asistencia = get_object_or_404(Asistencia, id=asistencia_id)
     if not asistencia.confirmada:
         asistencia.confirmada = True
+        if not asistencia.hora_salida:
+            asistencia.hora_salida = timezone.localtime(timezone.now()).time()
         asistencia.save()
         messages.success(request, f"Asistencia de {asistencia.usuario} confirmada exitosamente.")
         LogAccion.objects.create(
@@ -1772,6 +1782,161 @@ def confirmar_asistencia(request, asistencia_id):
     else:
         messages.warning(request, f"La asistencia de {asistencia.usuario} ya estaba confirmada.")
     return redirect('historial_asistencias')
+
+
+@login_required
+@permission_required('asistencia.can_manage_users', raise_exception=True)
+def api_eventos_con_pendientes(request):
+    """
+    Retorna la lista de eventos que tienen comuneros pendientes de salida,
+    junto con el contador de pendientes por cada evento y el total global.
+    """
+    eventos_qs = Evento.objects.filter(
+        asistencia__hora_ingreso__isnull=False,
+        asistencia__hora_salida__isnull=True,
+        asistencia__es_justificada=False,
+    ).exclude(
+        asistencia__usuario__estado=Usuario.ESTADO_EXONERADO
+    ).annotate(
+        total_pendientes=Count('asistencia', distinct=True)
+    ).filter(
+        total_pendientes__gt=0
+    ).order_by('-fecha', '-id')
+
+    eventos_list = []
+    total_pendientes_global = 0
+
+    for ev in eventos_qs:
+        total_pendientes_global += ev.total_pendientes
+        eventos_list.append({
+            'id': ev.id,
+            'nombre': ev.nombre,
+            'fecha': ev.fecha.strftime('%d/%m/%Y'),
+            'hora_ingreso': ev.hora_ingreso.strftime('%H:%M') if ev.hora_ingreso else '08:00',
+            'tipo': ev.tipo_nombre,
+            'color_badge': ev.color_badge,
+            'activo': ev.activo,
+            'total_pendientes': ev.total_pendientes,
+        })
+
+    return JsonResponse({
+        'success': True,
+        'total_pendientes_global': total_pendientes_global,
+        'eventos': eventos_list,
+    })
+
+
+@login_required
+@permission_required('asistencia.can_manage_users', raise_exception=True)
+def api_evento_pendientes(request, evento_id):
+    """
+    Retorna el listado de comuneros con ingreso pero sin salida de un evento específico.
+    """
+    evento = get_object_or_404(Evento, id=evento_id)
+
+    pendientes_qs = Asistencia.objects.filter(
+        evento=evento,
+        hora_ingreso__isnull=False,
+        hora_salida__isnull=True,
+        es_justificada=False,
+    ).exclude(
+        usuario__estado=Usuario.ESTADO_EXONERADO
+    ).select_related('usuario').order_by('usuario__apellido', 'usuario__nombre')
+
+    pendientes_data = []
+    for a in pendientes_qs:
+        pendientes_data.append({
+            'asistencia_id': a.id,
+            'usuario_id': a.usuario.id,
+            'dni': a.usuario.dni,
+            'nombre_completo': f"{a.usuario.apellido}, {a.usuario.nombre}",
+            'foto_url': a.usuario.foto_perfil_url,
+            'hora_ingreso': a.hora_ingreso.strftime('%H:%M') if a.hora_ingreso else '--',
+            'puntualidad': a.get_puntualidad_display() if a.puntualidad else 'No aplica',
+            'es_tarde': a.puntualidad == Asistencia.PUNTUALIDAD_TARDE,
+        })
+
+    now_local = timezone.localtime(timezone.now())
+    if evento.fecha == now_local.date():
+        sugerencia_hora = now_local.strftime('%H:%M')
+    else:
+        if evento.hora_ingreso:
+            dt_base = datetime.combine(evento.fecha, evento.hora_ingreso) + timedelta(hours=4)
+            sugerencia_hora = dt_base.strftime('%H:%M')
+        else:
+            sugerencia_hora = "13:00"
+
+    return JsonResponse({
+        'success': True,
+        'evento': {
+            'id': evento.id,
+            'nombre': evento.nombre,
+            'fecha': evento.fecha.strftime('%d/%m/%Y'),
+            'hora_ingreso': evento.hora_ingreso.strftime('%H:%M') if evento.hora_ingreso else '08:00',
+            'tipo': evento.tipo_nombre,
+            'color_badge': evento.color_badge,
+        },
+        'sugerencia_hora_salida': sugerencia_hora,
+        'total': len(pendientes_data),
+        'pendientes': pendientes_data,
+    })
+
+
+@login_required
+@permission_required('asistencia.can_manage_users', raise_exception=True)
+def regularizar_pendientes_evento(request):
+    """
+    Endpoint POST para marcar las asistencias pendientes de un evento como completadas.
+    """
+    if request.method != 'POST':
+        return JsonResponse({'error': 'Método no permitido. Se requiere POST.'}, status=405)
+
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        return JsonResponse({'error': 'Formato JSON inválido.'}, status=400)
+
+    evento_id = data.get('evento_id')
+    if not evento_id:
+        return JsonResponse({'error': 'Debe especificar el ID del evento.'}, status=400)
+
+    evento = get_object_or_404(Evento, id=evento_id)
+    marcar_todos = bool(data.get('marcar_todos', False))
+    asistencia_ids = data.get('asistencia_ids')
+    hora_salida_str = (data.get('hora_salida') or '').strip()
+    observacion = (data.get('observacion') or '').strip()
+
+    if not marcar_todos and not asistencia_ids:
+        return JsonResponse({'error': 'Debe seleccionar al menos un comunero o marcar todos.'}, status=400)
+
+    hora_salida_obj = None
+    if hora_salida_str:
+        try:
+            hora_salida_obj = datetime.strptime(hora_salida_str, '%H:%M').time()
+        except ValueError:
+            try:
+                hora_salida_obj = datetime.strptime(hora_salida_str, '%H:%M:%S').time()
+            except ValueError:
+                hora_salida_obj = None
+
+    if not hora_salida_obj:
+        hora_salida_obj = timezone.localtime(timezone.now()).time()
+
+    from .services import AsistenciaService
+    ids_to_process = None if marcar_todos else asistencia_ids
+    total_updated, _ = AsistenciaService.regularizar_pendientes(
+        evento=evento,
+        asistencia_ids=ids_to_process,
+        hora_salida=hora_salida_obj,
+        observacion=observacion,
+        request_user=request.user,
+    )
+
+    return JsonResponse({
+        'success': True,
+        'count': total_updated,
+        'message': f'Se regularizó la asistencia de {total_updated} comunero(s) exitosamente como completos.',
+    })
 
 @login_required
 @permission_required('asistencia.can_manage_users', raise_exception=True)

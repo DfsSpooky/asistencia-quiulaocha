@@ -805,6 +805,120 @@ class AttendanceEnhancementsTests(TestCase):
             Justificacion.objects.filter(usuario=usuario_exonerado, evento=self.evento).exists()
         )
 
+    def test_api_eventos_con_pendientes_y_regularizacion(self):
+        # Crear usuarios y asistencias con solo ingreso (sin salida)
+        user1 = Usuario.objects.create(nombre='Carlos', apellido='Gomez', dni='87654321', estado=Usuario.ESTADO_ACTIVO)
+        user2 = Usuario.objects.create(nombre='Elena', apellido='Perez', dni='87654322', estado=Usuario.ESTADO_ACTIVO)
+        user_exonerado = Usuario.objects.create(nombre='Mario', apellido='Soto', dni='87654323', estado=Usuario.ESTADO_EXONERADO)
+
+        a1 = Asistencia.objects.create(
+            usuario=user1,
+            evento=self.evento,
+            fecha=self.evento.fecha,
+            hora_ingreso=time(8, 10),
+            hora_salida=None,
+            confirmada=False,
+        )
+        a2 = Asistencia.objects.create(
+            usuario=user2,
+            evento=self.evento,
+            fecha=self.evento.fecha,
+            hora_ingreso=time(8, 20),
+            hora_salida=None,
+            confirmada=False,
+        )
+
+        # 1. Probar GET api_eventos_con_pendientes
+        res_eventos = self.client.get(reverse('api_eventos_con_pendientes'))
+        self.assertEqual(res_eventos.status_code, 200)
+        data_eventos = res_eventos.json()
+        self.assertTrue(data_eventos['success'])
+        self.assertEqual(data_eventos['total_pendientes_global'], 2)
+        self.assertEqual(len(data_eventos['eventos']), 1)
+        self.assertEqual(data_eventos['eventos'][0]['id'], self.evento.id)
+        self.assertEqual(data_eventos['eventos'][0]['total_pendientes'], 2)
+
+        # 2. Probar GET api_evento_pendientes
+        res_pendientes = self.client.get(reverse('api_evento_pendientes', args=[self.evento.id]))
+        self.assertEqual(res_pendientes.status_code, 200)
+        data_pendientes = res_pendientes.json()
+        self.assertTrue(data_pendientes['success'])
+        self.assertEqual(data_pendientes['total'], 2)
+        p_ids = [p['asistencia_id'] for p in data_pendientes['pendientes']]
+        self.assertIn(a1.id, p_ids)
+        self.assertIn(a2.id, p_ids)
+
+        # 3. Probar POST regularizar_pendientes_evento (regularizar solo user1 primero)
+        res_reg = self.client.post(
+            reverse('regularizar_pendientes_evento'),
+            data={
+                'evento_id': self.evento.id,
+                'marcar_todos': False,
+                'asistencia_ids': [a1.id],
+                'hora_salida': '12:30',
+                'observacion': 'Salida por otra puerta regularizada',
+            },
+            content_type='application/json',
+        )
+        self.assertEqual(res_reg.status_code, 200)
+        data_reg = res_reg.json()
+        self.assertTrue(data_reg['success'])
+        self.assertEqual(data_reg['count'], 1)
+
+        # Verificar a1 actualizado
+        a1.refresh_from_db()
+        self.assertTrue(a1.confirmada)
+        self.assertEqual(a1.hora_salida, time(12, 30))
+
+        # Verificar log en LogAccion
+        log_entry = LogAccion.objects.filter(accion='Regularización de Asistencias Pendientes').first()
+        self.assertIsNotNone(log_entry)
+        self.assertIn(self.evento.nombre, log_entry.descripcion)
+
+        # 4. Probar POST regularizar con marcar_todos=True para regularizar a user2
+        res_reg_todos = self.client.post(
+            reverse('regularizar_pendientes_evento'),
+            data={
+                'evento_id': self.evento.id,
+                'marcar_todos': True,
+                'hora_salida': '13:00',
+            },
+            content_type='application/json',
+        )
+        self.assertEqual(res_reg_todos.status_code, 200)
+        self.assertEqual(res_reg_todos.json()['count'], 1)
+
+        a2.refresh_from_db()
+        self.assertTrue(a2.confirmada)
+        self.assertEqual(a2.hora_salida, time(13, 0))
+
+        # 5. Verificar que ahora el evento ya no tiene pendientes
+        res_vacio = self.client.get(reverse('api_eventos_con_pendientes'))
+        self.assertEqual(res_vacio.json()['total_pendientes_global'], 0)
+        self.assertEqual(len(res_vacio.json()['eventos']), 0)
+
+        # 6. Test de permisos: usuario sin 'can_manage_users' es denegado
+        user_sin_permiso = User.objects.create_user(username='regular_user', password='password')
+        client_sin_permiso = Client()
+        client_sin_permiso.force_login(user_sin_permiso)
+        res_unauthorized = client_sin_permiso.get(reverse('api_eventos_con_pendientes'))
+        self.assertEqual(res_unauthorized.status_code, 403)
+
+        res_unauthorized_post = client_sin_permiso.post(
+            reverse('regularizar_pendientes_evento'),
+            data={'evento_id': self.evento.id, 'marcar_todos': True},
+            content_type='application/json',
+        )
+        self.assertEqual(res_unauthorized_post.status_code, 403)
+
+        # 7. Test de validación: POST sin IDs y con marcar_todos=False retorna 400
+        res_bad_request = self.client.post(
+            reverse('regularizar_pendientes_evento'),
+            data={'evento_id': self.evento.id, 'marcar_todos': False, 'asistencia_ids': []},
+            content_type='application/json',
+        )
+        self.assertEqual(res_bad_request.status_code, 400)
+
 
 class AdminMassPhotoUploadTests(TestCase):
     def setUp(self):
@@ -1347,5 +1461,6 @@ class BackupRestoreWebTests(TransactionTestCase):
             self.assertIn('Sistema restaurado exitosamente', data.get('message'))
         finally:
             shutil.rmtree(test_tar_dir, ignore_errors=True)
+
 
 

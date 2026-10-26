@@ -173,6 +173,67 @@ class AsistenciaService:
         message = f'Salida registrada para {usuario.nombre} {usuario.apellido} en el evento {evento.nombre if evento else "sin evento"} con éxito.'
         return existing_asistencia, message, existing_asistencia.hora_salida
     
+    @staticmethod
+    def regularizar_pendientes(evento, asistencia_ids=None, hora_salida=None, observacion=None, request_user=None):
+        """
+        Regulariza asistencias pendientes (comuneros que marcaron ingreso pero no registraron salida).
+        Marca su hora_salida y confirmada=True para que figuren como asistencia completa.
+
+        Args:
+            evento (Evento): El evento al que corresponden las asistencias
+            asistencia_ids (list, optional): Lista de IDs específicos a regularizar. Si es None, regulariza todos los pendientes del evento.
+            hora_salida (time, optional): Hora de salida a asignar. Si no se especifica, usa la hora actual o estimada.
+            observacion (str, optional): Motivo o comentario adicional para el registro de auditoría.
+            request_user (User, optional): Usuario que realiza la acción (para auditoría).
+
+        Returns:
+            tuple: (total_regularizados, lista_asistencias_actualizadas)
+        """
+        from django.db import transaction
+        from django.utils import timezone
+
+        qs = Asistencia.objects.filter(
+            evento=evento,
+            hora_ingreso__isnull=False,
+            hora_salida__isnull=True,
+            es_justificada=False,
+        ).exclude(usuario__estado=Usuario.ESTADO_EXONERADO)
+
+        if asistencia_ids is not None:
+            qs = qs.filter(id__in=asistencia_ids)
+
+        asistencias = list(qs.select_related('usuario'))
+        if not asistencias:
+            return 0, []
+
+        if not hora_salida:
+            hora_salida = timezone.localtime(timezone.now()).time()
+
+        updated = []
+        with transaction.atomic():
+            for a in asistencias:
+                salida_asig = hora_salida
+                # Si la hora de ingreso registrada es posterior o igual a la salida elegida,
+                # ajustar la salida 15 minutos después del ingreso para mantener coherencia cronológica.
+                if a.hora_ingreso and salida_asig <= a.hora_ingreso:
+                    temp_dt = datetime.combine(date.today(), a.hora_ingreso) + timedelta(minutes=15)
+                    salida_asig = temp_dt.time()
+
+                a.hora_salida = salida_asig
+                a.confirmada = True
+                a.save(update_fields=['hora_salida', 'confirmada'])
+                updated.append(a)
+
+            if request_user:
+                obs_txt = f" - Obs: {observacion}" if observacion else ""
+                AsistenciaService._registrar_log(
+                    request_user,
+                    'Regularización de Asistencias Pendientes',
+                    f"{request_user.username} regularizó la salida de {len(updated)} comunero(s) en el evento '{evento.nombre}' ({evento.fecha.strftime('%d/%m/%Y')}) con salida asignada {hora_salida.strftime('%H:%M')}.{obs_txt}"
+                )
+
+        return len(updated), updated
+    
     # ==================== Métodos de Validación ====================
     
     @staticmethod

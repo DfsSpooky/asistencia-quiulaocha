@@ -10,7 +10,8 @@ from .views import (
     descargar_todos_carnets_pdf, descargar_reporte_global_pdf, descargar_reporte_filtrado_pdf,
     exportar_reporte_global_excel, descargar_backup, restaurar_backup, cerrar_evento, panel_salud,
     actualizar_foto_rapida, entregar_carnet, modulo_gestion_carnets, healthcheck,
-    solicitar_descarga_carnets, estado_descargas_carnets, descargar_archivo_carnets
+    solicitar_descarga_carnets, estado_descargas_carnets, descargar_archivo_carnets,
+    api_eventos_con_pendientes, api_evento_pendientes, regularizar_pendientes_evento
 )
 from rest_framework.authtoken.views import obtain_auth_token
 
@@ -57,4 +58,7 @@ urlpatterns = [
     path('evento/cerrar/<int:evento_id>/', cerrar_evento, name='cerrar_evento'),
     path('sistema/gestion-carnets/', modulo_gestion_carnets, name='modulo_gestion_carnets'),
     path('api/buscar-usuario-dni/', buscar_usuario_dni, name='buscar_usuario_dni'),
+    path('api/eventos-con-pendientes/', api_eventos_con_pendientes, name='api_eventos_con_pendientes'),
+    path('api/evento/<int:evento_id>/pendientes/', api_evento_pendientes, name='api_evento_pendientes'),
+    path('api/regularizar-pendientes/', regularizar_pendientes_evento, name='regularizar_pendientes_evento'),
 ]

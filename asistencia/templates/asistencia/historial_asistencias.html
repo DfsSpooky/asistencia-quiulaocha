@@ -30,6 +30,26 @@
                 </div>
                 <!-- Global Actions -->
                 <div class="flex flex-wrap items-center gap-3">
+                    {% if perms.asistencia.can_manage_users or user.is_staff %}
+                    <button type="button"
+                            onclick="window.dispatchEvent(new CustomEvent('open-regularizar-modal'))"
+                            class="group flex items-center gap-4 px-8 py-5 bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 rounded-[2rem] font-black transition-all duration-300 shadow-xl shadow-amber-500/25 transform hover:-translate-y-1 active:scale-95">
+                        <div class="h-10 w-10 bg-slate-950 text-amber-400 rounded-xl flex items-center justify-center group-hover:rotate-12 transition-transform shadow-md">
+                            <i class="bi bi-person-check-fill text-xl"></i>
+                        </div>
+                        <div class="text-left">
+                            <div class="flex items-center gap-2 mb-1">
+                                <p class="text-[10px] uppercase tracking-widest leading-none opacity-75">Validar Asistencias</p>
+                                {% if total_pendientes_global > 0 %}
+                                    <span class="px-2 py-0.5 rounded-full bg-slate-950 text-amber-300 text-[9px] font-black leading-none">
+                                        {{ total_pendientes_global }}
+                                    </span>
+                                {% endif %}
+                            </div>
+                            <p class="text-sm leading-none font-black">MARCAR PENDIENTES</p>
+                        </div>
+                    </button>
+                    {% endif %}
                     <button onclick="descargarReporteGlobal()"
                             data-global-report-url="{% url 'descargar_reporte_global_pdf' %}"
                        class="group flex items-center gap-4 px-8 py-5 bg-primary-500 hover:bg-primary-400 text-slate-900 rounded-[2rem] font-black transition-all duration-300 shadow-xl shadow-primary-500/20 transform hover:-translate-y-1 active:scale-95">
@@ -551,4 +571,6 @@ window.applyAdvancedFilters = function() {
             height: 44px !important;
         }
     </style>
+
+    {% include 'asistencia/partials/modal_regularizar_pendientes.html' %}
 {% endblock content %}

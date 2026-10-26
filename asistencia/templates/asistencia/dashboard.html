@@ -122,6 +122,19 @@
                             </div>
                             <i class="bi bi-download ml-auto text-slate-500 group-hover:text-white transition-colors"></i>
                         </a>
+                        {% if perms.asistencia.can_manage_users or user.is_staff %}
+                            <a href="{% url 'historial_asistencias' %}?abrir_regularizar=1"
+                               class="group flex items-center gap-6 p-6 bg-amber-500/10 border border-amber-500/20 rounded-[2rem] hover:bg-amber-500/20 transition-all duration-300 transform hover:-translate-y-1">
+                                <div class="h-14 w-14 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center shadow-lg shadow-amber-500/20 group-hover:scale-110 transition-transform">
+                                    <i class="bi bi-person-check-fill text-2xl"></i>
+                                </div>
+                                <div class="text-left">
+                                    <h6 class="text-lg font-bold text-white mb-1">Validar Pendientes</h6>
+                                    <p class="text-slate-400 text-xs font-medium">Regularizar salidas no marcadas</p>
+                                </div>
+                                <i class="bi bi-chevron-right ml-auto text-slate-500 group-hover:text-white transition-colors"></i>
+                            </a>
+                        {% endif %}
                         {% if user.is_superuser %}
                             <a href="javascript:void(0)"
                                @click="showBackupModal = true"
