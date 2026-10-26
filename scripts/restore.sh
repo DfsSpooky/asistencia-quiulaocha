@@ -34,7 +34,10 @@ INTERNAL_DIR=$(ls "${TEMP_RESTORE_DIR}")
 echo "1/2: Restaurando base de datos..."
 SQL_FILE=$(find "${TEMP_RESTORE_DIR}" -name "database.sql" | head -n 1)
 if [ -n "${SQL_FILE}" ] && [ -f "${SQL_FILE}" ]; then
-    grep -Ev '^\s*(\\restrict|\\unrestrict|SET transaction_timeout)' "${SQL_FILE}" | docker compose exec -T db psql \
+    (
+        echo "DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO \"${POSTGRES_USER}\";"
+        grep -Ev '^\s*(\\restrict|\\unrestrict|SET transaction_timeout)' "${SQL_FILE}"
+    ) | docker compose exec -T db psql \
         -v ON_ERROR_STOP=1 \
         --single-transaction \
         -U "${POSTGRES_USER}" "${POSTGRES_DB}"

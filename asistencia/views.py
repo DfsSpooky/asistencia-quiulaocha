@@ -1435,10 +1435,15 @@ def restaurar_backup(request):
                 if not sql_file or not os.path.exists(sql_file):
                     raise Exception("No se encontro database.sql en el backup para PostgreSQL.")
 
-                # Sanitizar database.sql (remover comandos de pg_dump 17 incompatibles con PostgreSQL 15: \\restrict, \\unrestrict y transaction_timeout)
+                # Sanitizar database.sql (remover comandos de pg_dump 17 incompatibles con PostgreSQL 15: \restrict, \unrestrict y transaction_timeout)
+                # y reiniciar el esquema public para asegurar una importación limpia sin tablas huérfanas
                 with open(sql_file, 'r', encoding='utf-8', errors='ignore') as sf:
                     sql_lines = sf.readlines()
-                sanitized_lines = []
+                sanitized_lines = [
+                    "DROP SCHEMA IF EXISTS public CASCADE;\n",
+                    "CREATE SCHEMA public;\n",
+                    "GRANT ALL ON SCHEMA public TO CURRENT_USER;\n",
+                ]
                 for line in sql_lines:
                     strip_line = line.strip()
                     if (
@@ -1546,6 +1551,7 @@ def restaurar_backup(request):
                     restored_user.save(update_fields=['password', 'is_superuser', 'is_staff'])
 
                 auth_login(request, restored_user, backend='django.contrib.auth.backends.ModelBackend')
+                request.user = restored_user
                 request.session.cycle_key()
             except Exception as session_exc:
                 logger.warning("No se pudo regenerar la sesión post-restauración: %s", session_exc)
@@ -1554,21 +1560,27 @@ def restaurar_backup(request):
                 except Exception:
                     request.session.modified = False
 
-            LogAccion.objects.create(
-                usuario=request.user,
-                accion="Restaurar Backup",
-                descripcion=(
-                    f"{request.user.username} restauró el sistema desde {backup_file.name}. "
-                    f"Usuarios: {after['usuarios']}, Asistencias: {after['asistencias']}."
+            log_user = getattr(request, 'user', None)
+            if not log_user or not getattr(log_user, 'is_authenticated', False):
+                from django.contrib.auth.models import User
+                log_user = User.objects.filter(is_superuser=True).first()
+
+            if log_user:
+                LogAccion.objects.create(
+                    usuario=log_user,
+                    accion="Restaurar Backup",
+                    descripcion=(
+                        f"{getattr(log_user, 'username', 'admin')} restauró el sistema desde {backup_file.name}. "
+                        f"Usuarios: {after['usuarios']}, Asistencias: {after['asistencias']}."
+                    )
                 )
-            )
-            log_critical_change(
-                request.user,
-                'Sistema',
-                before,
-                after,
-                action_label='Restauracion de backup',
-            )
+                log_critical_change(
+                    log_user,
+                    'Sistema',
+                    before,
+                    after,
+                    action_label='Restauracion de backup',
+                )
 
             if is_ajax:
                 return JsonResponse({
