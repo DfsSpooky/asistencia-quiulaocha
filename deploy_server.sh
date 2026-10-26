@@ -90,6 +90,9 @@ fi
 # 4. Build and Run Docker
 echo "Building and starting containers for production..."
 cd "$APP_DIR"
+export ENV_FILE="$ENV_FILE"
+export STATIC_DIR="$PUBLIC_DIR/static"
+export MEDIA_DIR="$MEDIA_DIR"
 docker compose -f docker-compose.yml up -d --build
 
 # 5. Sanity Check

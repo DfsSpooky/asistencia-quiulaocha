@@ -7,7 +7,7 @@ from django.urls import reverse, path
 from django.template.response import TemplateResponse
 from django.shortcuts import redirect
 from django.http import JsonResponse
-from .models import Usuario, Asistencia, Ubicacion, Evento, LogAccion, ConfiguracionSistema, Justificacion, HistorialCarnet
+from .models import Usuario, Asistencia, Ubicacion, Evento, TipoEvento, LogAccion, ConfiguracionSistema, Justificacion, HistorialCarnet
 from .audit import log_critical_change
 from .forms import CargaMasivaFotosForm
 
@@ -408,14 +408,55 @@ class UbicacionAdmin(admin.ModelAdmin):
     list_display = ('nombre', 'descripcion')
     search_fields = ('nombre',)
 
+@admin.register(TipoEvento)
+class TipoEventoAdmin(admin.ModelAdmin):
+    list_display = ('nombre', 'categoria_badge', 'color_preview', 'activo')
+    list_filter = ('categoria', 'activo')
+    search_fields = ('nombre', 'descripcion')
+
+    def categoria_badge(self, obj):
+        if obj.categoria == TipoEvento.CATEGORIA_FAENA:
+            bg, text, label = '#ecfdf5', '#047857', '🚜 Faena Comunal'
+        elif obj.categoria == TipoEvento.CATEGORIA_ASAMBLEA:
+            bg, text, label = '#eff6ff', '#1d4ed8', '🏛️ Asamblea'
+        else:
+            bg, text, label = '#f8fafc', '#475569', 'Reunión'
+        return format_html(
+            '<span style="padding: 4px 10px; border-radius: 9999px; background: {}; color: {}; font-weight: 700; font-size: 11px;">{}</span>',
+            bg, text, label
+        )
+    categoria_badge.short_description = "Clasificación"
+
+    def color_preview(self, obj):
+        return format_html(
+            '<span style="display:inline-flex; align-items:center; gap:6px;">'
+            '<span style="width:14px; height:14px; border-radius:4px; background:{}; border:1px solid #cbd5e1;"></span>'
+            '<code>{}</code>'
+            '</span>',
+            obj.color, obj.color
+        )
+    color_preview.short_description = "Color"
+
 @admin.register(Evento)
 class EventoAdmin(admin.ModelAdmin):
     form = EventoAdminForm
-    list_display = ('nombre', 'fecha', 'hora_ingreso', 'activo_badge', 'editar_evento')
-    search_fields = ('nombre',)
-    list_filter = ('activo', 'fecha')
+    list_display = ('nombre', 'tipo_evento_badge', 'fecha', 'hora_ingreso', 'activo_badge', 'editar_evento')
+    search_fields = ('nombre', 'tipo_evento__nombre')
+    list_filter = ('tipo_evento', 'activo', 'fecha')
     actions = ['finalizar_eventos']
     list_display_links = ('nombre', 'fecha')
+
+    def tipo_evento_badge(self, obj):
+        tipo_nombre = obj.tipo_nombre
+        color = obj.color_badge
+        icon = '🚜' if obj.es_faena else '🏛️'
+        return format_html(
+            '<span style="display:inline-flex; align-items:center; gap:4px; padding: 4px 10px; border-radius: 9999px; '
+            'background: {}; color: #fff; font-weight: 700; font-size: 11px; letter-spacing: 0.02em;">'
+            '{} {}</span>',
+            color, icon, tipo_nombre
+        )
+    tipo_evento_badge.short_description = "Tipo de Reunión"
 
     def activo_badge(self, obj):
         if obj.activo:
@@ -465,6 +506,7 @@ class EventoAdmin(admin.ModelAdmin):
             old = Evento.objects.get(pk=obj.pk)
             before = {
                 'nombre': old.nombre,
+                'tipo_evento': str(old.tipo_evento) if old.tipo_evento else '',
                 'fecha': str(old.fecha),
                 'hora_ingreso': str(old.hora_ingreso),
                 'activo': old.activo,
@@ -472,6 +514,7 @@ class EventoAdmin(admin.ModelAdmin):
         super().save_model(request, obj, form, change)
         after = {
             'nombre': obj.nombre,
+            'tipo_evento': str(obj.tipo_evento) if obj.tipo_evento else '',
             'fecha': str(obj.fecha),
             'hora_ingreso': str(obj.hora_ingreso),
             'activo': obj.activo,
@@ -534,8 +577,42 @@ class LogAccionAdmin(admin.ModelAdmin):
 
 @admin.register(ConfiguracionSistema)
 class ConfiguracionSistemaAdmin(admin.ModelAdmin):
-    list_display = ('id', 'nombre_institucion', 'tardanza_activa', 'tolerancia_minutos', 'logo', 'avatar_carnet_sin_foto')
-    fields = ('nombre_institucion', 'tardanza_activa', 'tolerancia_minutos', 'logo', 'avatar_carnet_sin_foto')
+    list_display = (
+        'id',
+        'nombre_institucion',
+        'tardanza_activa',
+        'tolerancia_minutos',
+        'permitir_carnets_antiguos_sin_firma',
+        'logo',
+        'avatar_carnet_sin_foto',
+    )
+    fieldsets = (
+        ('Institución y Asistencia', {
+            'fields': (
+                'nombre_institucion',
+                'tardanza_activa',
+                'tolerancia_minutos',
+                'logo',
+                'avatar_carnet_sin_foto',
+            )
+        }),
+        ('Seguridad y Compatibilidad de Carnets QR', {
+            'fields': (
+                'permitir_carnets_antiguos_sin_firma',
+                'qr_signing_key',
+                'qr_fallback_keys',
+            ),
+            'description': (
+                'Configuración para evitar que los carnets físicos queden invalidados ante cambios de servidor o claves.<br>'
+                '<strong>Permitir carnets antiguos sin firma (Recomendado: Activado):</strong> El escáner aceptará los carnets físicos '
+                'ya entregados a los comuneros aunque se haya perdido la clave original con la que se imprimieron.<br>'
+                '<strong>Clave de firma QR fija:</strong> Opcional. Si deseas fijar una clave aquí en lugar del archivo .env.'
+            )
+        }),
+    )
+
+    change_form_template = 'admin/asistencia/configuracionsistema/change_form.html'
+    change_list_template = 'admin/asistencia/configuracionsistema/change_list.html'
 
     # Limitar a una sola instancia en la lista
     def has_add_permission(self, request):

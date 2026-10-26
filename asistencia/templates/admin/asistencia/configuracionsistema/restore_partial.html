@@ -1,0 +1,543 @@
+<!-- Asistente de Restauracion Completa con Barra de Progreso en Django Admin -->
+<style>
+.restore-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    background: #ffffff;
+    box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.06);
+    overflow: hidden;
+    margin-bottom: 24px;
+}
+.restore-card-header {
+    padding: 16px 24px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.restore-card-body {
+    padding: 24px;
+}
+.restore-dropzone {
+    border: 2px dashed #cbd5e1;
+    border-radius: 14px;
+    background: #f8fafc;
+    padding: 28px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease-in-out;
+    position: relative;
+}
+.restore-dropzone:hover, .restore-dropzone.dragover {
+    border-color: #2563eb;
+    background: #eff6ff;
+}
+.restore-dropzone-icon {
+    width: 56px;
+    height: 56px;
+    line-height: 56px;
+    border-radius: 50%;
+    background: #e0f2fe;
+    color: #0284c7;
+    font-size: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 12px;
+}
+.restore-btn-submit {
+    height: 46px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    background: linear-gradient(135deg, #1d4ed8, #2563eb);
+    color: #ffffff !important;
+    border: none;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+}
+.restore-btn-submit:hover:not(:disabled) {
+    background: linear-gradient(135deg, #1e40af, #1d4ed8);
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.35);
+    transform: translateY(-1px);
+}
+.restore-btn-submit:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+.restore-file-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 30px;
+    font-size: 13px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+}
+.restore-progress-bar-custom {
+    background: linear-gradient(90deg, #2563eb, #38bdf8);
+}
+.restore-step-item {
+    padding: 8px 12px;
+    border-radius: 8px;
+    transition: background-color 0.2s ease;
+}
+.restore-step-item.active {
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-weight: 600;
+}
+.restore-step-item.done {
+    color: #15803d;
+    font-weight: 500;
+}
+.restore-step-item.waiting {
+    color: #64748b;
+}
+</style>
+
+<div class="restore-card">
+    <!-- Header -->
+    <div class="restore-card-header">
+        <div class="d-flex align-items-center">
+            <div style="width: 40px; height: 40px; border-radius: 10px; background: #eff6ff; display: flex; align-items: center; justify-content: center; margin-right: 14px; border: 1px solid #dbeafe;">
+                <i class="fas fa-database text-primary" style="font-size: 18px;"></i>
+            </div>
+            <div>
+                <h5 class="m-0 font-weight-bold text-dark" style="font-size: 16px; letter-spacing: -0.01em;">
+                    Restauración Integral del Sistema
+                </h5>
+                <small class="text-muted" style="font-size: 12px;">
+                    Restaura la base de datos PostgreSQL y archivos multimedia desde un archivo <code>.tar.gz</code>
+                </small>
+            </div>
+        </div>
+        <div>
+            <span class="badge" style="background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; font-size: 11px; font-weight: 600; padding: 6px 12px; border-radius: 20px;">
+                <i class="fas fa-shield-alt text-primary mr-1"></i> Área de Superusuario
+            </span>
+        </div>
+    </div>
+
+    <!-- Body -->
+    <div class="restore-card-body">
+        <form id="admin-restore-backup-form" action="{% url 'restaurar_backup' %}" method="POST" enctype="multipart/form-data">
+            {% csrf_token %}
+            <input type="file" id="admin_backup_file" name="backup_file" accept=".tar.gz" style="display: none;" required>
+
+            <!-- Dropzone Area -->
+            <div class="restore-dropzone" id="admin-dropzone">
+                <div id="dropzone-idle-content">
+                    <div class="restore-dropzone-icon">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                    </div>
+                    <div class="font-weight-bold text-dark mb-1" style="font-size: 15px;">
+                        Arrastra y suelta aquí el archivo de respaldo <span class="text-primary font-weight-bold">.tar.gz</span>
+                    </div>
+                    <p class="text-muted mb-2" style="font-size: 13px;">
+                        o haz clic en esta área para seleccionarlo desde tu equipo
+                    </p>
+                    <span class="badge badge-light border text-muted px-2 py-1" style="font-size: 11px;">
+                        <i class="fas fa-file-archive text-warning mr-1"></i> Compatible con respaldos completos (Base de datos + Media)
+                    </span>
+                </div>
+
+                <!-- Selected File Display -->
+                <div id="dropzone-selected-content" style="display: none;">
+                    <div class="restore-dropzone-icon" style="background: #fef3c7; color: #d97706;">
+                        <i class="fas fa-file-archive"></i>
+                    </div>
+                    <div class="mb-2">
+                        <div class="restore-file-pill" style="max-width: 100%;">
+                            <i class="fas fa-check-circle text-success flex-shrink-0"></i>
+                            <span class="font-weight-bold text-dark text-truncate d-inline-block" style="max-width: 280px; vertical-align: middle;" id="admin-selected-filename">archivo.tar.gz</span>
+                            <span class="badge badge-secondary ml-1 flex-shrink-0" id="admin-selected-filesize">0 MB</span>
+                            <button type="button" class="btn btn-sm btn-link text-danger p-0 ml-2 flex-shrink-0" id="admin-remove-file-btn" title="Quitar archivo">
+                                <i class="fas fa-times-circle"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <small class="text-muted d-block" style="font-size: 12px;">
+                        Haz clic en el botón de abajo para comenzar el proceso de restauración.
+                    </small>
+                </div>
+            </div>
+
+            <!-- Action Row -->
+            <div class="mt-3">
+                <div class="row justify-content-center">
+                    <div class="col-lg-6 col-md-8 col-sm-12 text-center">
+                        <button type="submit" id="admin-start-restore-btn" class="restore-btn-submit" disabled>
+                            <i class="fas fa-upload"></i>
+                            <span>Iniciar Restauración Completa</span>
+                        </button>
+                        <small class="text-muted d-block mt-2" style="font-size: 11.5px;">
+                            <i class="fas fa-exclamation-circle text-warning mr-1"></i>
+                            Los registros existentes serán actualizados y reemplazados con los del respaldo.
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </form>
+
+        <!-- Progress Box (Hidden initially) -->
+        <div id="admin-restore-progress-container" class="mt-4 p-4 border rounded" style="display: none; background: #f8fafc; border-color: #e2e8f0 !important; border-radius: 12px;">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span id="admin-progress-stage" class="font-weight-bold text-dark" style="font-size: 13.5px;">
+                    <i class="fas fa-spinner fa-spin text-primary mr-1"></i> Subiendo archivo al servidor...
+                </span>
+                <span id="admin-progress-percent" class="badge badge-primary px-3 py-1 font-weight-bold" style="font-size: 13px; border-radius: 12px;">0%</span>
+            </div>
+
+            <div class="progress mb-2" style="height: 14px; border-radius: 20px; background-color: #e2e8f0; overflow: hidden;">
+                <div id="admin-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated restore-progress-bar-custom font-weight-bold" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-between text-muted mb-3" style="font-size: 11.5px;">
+                <span id="admin-step-detail">Preparando transferencia...</span>
+                <span id="admin-bytes-detail" class="font-weight-bold">0 MB / 0 MB</span>
+            </div>
+
+            <!-- Steps list -->
+            <div class="bg-white p-3 rounded border" style="border-color: #e2e8f0 !important;">
+                <div class="row" style="font-size: 12.5px;">
+                    <div class="col-md-6 mb-2">
+                        <div id="adm-step-1" class="restore-step-item active">
+                            <i class="fas fa-spinner fa-spin mr-1"></i> 1. Subiendo archivo de respaldo
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <div id="adm-step-2" class="restore-step-item waiting">
+                            <i class="far fa-circle mr-1"></i> 2. Desempaquetando archivos
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <div id="adm-step-3" class="restore-step-item waiting">
+                            <i class="far fa-circle mr-1"></i> 3. Restaurando base de datos PostgreSQL
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-2">
+                        <div id="adm-step-4" class="restore-step-item waiting">
+                            <i class="far fa-circle mr-1"></i> 4. Sincronizando migraciones
+                        </div>
+                    </div>
+                    <div class="col-12">
+                        <div id="adm-step-5" class="restore-step-item waiting">
+                            <i class="far fa-circle mr-1"></i> 5. Restaurando fotos y carnets QR
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Success Box -->
+            <div id="admin-restore-success" class="alert alert-success mt-4 mb-0" style="display: none; border-radius: 12px; border: 1px solid #bbf7d0; background: #f0fdf4;">
+                <div class="text-center mb-3">
+                    <div style="width: 48px; height: 48px; border-radius: 50%; background: #dcfce7; color: #16a34a; font-size: 22px; display: inline-flex; align-items: center; justify-content: center; margin-bottom: 8px;">
+                        <i class="fas fa-check"></i>
+                    </div>
+                    <h5 class="font-weight-bold text-success mb-1" style="font-size: 16px;">¡Restauración Completada con Éxito!</h5>
+                    <p id="admin-success-msg" class="text-muted mb-0" style="font-size: 13px;"></p>
+                </div>
+                
+                <div class="row text-center mb-3">
+                    <div class="col-4">
+                        <div class="bg-white p-3 rounded border shadow-sm">
+                            <span id="adm-stat-u" class="d-block font-weight-bold text-dark" style="font-size: 22px; color: #1e293b;">0</span>
+                            <small class="text-muted text-uppercase font-weight-bold" style="font-size: 10px; letter-spacing: 0.05em;">Usuarios</small>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="bg-white p-3 rounded border shadow-sm">
+                            <span id="adm-stat-a" class="d-block font-weight-bold text-dark" style="font-size: 22px; color: #1e293b;">0</span>
+                            <small class="text-muted text-uppercase font-weight-bold" style="font-size: 10px; letter-spacing: 0.05em;">Asistencias</small>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="bg-white p-3 rounded border shadow-sm">
+                            <span id="adm-stat-e" class="d-block font-weight-bold text-dark" style="font-size: 22px; color: #1e293b;">0</span>
+                            <small class="text-muted text-uppercase font-weight-bold" style="font-size: 10px; letter-spacing: 0.05em;">Eventos</small>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="text-center">
+                    <button type="button" class="btn btn-success font-weight-bold px-4 py-2" style="border-radius: 8px;" onclick="window.location.reload();">
+                        <i class="fas fa-sync-alt mr-1"></i> Recargar Página del Sistema
+                    </button>
+                </div>
+            </div>
+
+            <!-- Error Box -->
+            <div id="admin-restore-error" class="alert alert-danger mt-4 mb-0" style="display: none; border-radius: 12px;">
+                <h6 class="font-weight-bold mb-1"><i class="fas fa-exclamation-triangle mr-1"></i> Error en la Restauración</h6>
+                <p id="admin-error-msg" class="mb-2" style="font-size: 12.5px;"></p>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('admin-restore-progress-container').style.display='none';">
+                    Cerrar e Intentar Nuevamente
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    var fileInput = document.getElementById('admin_backup_file');
+    var dropzone = document.getElementById('admin-dropzone');
+    var idleContent = document.getElementById('dropzone-idle-content');
+    var selectedContent = document.getElementById('dropzone-selected-content');
+    var selectedFilename = document.getElementById('admin-selected-filename');
+    var selectedFilesize = document.getElementById('admin-selected-filesize');
+    var removeFileBtn = document.getElementById('admin-remove-file-btn');
+    var startBtn = document.getElementById('admin-start-restore-btn');
+
+    var form = document.getElementById('admin-restore-backup-form');
+    var progressContainer = document.getElementById('admin-restore-progress-container');
+    var progressBar = document.getElementById('admin-progress-bar');
+    var progressPercent = document.getElementById('admin-progress-percent');
+    var progressStage = document.getElementById('admin-progress-stage');
+    var stepDetail = document.getElementById('admin-step-detail');
+    var bytesDetail = document.getElementById('admin-bytes-detail');
+
+    var successBox = document.getElementById('admin-restore-success');
+    var errorBox = document.getElementById('admin-restore-error');
+    var successMsg = document.getElementById('admin-success-msg');
+    var errorMsg = document.getElementById('admin-error-msg');
+
+    var statU = document.getElementById('adm-stat-u');
+    var statA = document.getElementById('adm-stat-a');
+    var statE = document.getElementById('adm-stat-e');
+
+    var s1 = document.getElementById('adm-step-1');
+    var s2 = document.getElementById('adm-step-2');
+    var s3 = document.getElementById('adm-step-3');
+    var s4 = document.getElementById('adm-step-4');
+    var s5 = document.getElementById('adm-step-5');
+
+    function formatBytes(bytes) {
+        if (!bytes || bytes === 0) return '0 Bytes';
+        var k = 1024;
+        var sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        var i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function updateFileView() {
+        if (fileInput.files && fileInput.files.length > 0) {
+            var file = fileInput.files[0];
+            selectedFilename.textContent = file.name;
+            selectedFilename.title = file.name;
+            selectedFilesize.textContent = formatBytes(file.size);
+            idleContent.style.display = 'none';
+            selectedContent.style.display = 'block';
+            startBtn.disabled = false;
+        } else {
+            idleContent.style.display = 'block';
+            selectedContent.style.display = 'none';
+            startBtn.disabled = true;
+        }
+    }
+
+    if (dropzone && fileInput) {
+        dropzone.addEventListener('click', function(e) {
+            if (e.target && (e.target.id === 'admin-remove-file-btn' || e.target.closest('#admin-remove-file-btn'))) {
+                return;
+            }
+            fileInput.click();
+        });
+
+        dropzone.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.classList.add('dragover');
+        });
+
+        dropzone.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.classList.remove('dragover');
+        });
+
+        dropzone.addEventListener('drop', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            dropzone.classList.remove('dragover');
+            if (e.dataTransfer && e.dataTransfer.files.length > 0) {
+                fileInput.files = e.dataTransfer.files;
+                updateFileView();
+            }
+        });
+
+        fileInput.addEventListener('change', updateFileView);
+    }
+
+    if (removeFileBtn) {
+        removeFileBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            fileInput.value = '';
+            updateFileView();
+        });
+    }
+
+    function setStep(el, state, text) {
+        if (!el) return;
+        el.className = 'restore-step-item ' + state;
+        if (state === 'active') {
+            el.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> ' + text;
+        } else if (state === 'done') {
+            el.innerHTML = '<i class="fas fa-check-circle mr-1"></i> ' + text;
+        } else {
+            el.innerHTML = '<i class="far fa-circle mr-1"></i> ' + text;
+        }
+    }
+
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            if (!fileInput.files.length) {
+                alert('Por favor selecciona un archivo .tar.gz');
+                return;
+            }
+
+            var file = fileInput.files[0];
+            if (!file.name.endsWith('.tar.gz')) {
+                alert('El archivo debe terminar en .tar.gz');
+                return;
+            }
+
+            if (!confirm('¡ATENCIÓN! La base de datos actual será reemplazada por los datos del archivo de backup. ¿Deseas continuar?')) {
+                return;
+            }
+
+            progressContainer.style.display = 'block';
+            successBox.style.display = 'none';
+            errorBox.style.display = 'none';
+            startBtn.disabled = true;
+
+            progressBar.style.width = '0%';
+            progressPercent.textContent = '0%';
+            progressStage.innerHTML = '<i class="fas fa-spinner fa-spin text-primary mr-1"></i> Subiendo archivo al servidor...';
+            bytesDetail.textContent = '0 / ' + formatBytes(file.size);
+
+            setStep(s1, 'active', '1. Subiendo archivo de respaldo');
+            setStep(s2, 'waiting', '2. Desempaquetando archivos y verificando estructura');
+            setStep(s3, 'waiting', '3. Restaurando registros en PostgreSQL');
+            setStep(s4, 'waiting', '4. Sincronizando migraciones de base de datos');
+            setStep(s5, 'waiting', '5. Restaurando fotos de perfil y carnets QR');
+
+            var formData = new FormData(form);
+            var xhr = new XMLHttpRequest();
+
+            xhr.upload.addEventListener('progress', function(event) {
+                if (event.lengthComputable) {
+                    var percent = Math.round((event.loaded / event.total) * 100);
+                    var displayPercent = Math.min(Math.round(percent * 0.45), 45);
+                    progressBar.style.width = displayPercent + '%';
+                    progressPercent.textContent = percent + '%';
+                    bytesDetail.textContent = formatBytes(event.loaded) + ' / ' + formatBytes(event.total);
+
+                    if (percent >= 100) {
+                        setStep(s1, 'done', '1. Archivo subido con éxito');
+                        setStep(s2, 'active', '2. Desempaquetando archivos y verificando...');
+                        progressStage.innerHTML = '<i class="fas fa-cogs fa-spin text-primary mr-1"></i> Desempaquetando y procesando...';
+                        progressBar.style.width = '55%';
+                        progressPercent.textContent = '55%';
+
+                        setTimeout(function() {
+                            setStep(s2, 'done', '2. Archivos verificados');
+                            setStep(s3, 'active', '3. Restaurando registros en PostgreSQL...');
+                            progressBar.style.width = '75%';
+                            progressPercent.textContent = '75%';
+                        }, 1500);
+
+                        setTimeout(function() {
+                            setStep(s3, 'done', '3. Base de datos restaurada');
+                            setStep(s4, 'active', '4. Sincronizando migraciones...');
+                            progressBar.style.width = '88%';
+                            progressPercent.textContent = '88%';
+                        }, 3500);
+
+                        setTimeout(function() {
+                            setStep(s4, 'done', '4. Migraciones sincronizadas');
+                            setStep(s5, 'active', '5. Restaurando fotos de perfil y carnets QR...');
+                            progressBar.style.width = '96%';
+                            progressPercent.textContent = '96%';
+                        }, 5500);
+                    }
+                }
+            });
+
+            xhr.addEventListener('load', function() {
+                progressBar.style.width = '100%';
+                progressPercent.textContent = '100%';
+
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    var resp = {};
+                    try {
+                        resp = JSON.parse(xhr.responseText);
+                    } catch(e) {
+                        resp = { ok: true, message: 'Sistema restaurado exitosamente.' };
+                    }
+
+                    setStep(s1, 'done', '1. Archivo subido con éxito');
+                    setStep(s2, 'done', '2. Archivos verificados');
+                    setStep(s3, 'done', '3. Base de datos restaurada');
+                    setStep(s4, 'done', '4. Migraciones sincronizadas');
+                    setStep(s5, 'done', '5. Fotos y carnets QR restaurados');
+
+                    progressStage.innerHTML = '<i class="fas fa-check-circle text-success mr-1"></i> ¡Proceso Completado!';
+                    progressBar.className = 'progress-bar bg-success font-weight-bold';
+
+                    successMsg.textContent = resp.message || 'Restauración completada satisfactoriamente.';
+                    statU.textContent = resp.usuarios !== undefined ? resp.usuarios : '-';
+                    statA.textContent = resp.asistencias !== undefined ? resp.asistencias : '-';
+                    statE.textContent = resp.eventos !== undefined ? resp.eventos : '-';
+
+                    successBox.style.display = 'block';
+
+                    setTimeout(function() {
+                        window.location.reload();
+                    }, 4000);
+                } else {
+                    var errText = 'Error durante la restauración.';
+                    try {
+                        var errResp = JSON.parse(xhr.responseText);
+                        if (errResp.error) errText = errResp.error;
+                    } catch(e) {
+                        if (xhr.responseText) errText = xhr.responseText.substring(0, 300);
+                    }
+
+                    progressStage.innerHTML = '<i class="fas fa-times-circle text-danger mr-1"></i> Error en el proceso';
+                    progressBar.className = 'progress-bar bg-danger font-weight-bold';
+
+                    errorMsg.textContent = errText;
+                    errorBox.style.display = 'block';
+                    startBtn.disabled = false;
+                }
+            });
+
+            xhr.addEventListener('error', function() {
+                progressStage.innerHTML = '<i class="fas fa-times-circle text-danger mr-1"></i> Error de conexión';
+                progressBar.className = 'progress-bar bg-danger font-weight-bold';
+                errorMsg.textContent = 'Fallo de red al enviar el archivo al servidor.';
+                errorBox.style.display = 'block';
+                startBtn.disabled = false;
+            });
+
+            xhr.open('POST', form.action);
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+            xhr.send(formData);
+        });
+    }
+})();
+</script>

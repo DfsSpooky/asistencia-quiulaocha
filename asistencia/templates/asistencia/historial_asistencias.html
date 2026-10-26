@@ -38,9 +38,19 @@
                         </div>
                         <div class="text-left">
                             <p class="text-[10px] uppercase tracking-widest leading-none opacity-60 mb-1">Exportar Todo</p>
-                            <p class="text-sm leading-none">REPORTE GLOBAL ANUAL</p>
+                            <p class="text-sm leading-none">REPORTE GLOBAL PDF</p>
                         </div>
                     </button>
+                    <a href="{% url 'exportar_reporte_global_excel' %}"
+                       class="group flex items-center gap-4 px-8 py-5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-[2rem] font-black transition-all duration-300 shadow-xl shadow-emerald-600/20 transform hover:-translate-y-1 active:scale-95">
+                        <div class="h-10 w-10 bg-emerald-800 text-white rounded-xl flex items-center justify-center group-hover:rotate-12 transition-transform">
+                            <i class="bi bi-file-earmark-excel-fill text-xl"></i>
+                        </div>
+                        <div class="text-left">
+                            <p class="text-[10px] uppercase tracking-widest leading-none opacity-80 mb-1">Matriz y Consolidado</p>
+                            <p class="text-sm leading-none">SÁBANA GLOBAL EXCEL</p>
+                        </div>
+                    </a>
                 </div>
             </div>
         </div>
@@ -66,15 +76,21 @@
                         <div class="flex flex-col gap-2 w-full">
                              <input type="text" id="user-report-search" name="dni" placeholder="DNI del socio..."
                                    data-user-report-base="{% url 'descargar_reporte_usuario_pdf' '__DNI__' %}"
+                                   data-user-report-excel="{% url 'descargar_reporte_usuario_excel' '__DNI__' %}"
                                    hx-get="{% url 'buscar_usuario_dni' %}"
                                    hx-trigger="keyup changed delay:500ms"
                                    hx-target="#user-verification-result"
                                    class="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-primary-500 outline-none">
                             <div id="user-verification-result" class="min-h-[20px]"></div>
                         </div>
-                        <button onclick="downloadUserReport()" class="px-6 bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors h-[46px]">
-                            <i class="bi bi-download"></i>
-                        </button>
+                        <div class="flex gap-2 w-full mt-2">
+                            <button type="button" onclick="downloadUserReport('pdf')" class="flex-1 flex items-center justify-center gap-2 bg-slate-900 text-white rounded-xl hover:bg-red-600 transition-colors h-[46px] font-bold text-xs shadow-md">
+                                <i class="bi bi-file-earmark-pdf-fill"></i> PDF
+                            </button>
+                            <button type="button" onclick="downloadUserReport('excel')" class="flex-1 flex items-center justify-center gap-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition-colors h-[46px] font-bold text-xs shadow-md">
+                                <i class="bi bi-file-earmark-excel-fill"></i> Excel
+                            </button>
+                        </div>
                     </div>
 
                     <div class="group p-6 bg-slate-50 rounded-3xl border border-slate-100 hover:border-emerald-200 transition-all">
@@ -96,15 +112,15 @@
         <div class="bg-white rounded-[3rem] p-8 shadow-premium border border-slate-100">
             <form id="attendance-filter-form"
                   hx-get="{% url 'historial_asistencias' %}"
-                  hx-trigger="submit, change from:#evento-select, change from:#estado-select, input from:#dni-input delay:500ms"
+                  hx-trigger="submit, change from:#evento-select, change from:#categoria-select, change from:#estado-select, input from:#dni-input delay:500ms"
                   hx-target="#attendance-content-area"
                   hx-swap="outerHTML"
                   hx-push-url="true"
                   class="space-y-8">
                 
-                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-end">
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-end">
                     <!-- Event Selector (Main Focus) -->
-                    <div class="lg:col-span-5 space-y-3">
+                    <div class="lg:col-span-4 space-y-2">
                         <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Seleccionar Evento o Actividad</label>
                         <select name="evento" id="evento-select" class="select2-searchable">
                             <option value="">Todos los eventos registrados</option>
@@ -118,8 +134,19 @@
                         </select>
                     </div>
 
+                    <!-- Clasificación de Reunión (Asamblea vs Faena) -->
+                    <div class="lg:col-span-3 space-y-2">
+                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tipo de Reunión</label>
+                        <select name="categoria_evento" id="categoria-select" class="select2-searchable">
+                            <option value="" {% if not form.categoria_evento.value %}selected{% endif %}>Todas (Asambleas + Faenas)</option>
+                            <option value="ASAMBLEA" {% if form.categoria_evento.value == 'ASAMBLEA' %}selected{% endif %}>🏛️ Solo Asambleas</option>
+                            <option value="FAENA" {% if form.categoria_evento.value == 'FAENA' %}selected{% endif %}>🚜 Solo Faenas Comunales</option>
+                            <option value="OTRO" {% if form.categoria_evento.value == 'OTRO' %}selected{% endif %}>📋 Otras Reuniones</option>
+                        </select>
+                    </div>
+
                     <!-- Status Tabs (Attendees vs Absentees) -->
-                    <div class="lg:col-span-4 space-y-3">
+                    <div class="lg:col-span-3 space-y-2">
                         <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Estado de Asistencia</label>
                         <select name="estado" id="estado-select" class="select2-searchable">
                             <option value="" {% if not form.estado.value %}selected{% endif %}>Todos (Asistencias + Faltas)</option>
@@ -132,13 +159,13 @@
                     </div>
 
                     <!-- Name/DNI Search -->
-                    <div class="lg:col-span-3 space-y-3">
+                    <div class="lg:col-span-2 space-y-2">
                         <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Búsqueda rápida</label>
                         <div class="relative group">
-                            <i class="bi bi-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                            <i class="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
                             <input type="text" name="dni" id="dni-input" value="{{ form.dni.value|default:'' }}"
-                                   placeholder="Nombre o DNI..."
-                                   class="w-full pl-11 pr-4 py-3 bg-slate-50 border-2 border-slate-50 rounded-2xl focus:bg-white focus:border-primary-500 outline-none transition-all font-bold text-sm">
+                                   placeholder="DNI o socio..."
+                                   class="w-full pl-8 pr-3 py-3 bg-slate-50 border-2 border-slate-50 rounded-2xl focus:bg-white focus:border-primary-500 outline-none transition-all font-bold text-xs">
                         </div>
                     </div>
 
@@ -301,12 +328,13 @@
                 window.open(`${baseUrl}${eventId}/`, '_blank');
             };
 
-            window.downloadUserReport = function() {
+            window.downloadUserReport = function(format = 'pdf') {
                 const input = document.getElementById('user-report-search');
                 if (!input) return;
                 const dni = input.value.trim();
                 if (dni) {
-                    const targetUrl = input.dataset.userReportBase.replace('__DNI__', encodeURIComponent(dni));
+                    const baseUrl = format === 'excel' ? input.dataset.userReportExcel : input.dataset.userReportBase;
+                    const targetUrl = baseUrl.replace('__DNI__', encodeURIComponent(dni));
                     window.open(targetUrl, '_blank');
                 } else {
                     Swal.fire('Atención', 'Por favor, ingresa un DNI válido.', 'warning');

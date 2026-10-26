@@ -394,7 +394,9 @@
                                 class="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-primary-500 outline-none font-bold text-slate-700">
                             <option value="">-- Elige un evento activo --</option>
                             {% for evento in eventos %}
-                                <option value="{{ evento.id }}">{{ evento.nombre }} ({{ evento.fecha }})</option>
+                                <option value="{{ evento.id }}">
+                                    {% if evento.es_faena %}🚜 [FAENA]{% else %}🏛️ [{{ evento.tipo_nombre|upper }}]{% endif %} {{ evento.nombre }} ({{ evento.fecha|date:"d/m/Y" }})
+                                </option>
                             {% endfor %}
                         </select>
                     </div>
@@ -548,7 +550,9 @@
                                 class="w-full px-6 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:bg-white focus:border-primary-500 outline-none transition-all font-bold text-slate-700 shadow-sm cursor-pointer">
                             <option value="">-- Elige un evento activo --</option>
                             {% for evento in eventos %}
-                                <option value="{{ evento.id }}">{{ evento.nombre }} ({{ evento.fecha }})</option>
+                                <option value="{{ evento.id }}">
+                                    {% if evento.es_faena %}🚜 [FAENA]{% else %}🏛️ [{{ evento.tipo_nombre|upper }}]{% endif %} {{ evento.nombre }} ({{ evento.fecha|date:"d/m/Y" }})
+                                </option>
                             {% endfor %}
                         </select>
                     </div>

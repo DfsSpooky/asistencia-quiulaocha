@@ -105,6 +105,13 @@
                                            title="Ver Ficha">
                                             <i class="bi bi-eye-fill"></i>
                                         </a>
+                                        <a href="{% url 'descargar_reporte_usuario_excel' usuario.dni %}"
+                                           hx-boost="false"
+                                           hx-disable
+                                           class="h-10 w-10 flex items-center justify-center bg-white border border-slate-100 rounded-xl text-slate-400 hover:text-emerald-600 hover:border-emerald-200 hover:shadow-lg transition-all"
+                                           title="Historial en Excel">
+                                            <i class="bi bi-file-earmark-excel-fill"></i>
+                                        </a>
                                         <a href="{% url 'descargar_reporte_usuario_pdf' usuario.dni %}"
                                            hx-boost="false"
                                            hx-disable

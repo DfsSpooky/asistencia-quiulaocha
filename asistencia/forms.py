@@ -1,6 +1,6 @@
 from django import forms
 from django.contrib.auth.password_validation import validate_password
-from .models import Evento, Ubicacion, Usuario, Justificacion, HistorialCarnet
+from .models import Evento, TipoEvento, Ubicacion, Usuario, Justificacion, HistorialCarnet
 
 class JustificacionForm(forms.ModelForm):
     class Meta:
@@ -39,6 +39,21 @@ class FiltroAsistenciaForm(forms.Form):
     fecha_inicio = forms.DateField(required=False, label='Fecha Inicio', widget=forms.DateInput(attrs={'type': 'date'}))
     fecha_fin = forms.DateField(required=False, label='Fecha Fin', widget=forms.DateInput(attrs={'type': 'date'}))
     evento = forms.ModelChoiceField(queryset=Evento.objects.all().order_by('-fecha'), required=False, label='Evento')
+    tipo_evento = forms.ModelChoiceField(
+        queryset=TipoEvento.objects.filter(activo=True).order_by('nombre'),
+        required=False,
+        label='Tipo de Reunión'
+    )
+    categoria_evento = forms.ChoiceField(
+        choices=[
+            ('', 'Todas las reuniones'),
+            ('ASAMBLEA', '🏛️ Solo Asambleas'),
+            ('FAENA', '🚜 Solo Faenas Comunales'),
+            ('OTRO', '📋 Otras Reuniones'),
+        ],
+        required=False,
+        label='Clasificación de Reunión'
+    )
     ubicacion = forms.ModelChoiceField(queryset=Ubicacion.objects.all(), required=False, label='Ubicación')
     confirmada = forms.ChoiceField(
         choices=[('', 'Todos'), ('true', 'Confirmada'), ('false', 'No Confirmada')],

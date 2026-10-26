@@ -6,10 +6,10 @@ services:
       # Solo accesible desde localhost del servidor (Nginx/Hestia hace de reverse proxy).
       - "127.0.0.1:${APP_PORT:-8020}:${APP_PORT:-8020}"
     volumes:
-      - ../public_html/static:/app/staticfiles
-      - ../private/media:/app/media
+      - ${STATIC_DIR:-../public_html/static}:/app/staticfiles
+      - ${MEDIA_DIR:-../private/media}:/app/media
     env_file:
-      - ../private/.env
+      - ${ENV_FILE:-.env}
     depends_on:
       db:
         condition: service_healthy
@@ -30,7 +30,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     env_file:
-      - ../private/.env
+      - ${ENV_FILE:-.env}
     environment:
       - PGDATA=/var/lib/postgresql/data/pgdata
     healthcheck:

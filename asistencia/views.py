@@ -51,6 +51,7 @@ import subprocess
 import shutil
 import sys
 import tarfile
+import tempfile
 import zipfile
 from django.db.migrations.executor import MigrationExecutor
 from .audit import log_critical_change
@@ -731,7 +732,7 @@ def solicitar_justificacion(request):
     try:
         usuario = Usuario.objects.get(user=request.user)
     except Usuario.DoesNotExist:
-        return redirect('index')
+        return redirect('landing_page')
 
     if request.method == 'POST':
         form = JustificacionForm(request.POST, request.FILES)
@@ -1237,6 +1238,98 @@ def validate_tar_limits(tar, *, max_members, max_total_uncompressed_size, label)
             max_mb = max_total_uncompressed_size // (1024 * 1024)
             raise Exception(f"{label}: tamano descomprimido excede el limite de {max_mb} MB.")
 
+def _import_postgres_sql_into_sqlite(sql_file, sqlite_path):
+    import sqlite3
+    from django.core.management import call_command
+
+    connection.close()
+    call_command('migrate', interactive=False)
+
+    tables = {}
+    current_table = None
+
+    with open(sql_file, 'r', encoding='utf-8', errors='ignore') as f:
+        for line in f:
+            line_clean = line.rstrip('\r\n')
+            if line_clean.startswith('COPY public.'):
+                table_name = line_clean.split()[1].replace('public.', '')
+                col_str = line_clean[line_clean.find('(') + 1 : line_clean.find(')')]
+                cols = [c.strip().strip('"') for c in col_str.split(',')]
+                current_table = table_name
+                tables[current_table] = {'cols': cols, 'rows': []}
+            elif line_clean == r'\.' and current_table:
+                current_table = None
+            elif current_table:
+                raw_vals = line_clean.split('\t')
+                vals = [None if v == r'\N' else (1 if v == 't' else (0 if v == 'f' else v)) for v in raw_vals]
+                tables[current_table]['rows'].append(vals)
+
+    conn = sqlite3.connect(sqlite_path)
+    cur = conn.cursor()
+    cur.execute('PRAGMA foreign_keys = OFF;')
+
+    for table_name, data in tables.items():
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+        if not cur.fetchone():
+            continue
+
+        cur.execute(f'PRAGMA table_info("{table_name}");')
+        cols_info = cur.fetchall()
+        sqlite_cols = {row[1] for row in cols_info}
+
+        target_indices = [idx for idx, c in enumerate(data['cols']) if c in sqlite_cols]
+        target_cols = [data['cols'][idx] for idx in target_indices]
+
+        if not target_cols:
+            continue
+
+        # Suplir columnas NOT NULL que no vinieron en el respaldo (ej. migraciones posteriores)
+        missing_defaults = []
+        for col_info in cols_info:
+            cid, cname, ctype, notnull, dflt, pk = col_info
+            if notnull and not pk and cname not in target_cols and dflt is None:
+                ctype_lower = ctype.lower()
+                if 'bool' in ctype_lower:
+                    def_val = 1
+                elif 'int' in ctype_lower or 'real' in ctype_lower or 'numeric' in ctype_lower:
+                    def_val = 0
+                else:
+                    def_val = ''
+                target_cols.append(cname)
+                missing_defaults.append(def_val)
+
+        cur.execute(f'DELETE FROM "{table_name}";')
+
+        placeholders = ', '.join(['?'] * len(target_cols))
+        col_names = ', '.join([f'"{c}"' for c in target_cols])
+        insert_sql = f'INSERT OR REPLACE INTO "{table_name}" ({col_names}) VALUES ({placeholders})'
+
+        batch = []
+        for r in data['rows']:
+            row_vals = []
+            for idx in target_indices:
+                val = r[idx]
+                col_name = data['cols'][idx]
+                if isinstance(val, str) and (col_name.endswith('_uid') or (len(val) == 36 and val.count('-') == 4)):
+                    try:
+                        from uuid import UUID
+                        val = UUID(val).hex
+                    except Exception:
+                        pass
+                row_vals.append(val)
+            row_vals.extend(missing_defaults)
+            batch.append(row_vals)
+            if len(batch) >= 500:
+                cur.executemany(insert_sql, batch)
+                batch = []
+        if batch:
+            cur.executemany(insert_sql, batch)
+
+    cur.execute('PRAGMA foreign_keys = ON;')
+    conn.commit()
+    conn.close()
+
+
 @login_required
 @permission_required('asistencia.can_manage_users', raise_exception=True)
 def restaurar_backup(request):
@@ -1244,16 +1337,28 @@ def restaurar_backup(request):
     Restaura el sistema (DB + Media) desde un archivo subido.
     Solo superusuarios.
     """
+    is_ajax = (
+        request.headers.get('x-requested-with') == 'XMLHttpRequest' or
+        'application/json' in request.headers.get('Accept', '')
+    )
+
     if not request.user.is_superuser:
+        if is_ajax:
+            return JsonResponse({'ok': False, 'error': "Solo superusuarios pueden restaurar backups."}, status=403)
         messages.error(request, "Solo superusuarios pueden restaurar backups.")
         return redirect('dashboard')
 
     if request.method == 'POST' and request.FILES.get('backup_file'):
         backup_file = request.FILES['backup_file']
         max_upload_size_bytes = 512 * 1024 * 1024  # 512 MB
-        max_members = 20000
+        max_members = 25000
         max_uncompressed_main_bytes = 2 * 1024 * 1024 * 1024  # 2 GB
         max_uncompressed_media_bytes = 4 * 1024 * 1024 * 1024  # 4 GB
+
+        current_user = request.user
+        current_username = current_user.username
+        current_email = getattr(current_user, 'email', '')
+        current_password_hash = current_user.password
 
         before = {
             'usuarios': Usuario.objects.count(),
@@ -1262,20 +1367,22 @@ def restaurar_backup(request):
         }
 
         if not backup_file.name.endswith('.tar.gz'):
-            messages.error(request, "El archivo debe ser un .tar.gz valido.")
+            err = "El archivo debe ser un .tar.gz valido."
+            if is_ajax:
+                return JsonResponse({'ok': False, 'error': err}, status=400)
+            messages.error(request, err)
             return redirect('dashboard')
 
         if backup_file.size > max_upload_size_bytes:
             max_mb = max_upload_size_bytes // (1024 * 1024)
-            messages.error(request, f"El backup supera el limite de {max_mb} MB.")
+            err = f"El backup supera el limite de {max_mb} MB."
+            if is_ajax:
+                return JsonResponse({'ok': False, 'error': err}, status=400)
+            messages.error(request, err)
             return redirect('dashboard')
 
-        # Directorio temporal para la restauracion
-        temp_restore_root = os.path.join(settings.BASE_DIR, 'temp_restore_web')
-        if os.path.exists(temp_restore_root):
-            shutil.rmtree(temp_restore_root)
-        os.makedirs(temp_restore_root)
-
+        # Directorio temporal aislado para la restauracion
+        temp_restore_root = tempfile.mkdtemp(prefix='restore_web_')
         archive_path = os.path.join(temp_restore_root, 'uploaded_backup.tar.gz')
 
         # Guardar archivo subido
@@ -1294,48 +1401,90 @@ def restaurar_backup(request):
                 )
                 safe_extract(tar, path=temp_restore_root)
 
-            # Buscar el directorio interno que contiene el respaldo de base de datos
-            internal_dirs = [d for d in os.listdir(temp_restore_root) if os.path.isdir(os.path.join(temp_restore_root, d))]
-            if not internal_dirs:
-                raise Exception("Estructura de backup invalida.")
+            # Buscar dónde se encuentran database.sql, database.sqlite3 y media.tar.gz
+            sql_file = None
+            sqlite_file = None
+            media_tar = None
 
-            extract_path = os.path.join(temp_restore_root, internal_dirs[0])
-            sql_file = os.path.join(extract_path, 'database.sql')
-            sqlite_file = os.path.join(extract_path, 'database.sqlite3')
-            media_tar = os.path.join(extract_path, 'media.tar.gz')
+            for root_dir, dirs, files in os.walk(temp_restore_root):
+                if '__MACOSX' in root_dir:
+                    continue
+                if 'database.sql' in files and not sql_file:
+                    sql_file = os.path.join(root_dir, 'database.sql')
+                if 'database.sqlite3' in files and not sqlite_file:
+                    sqlite_file = os.path.join(root_dir, 'database.sqlite3')
+                if 'media.tar.gz' in files and not media_tar:
+                    media_tar = os.path.join(root_dir, 'media.tar.gz')
+
+            if not sql_file and not sqlite_file:
+                raise Exception("Estructura de backup invalida: no se encontro database.sql ni database.sqlite3 en el archivo.")
 
             # 2. Restaurar Base de Datos
             db_conf = settings.DATABASES['default']
             db_engine = db_conf.get('ENGINE', '')
 
             if db_engine.endswith('sqlite3'):
-                if not os.path.exists(sqlite_file):
-                    raise Exception("No se encontro database.sqlite3 en el backup.")
-                connection.close()
-                shutil.copy2(sqlite_file, str(db_conf['NAME']))
+                if sqlite_file and os.path.exists(sqlite_file):
+                    connection.close()
+                    shutil.copy2(sqlite_file, str(db_conf['NAME']))
+                elif sql_file and os.path.exists(sql_file):
+                    _import_postgres_sql_into_sqlite(sql_file, str(db_conf['NAME']))
+                else:
+                    raise Exception("No se encontro un archivo de base de datos compatible en el backup.")
             else:
-                if not os.path.exists(sql_file):
-                    raise Exception("No se encontro database.sql en el backup.")
+                if not sql_file or not os.path.exists(sql_file):
+                    raise Exception("No se encontro database.sql en el backup para PostgreSQL.")
 
+                # Sanitizar database.sql (remover comandos de pg_dump 17 incompatibles con PostgreSQL 15: \\restrict, \\unrestrict y transaction_timeout)
+                with open(sql_file, 'r', encoding='utf-8', errors='ignore') as sf:
+                    sql_lines = sf.readlines()
+                sanitized_lines = []
+                for line in sql_lines:
+                    strip_line = line.strip()
+                    if (
+                        strip_line.startswith(r'\restrict') or
+                        strip_line.startswith(r'\unrestrict') or
+                        strip_line.startswith('SET transaction_timeout')
+                    ):
+                        sanitized_lines.append(f'-- {line}')
+                    else:
+                        sanitized_lines.append(line)
+                with open(sql_file, 'w', encoding='utf-8') as sf:
+                    sf.writelines(sanitized_lines)
+
+                connection.close()
                 env = os.environ.copy()
                 env['PGPASSWORD'] = str(db_conf.get('PASSWORD', ''))
 
-                subprocess.run([
-                    'psql',
-                    '-h', db_conf['HOST'],
-                    '-p', str(db_conf['PORT']),
-                    '-U', db_conf['USER'],
-                    '-d', db_conf['NAME'],
+                psql_cmd = ['psql']
+                if db_conf.get('HOST'):
+                    psql_cmd.extend(['-h', str(db_conf['HOST'])])
+                if db_conf.get('PORT'):
+                    psql_cmd.extend(['-p', str(db_conf['PORT'])])
+                if db_conf.get('USER'):
+                    psql_cmd.extend(['-U', str(db_conf['USER'])])
+                psql_cmd.extend([
+                    '-d', str(db_conf['NAME']),
                     '-v', 'ON_ERROR_STOP=1',
                     '--single-transaction',
                     '-f', sql_file
-                ], env=env, check=True)
+                ])
+
+                res = subprocess.run(psql_cmd, env=env, capture_output=True, text=True)
+                if res.returncode != 0:
+                    err_detail = (res.stderr or res.stdout or '').strip()
+                    raise Exception(f"Fallo en PostgreSQL (código {res.returncode}): {err_detail}")
+
+            # Aplicar migraciones automáticas sobre la base recién restaurada
+            # para asegurar compatibilidad si el backup venía de una versión anterior
+            connection.close()
+            from django.core.management import call_command
+            call_command('migrate', interactive=False)
 
             # 3. Restaurar Media
-            if os.path.exists(media_tar):
-                media_root = settings.MEDIA_ROOT
-                if os.path.exists(media_root):
-                    shutil.rmtree(media_root)
+            if media_tar and os.path.exists(media_tar):
+                temp_media_dir = os.path.join(temp_restore_root, 'temp_media_extract')
+                os.makedirs(temp_media_dir, exist_ok=True)
 
                 with tarfile.open(media_tar, "r:gz") as mt:
                     validate_tar_limits(
@@ -1344,21 +1493,75 @@ def restaurar_backup(request):
                         max_total_uncompressed_size=max_uncompressed_media_bytes,
                         label="Media backup",
                     )
-                    # El media_tar contiene 'media/' como top level
-                    safe_extract(mt, path=settings.BASE_DIR)
+                    safe_extract(mt, path=temp_media_dir)
 
-            messages.success(request, "Sistema restaurado exitosamente.")
+                # Identificar carpeta origen (si vino como media/ o contenido directo)
+                nested_media = os.path.join(temp_media_dir, 'media')
+                source_media = nested_media if os.path.isdir(nested_media) else temp_media_dir
 
-            LogAccion.objects.create(
-                usuario=request.user,
-                accion="Restaurar Backup",
-                descripcion=f"{request.user.username} restauro el sistema desde {backup_file.name}."
-            )
+                media_root = settings.MEDIA_ROOT
+                os.makedirs(media_root, exist_ok=True)
+
+                for item in os.listdir(source_media):
+                    if item == '__MACOSX':
+                        continue
+                    src_item = os.path.join(source_media, item)
+                    dst_item = os.path.join(media_root, item)
+                    if os.path.isdir(src_item):
+                        if os.path.exists(dst_item):
+                            shutil.rmtree(dst_item)
+                        shutil.copytree(src_item, dst_item)
+                    else:
+                        shutil.copy2(src_item, dst_item)
+
             after = {
                 'usuarios': Usuario.objects.count(),
                 'asistencias': Asistencia.objects.count(),
                 'eventos': Evento.objects.count(),
             }
+
+            msg = (
+                f"Sistema restaurado exitosamente: {after['usuarios']} usuarios, "
+                f"{after['asistencias']} asistencias y {after['eventos']} eventos restablecidos."
+            )
+            # Preservar al superusuario en la base de datos restaurada y mantener su sesión activa
+            try:
+                from django.contrib.auth.models import User
+                from django.contrib.auth import login as auth_login
+
+                restored_user = User.objects.filter(username=current_username).first()
+                if not restored_user:
+                    restored_user = User.objects.create(
+                        username=current_username,
+                        email=current_email,
+                        password=current_password_hash,
+                        is_superuser=True,
+                        is_staff=True,
+                        is_active=True,
+                    )
+                else:
+                    restored_user.password = current_password_hash
+                    restored_user.is_superuser = True
+                    restored_user.is_staff = True
+                    restored_user.save(update_fields=['password', 'is_superuser', 'is_staff'])
+
+                auth_login(request, restored_user, backend='django.contrib.auth.backends.ModelBackend')
+                request.session.cycle_key()
+            except Exception as session_exc:
+                logger.warning("No se pudo regenerar la sesión post-restauración: %s", session_exc)
+                try:
+                    request.session.create()
+                except Exception:
+                    request.session.modified = False
+
+            LogAccion.objects.create(
+                usuario=request.user,
+                accion="Restaurar Backup",
+                descripcion=(
+                    f"{request.user.username} restauró el sistema desde {backup_file.name}. "
+                    f"Usuarios: {after['usuarios']}, Asistencias: {after['asistencias']}."
+                )
+            )
             log_critical_change(
                 request.user,
                 'Sistema',
@@ -1367,10 +1570,32 @@ def restaurar_backup(request):
                 action_label='Restauracion de backup',
             )
 
+            if is_ajax:
+                return JsonResponse({
+                    'ok': True,
+                    'message': msg,
+                    'usuarios': after['usuarios'],
+                    'asistencias': after['asistencias'],
+                    'eventos': after['eventos'],
+                })
+
         except Exception as e:
-            messages.error(request, f"Error en restauracion: {str(e)}")
+            err_msg = f"Error en restauracion: {str(e)}"
+            if is_ajax:
+                return JsonResponse({'ok': False, 'error': err_msg}, status=400)
+            messages.error(request, err_msg)
         finally:
-            shutil.rmtree(temp_restore_root)
+            if temp_restore_root and os.path.exists(temp_restore_root):
+                try:
+                    shutil.rmtree(temp_restore_root, ignore_errors=True)
+                except Exception as clean_err:
+                    logger.warning("No se pudo limpiar directorio temporal %s: %s", temp_restore_root, clean_err)
+
+    elif request.method == 'POST' and not request.FILES.get('backup_file'):
+        err = "Por favor selecciona un archivo .tar.gz para restaurar."
+        if is_ajax:
+            return JsonResponse({'ok': False, 'error': err}, status=400)
+        messages.error(request, err)
 
     return redirect('dashboard')
 
@@ -1409,8 +1634,30 @@ def exportar_reporte_global_excel(request):
     system_config = ConfiguracionSistema.objects.first()
     tardanza_activa = bool(system_config and system_config.tardanza_activa)
 
-    
-    eventos = Evento.objects.all().order_by('fecha')
+    year_raw = request.GET.get('year')
+    categoria_raw = request.GET.get('categoria')
+    tipo_evento_raw = request.GET.get('tipo_evento')
+    eventos = list(Evento.objects.all().order_by('fecha'))
+    if year_raw:
+        try:
+            year_val = int(year_raw)
+            eventos = [ev for ev in eventos if ev.fecha.year == year_val]
+        except (ValueError, TypeError):
+            pass
+
+    if tipo_evento_raw:
+        eventos = [
+            ev for ev in eventos 
+            if str(getattr(ev, 'tipo_evento_id', '')) == str(tipo_evento_raw) or ev.tipo_nombre == str(tipo_evento_raw)
+        ]
+
+    if categoria_raw:
+        cat_upper = str(categoria_raw).upper()
+        if cat_upper == 'FAENA':
+            eventos = [ev for ev in eventos if ev.es_faena]
+        elif cat_upper == 'ASAMBLEA':
+            eventos = [ev for ev in eventos if ev.es_asamblea]
+
     report_data = []
     
     for ev in eventos:
@@ -1679,6 +1926,106 @@ def descargar_reporte_usuario_pdf(request, dni):
     )
     
     return generate_pdf_report('asistencia/reporte_asistencias_usuario.html', context, f"reporte_asistencias_{usuario.dni}.pdf")
+
+@login_required
+@permission_required('asistencia.can_manage_users', raise_exception=True)
+def descargar_reporte_usuario_excel(request, dni):
+    """
+    Genera un Excel individual completo de asistencias e inasistencias para un comunero específico.
+    """
+    from .utils.reports import generate_user_attendance_excel
+    usuario = get_object_or_404(Usuario, dni=dni)
+    sistema_config = ConfiguracionSistema.objects.first()
+    tardanza_activa = bool(sistema_config and sistema_config.tardanza_activa)
+    
+    todos_eventos = Evento.objects.all().order_by('-fecha', '-hora_ingreso')
+    asistencias = Asistencia.objects.filter(usuario=usuario).select_related('evento', 'ubicacion')
+    asistencia_map = {a.evento_id: a for a in asistencias}
+    
+    justificaciones = Justificacion.objects.filter(usuario=usuario, estado='APROBADO')
+    justificacion_map = {j.evento_id: j for j in justificaciones}
+    
+    unified_list = []
+    
+    for evento in todos_eventos:
+        if evento.id in asistencia_map:
+            item = asistencia_map[evento.id]
+            item.es_justificada = bool(getattr(item, 'es_justificada', False))
+            item.is_late_absent = bool(
+                tardanza_activa
+                and getattr(item, 'puntualidad', None) == Asistencia.PUNTUALIDAD_TARDE
+                and item.usuario.estado != Usuario.ESTADO_EXONERADO
+            )
+            item.is_absent = item.es_justificada or item.is_late_absent
+            unified_list.append(item)
+            
+        elif evento.id in justificacion_map:
+            justificacion = justificacion_map[evento.id]
+            mock_item = type('MockAsistencia', (object,), {
+                'fecha': evento.fecha,
+                'hora_ingreso': None,
+                'hora_salida': None,
+                'evento': evento,
+                'ubicacion': None,
+                'usuario': usuario,
+                'is_absent': True,
+                'es_justificada': True,
+                'is_late_absent': False,
+                'justificacion_obs': justificacion.motivo,
+                'estado_display': 'JUSTIFICADA'
+            })
+            unified_list.append(mock_item)
+            
+        else:
+            mock_item = type('MockAsistencia', (object,), {
+                'fecha': evento.fecha,
+                'hora_ingreso': None,
+                'hora_salida': None,
+                'evento': evento,
+                'ubicacion': None,
+                'usuario': usuario,
+                'is_absent': True,
+                'es_justificada': False,
+                'is_late_absent': False,
+                'justificacion_obs': 'No asistió (Sin justificación)',
+                'estado_display': 'FALTA'
+            })
+            unified_list.append(mock_item)
+            
+    total_eventos = len(todos_eventos)
+    asistencias_confirmadas = sum(
+        1 for item in unified_list 
+        if not getattr(item, 'is_absent', False) and 
+        (getattr(item, 'hora_salida', None) or item.usuario.estado == 'EXONERADO')
+    )
+    justificadas = sum(1 for item in unified_list if getattr(item, 'es_justificada', False))
+    faltas = sum(1 for item in unified_list if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False))
+    pendientes = sum(
+        1 for item in unified_list 
+        if not getattr(item, 'is_absent', False) and 
+        not getattr(item, 'hora_salida', None) and 
+        item.usuario.estado != 'EXONERADO'
+    )
+    
+    total_participaciones = asistencias_confirmadas + justificadas
+    score_asistencia = (total_participaciones / total_eventos * 100) if total_eventos > 0 else 0
+    
+    stats = {
+        'total_eventos': total_eventos,
+        'asistencias': asistencias_confirmadas,
+        'justificadas': justificadas,
+        'faltas': faltas,
+        'pendientes': pendientes,
+        'score': round(score_asistencia, 1),
+    }
+    
+    LogAccion.objects.create(
+        usuario=request.user,
+        accion="Descargar reporte asistencias usuario Excel",
+        descripcion=f"{request.user.username} descargó el reporte de asistencias de {usuario.nombre} {usuario.apellido} (DNI: {usuario.dni}) en Excel."
+    )
+    
+    return generate_user_attendance_excel(usuario, unified_list, stats, sistema_config)
 
 @login_required
 @permission_required('asistencia.can_manage_users', raise_exception=True)

@@ -63,12 +63,107 @@ class Ubicacion(models.Model):
     def __str__(self):
         return self.nombre
 
+class TipoEvento(models.Model):
+    CATEGORIA_ASAMBLEA = 'ASAMBLEA'
+    CATEGORIA_FAENA = 'FAENA'
+    CATEGORIA_OTRO = 'OTRO'
+    CATEGORIAS = [
+        (CATEGORIA_ASAMBLEA, 'Asamblea'),
+        (CATEGORIA_FAENA, 'Faena Comunal'),
+        (CATEGORIA_OTRO, 'Otro tipo de reunión'),
+    ]
+
+    nombre = models.CharField(max_length=100, unique=True, verbose_name="Nombre del tipo")
+    categoria = models.CharField(
+        max_length=20,
+        choices=CATEGORIAS,
+        default=CATEGORIA_ASAMBLEA,
+        verbose_name="Clasificación principal",
+        help_text="Define si computa como Asamblea o como Faena Comunal para el cómputo de faltas y reportes.",
+    )
+    descripcion = models.TextField(blank=True, verbose_name="Descripción")
+    color = models.CharField(
+        max_length=20,
+        default="#1e40af",
+        verbose_name="Color de etiqueta",
+        help_text="Color distintivo para identificar la reunión (ej. #1e40af para asamblea, #047857 para faena)."
+    )
+    activo = models.BooleanField(default=True, verbose_name="Activo")
+
+    class Meta:
+        verbose_name = "Tipo de Reunión"
+        verbose_name_plural = "Tipos de Reuniones"
+        ordering = ['nombre']
+
+    def __str__(self):
+        return f"{self.nombre} ({self.get_categoria_display()})"
+
+    @property
+    def es_faena(self):
+        return self.categoria == self.CATEGORIA_FAENA or 'FAENA' in (self.nombre or '').upper()
+
+    @property
+    def es_asamblea(self):
+        return self.categoria == self.CATEGORIA_ASAMBLEA or 'ASAMBLEA' in (self.nombre or '').upper()
+
 class Evento(models.Model):
     nombre = models.CharField(max_length=100)
+    tipo_evento = models.ForeignKey(
+        TipoEvento,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='eventos',
+        verbose_name="Tipo de Reunión",
+        help_text="Clasificación de la reunión (ej. Asamblea, Faena Comunal, etc.)"
+    )
     fecha = models.DateField()
     descripcion = models.TextField(blank=True)
     hora_ingreso = models.TimeField(default='08:00', help_text="Hora de ingreso programada")
     activo = models.BooleanField(default=True)
+
+    @property
+    def tipo_nombre(self):
+        if self.tipo_evento:
+            return self.tipo_evento.nombre
+        n_up = (self.nombre or '').upper()
+        if 'FAENA' in n_up:
+            return 'Faena Comunal'
+        if 'EXTRAORDINARIA' in n_up:
+            return 'Asamblea Extraordinaria'
+        if 'ASAMBLEA' in n_up:
+            return 'Asamblea Ordinaria'
+        return 'Reunión General'
+
+    @property
+    def categoria_tipo(self):
+        if self.tipo_evento:
+            return self.tipo_evento.categoria
+        if 'FAENA' in (self.nombre or '').upper():
+            return TipoEvento.CATEGORIA_FAENA
+        if 'ASAMBLEA' in (self.nombre or '').upper():
+            return TipoEvento.CATEGORIA_ASAMBLEA
+        return TipoEvento.CATEGORIA_OTRO
+
+    @property
+    def es_faena(self):
+        if self.tipo_evento:
+            return self.tipo_evento.es_faena
+        return 'FAENA' in (self.nombre or '').upper()
+
+    @property
+    def es_asamblea(self):
+        if self.tipo_evento:
+            return self.tipo_evento.es_asamblea
+        return ('ASAMBLEA' in (self.nombre or '').upper()) or not self.es_faena
+
+    @property
+    def color_badge(self):
+        if self.tipo_evento and self.tipo_evento.color:
+            return self.tipo_evento.color
+        if self.es_faena:
+            return '#047857'
+        return '#1e40af'
 
     def save(self, *args, **kwargs):
         is_new = self.pk is None
@@ -402,8 +497,8 @@ class SolicitudDescargaCarnets(models.Model):
     class Meta:
         ordering = ['-fecha_solicitud']
         indexes = [
-            models.Index(fields=['estado']),
-            models.Index(fields=['solicitado_por', 'fecha_solicitud']),
+            models.Index(fields=['estado'], name='asistencia__estado_c49725_idx'),
+            models.Index(fields=['solicitado_por', 'fecha_solicitud'], name='asistencia__solicit_f8f229_idx'),
         ]
 
 class ConfiguracionSistema(models.Model):
@@ -433,6 +528,24 @@ class ConfiguracionSistema(models.Model):
     tolerancia_minutos = models.PositiveIntegerField(
         default=15,
         help_text="Tiempo de tolerancia en minutos para el ingreso antes de considerarse tardanza (si aplica)"
+    )
+    permitir_carnets_antiguos_sin_firma = models.BooleanField(
+        default=True,
+        verbose_name="Permitir carnets antiguos sin firma",
+        help_text="Modo rescate / compatibilidad: Acepta carnets físicos impresos previamente aunque la firma digital no coincida con la clave del servidor actual. Recomendado: ACTIVADO para no invalidar carnets ya entregados a los comuneros.",
+    )
+    qr_signing_key = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True,
+        verbose_name="Clave de firma QR fija",
+        help_text="Clave fija opcional para firmar los nuevos carnets. Si se deja vacía, se usa la variable de entorno QR_SIGNING_KEY o SECRET_KEY.",
+    )
+    qr_fallback_keys = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name="Claves QR de respaldo",
+        help_text="Claves anteriores separadas por coma para aceptar carnets de versiones o servidores anteriores.",
     )
 
     def save(self, *args, **kwargs):

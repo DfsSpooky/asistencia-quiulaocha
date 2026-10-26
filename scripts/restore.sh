@@ -32,15 +32,24 @@ tar -xzf "${BACKUP_FILE}" -C "${TEMP_RESTORE_DIR}"
 INTERNAL_DIR=$(ls "${TEMP_RESTORE_DIR}")
 
 echo "1/2: Restaurando base de datos..."
-cat "${TEMP_RESTORE_DIR}/${INTERNAL_DIR}/database.sql" | docker compose exec -T db psql \
-    -v ON_ERROR_STOP=1 \
-    --single-transaction \
-    -U "${POSTGRES_USER}" "${POSTGRES_DB}"
+SQL_FILE=$(find "${TEMP_RESTORE_DIR}" -name "database.sql" | head -n 1)
+if [ -n "${SQL_FILE}" ] && [ -f "${SQL_FILE}" ]; then
+    grep -Ev '^\s*(\\restrict|\\unrestrict|SET transaction_timeout)' "${SQL_FILE}" | docker compose exec -T db psql \
+        -v ON_ERROR_STOP=1 \
+        --single-transaction \
+        -U "${POSTGRES_USER}" "${POSTGRES_DB}"
+
+    echo "Aplicando migraciones pendientes..."
+    docker compose exec -T web python manage.py migrate --noinput || true
+else
+    echo "Aviso: No se encontró database.sql en el backup."
+fi
 
 echo "2/2: Restaurando archivos multimedia..."
-if [ -f "${TEMP_RESTORE_DIR}/${INTERNAL_DIR}/media.tar.gz" ]; then
-    rm -rf media/
-    tar -xzf "${TEMP_RESTORE_DIR}/${INTERNAL_DIR}/media.tar.gz"
+MEDIA_TAR=$(find "${TEMP_RESTORE_DIR}" -name "media.tar.gz" | head -n 1)
+if [ -n "${MEDIA_TAR}" ] && [ -f "${MEDIA_TAR}" ]; then
+    mkdir -p media/
+    tar -xzf "${MEDIA_TAR}" -C .
 fi
 
 echo "-------------------------------------------"

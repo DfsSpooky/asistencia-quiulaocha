@@ -12,12 +12,12 @@ from django.conf import settings
 from django.contrib.auth.models import Permission, User
 from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase, Client
+from django.test import TestCase, TransactionTestCase, Client, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from PIL import Image
 
-from .models import Asistencia, ConfiguracionSistema, Evento, HistorialCarnet, Justificacion, LogAccion, SolicitudDescargaCarnets, Usuario
+from .models import Asistencia, ConfiguracionSistema, Evento, TipoEvento, HistorialCarnet, Justificacion, LogAccion, SolicitudDescargaCarnets, Usuario
 from .services import AsistenciaService
 from .forms import CargaMasivaFotosForm, FiltroAsistenciaForm
 from .utils.reports import generate_attendance_csv, get_filtered_attendance_data
@@ -26,8 +26,8 @@ from .utils.reports import generate_attendance_csv, get_filtered_attendance_data
 class AttendanceEnhancementsTests(TestCase):
     def setUp(self):
         self.temp_media_root = tempfile.mkdtemp(prefix='test-media-')
-        self._original_media_root = settings.MEDIA_ROOT
-        settings.MEDIA_ROOT = self.temp_media_root
+        self._media_override = override_settings(MEDIA_ROOT=self.temp_media_root)
+        self._media_override.enable()
 
         self.user = User.objects.create_user(username='manager', password='password')
         self.user.user_permissions.add(
@@ -46,7 +46,7 @@ class AttendanceEnhancementsTests(TestCase):
         )
 
     def tearDown(self):
-        settings.MEDIA_ROOT = self._original_media_root
+        self._media_override.disable()
         shutil.rmtree(self.temp_media_root, ignore_errors=True)
 
     def test_registrar_ingreso_marca_puntualidad(self):
@@ -319,6 +319,303 @@ class AttendanceEnhancementsTests(TestCase):
             response['Content-Type']
         )
 
+    def test_exportar_excel_diversificado_con_pestanas_y_faltantes(self):
+        import openpyxl
+        socio_asistio = Usuario.objects.create(nombre='Ana', apellido='Gomez', dni='88990011', estado=Usuario.ESTADO_ACTIVO)
+        socio_falto = Usuario.objects.create(nombre='Pedro', apellido='Rios', dni='88990022', estado=Usuario.ESTADO_ACTIVO)
+        socio_justificado = Usuario.objects.create(nombre='Maria', apellido='Salas', dni='88990033', estado=Usuario.ESTADO_ACTIVO)
+
+        Asistencia.objects.create(
+            usuario=socio_asistio,
+            fecha=self.evento.fecha,
+            hora_ingreso=time(8, 0),
+            hora_salida=time(10, 0),
+            evento=self.evento,
+            confirmada=True,
+        )
+        Justificacion.objects.create(
+            usuario=socio_justificado,
+            evento=self.evento,
+            motivo='Cita medica',
+            estado=Justificacion.ESTADO_APROBADO,
+        )
+
+        response = self.client.get(reverse('exportar_asistencias_excel'), {
+            'evento': self.evento.id,
+        })
+        self.assertEqual(response.status_code, 200)
+
+        wb = openpyxl.load_workbook(BytesIO(response.content))
+        self.assertIn('Resumen Ejecutivo', wb.sheetnames)
+        self.assertIn('Faltas Reales', wb.sheetnames)
+        self.assertIn('Asistieron', wb.sheetnames)
+        self.assertIn('Justificaciones', wb.sheetnames)
+        self.assertIn('Pendientes', wb.sheetnames)
+        self.assertIn('Exonerados', wb.sheetnames)
+        self.assertIn('Padrón General', wb.sheetnames)
+
+        ws_faltas = wb['Faltas Reales']
+        self.assertIsNotNone(ws_faltas.auto_filter.ref)
+
+        # Probar también exportación CSV con inasistentes
+        response_csv = self.client.get(reverse('exportar_asistencias_csv'), {
+            'evento': self.evento.id,
+        })
+        self.assertEqual(response_csv.status_code, 200)
+        self.assertIn('text/csv', response_csv['Content-Type'])
+
+    def test_exportar_excel_filtrando_solo_por_fecha_inicio_incluye_padron_completo(self):
+        import openpyxl
+        socio_asistio = Usuario.objects.create(nombre='Luis', apellido='Perez', dni='77889901', estado=Usuario.ESTADO_ACTIVO)
+        socio_falto = Usuario.objects.create(nombre='Rosa', apellido='Castro', dni='77889902', estado=Usuario.ESTADO_ACTIVO)
+
+        Asistencia.objects.create(
+            usuario=socio_asistio,
+            fecha=self.evento.fecha,
+            hora_ingreso=time(8, 0),
+            hora_salida=time(10, 0),
+            evento=self.evento,
+            confirmada=True,
+        )
+
+        # Filtrar solo por fecha_inicio (sin fecha_fin y sin pasar evento)
+        response = self.client.get(reverse('exportar_asistencias_excel'), {
+            'fecha_inicio': self.evento.fecha.strftime('%Y-%m-%d'),
+        })
+        self.assertEqual(response.status_code, 200)
+
+        wb = openpyxl.load_workbook(BytesIO(response.content))
+        self.assertIn('Padrón General', wb.sheetnames)
+        self.assertIn('Faltas Reales', wb.sheetnames)
+
+        # Debe incluir a los inasistentes (socio_falto) en Faltas Reales y Padrón General
+        ws_general = wb['Padrón General']
+        self.assertGreater(ws_general.max_row, 5) # Encabezados + datos
+        ws_faltas = wb['Faltas Reales']
+        self.assertGreater(ws_faltas.max_row, 5) # Debe contener faltantes
+
+    def test_exportar_reporte_global_excel_incluye_matriz_y_consolidado(self):
+        import openpyxl
+        socio_1 = Usuario.objects.create(nombre='Carlos', apellido='Bendezu', dni='11223344', estado=Usuario.ESTADO_ACTIVO)
+        socio_2 = Usuario.objects.create(nombre='Diana', apellido='Zevallos', dni='55667788', estado=Usuario.ESTADO_ACTIVO)
+
+        Asistencia.objects.create(
+            usuario=socio_1,
+            fecha=self.evento.fecha,
+            hora_ingreso=time(8, 0),
+            hora_salida=time(10, 0),
+            evento=self.evento,
+            confirmada=True,
+        )
+
+        response = self.client.get(reverse('exportar_reporte_global_excel'))
+        self.assertEqual(response.status_code, 200)
+
+        wb = openpyxl.load_workbook(BytesIO(response.content))
+        self.assertIn('Resumen Ejecutivo', wb.sheetnames)
+        self.assertIn('Matriz de Asambleas', wb.sheetnames)
+        self.assertIn('Consolidado por Comunero', wb.sheetnames)
+        self.assertIn('Inasistencias Acumuladas', wb.sheetnames)
+        self.assertIn('Justificaciones Acumuladas', wb.sheetnames)
+        self.assertIn('Detalle General', wb.sheetnames)
+
+        ws_matrix = wb['Matriz de Asambleas']
+        self.assertEqual(ws_matrix.freeze_panes, "E6")
+        self.assertIsNotNone(ws_matrix.auto_filter.ref)
+
+        ws_consolidado = wb['Consolidado por Comunero']
+        self.assertIsNotNone(ws_consolidado.auto_filter.ref)
+
+    def test_descargar_reporte_usuario_excel(self):
+        import openpyxl
+        socio = Usuario.objects.create(nombre='Manuel', apellido='Quispe', dni='99887766', estado=Usuario.ESTADO_ACTIVO)
+        Asistencia.objects.create(
+            usuario=socio,
+            fecha=self.evento.fecha,
+            hora_ingreso=time(8, 0),
+            hora_salida=time(10, 0),
+            evento=self.evento,
+            confirmada=True,
+        )
+
+        response = self.client.get(reverse('descargar_reporte_usuario_excel', kwargs={'dni': socio.dni}))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+        wb = openpyxl.load_workbook(BytesIO(response.content))
+        self.assertIn('Historial Individual', wb.sheetnames)
+        ws = wb['Historial Individual']
+        self.assertEqual(ws.freeze_panes, "A11")
+        self.assertIsNotNone(ws.auto_filter.ref)
+
+    def test_tipo_evento_clasificacion_asamblea_y_faena(self):
+        tipo_asamblea = TipoEvento.objects.create(
+            nombre='Asamblea Ordinaria Anual',
+            categoria=TipoEvento.CATEGORIA_ASAMBLEA,
+            color='#1e40af'
+        )
+        tipo_faena = TipoEvento.objects.create(
+            nombre='Faena de Limpieza Comunal',
+            categoria=TipoEvento.CATEGORIA_FAENA,
+            color='#047857'
+        )
+
+        ev_asamblea = Evento.objects.create(
+            nombre='Asamblea de Presentación',
+            tipo_evento=tipo_asamblea,
+            fecha=date(2026, 5, 10),
+            hora_ingreso=time(8, 0),
+        )
+        ev_faena = Evento.objects.create(
+            nombre='Faena en Carretera',
+            tipo_evento=tipo_faena,
+            fecha=date(2026, 6, 12),
+            hora_ingreso=time(7, 0),
+        )
+        ev_historico_faena = Evento.objects.create(
+            nombre='FAENA POR FIESTAS PATRIAS',
+            fecha=date(2026, 7, 26),
+            hora_ingreso=time(13, 0),
+        )
+
+        self.assertTrue(ev_asamblea.es_asamblea)
+        self.assertFalse(ev_asamblea.es_faena)
+        self.assertEqual(ev_asamblea.tipo_nombre, 'Asamblea Ordinaria Anual')
+
+        self.assertTrue(ev_faena.es_faena)
+        self.assertFalse(ev_faena.es_asamblea)
+        self.assertEqual(ev_faena.tipo_nombre, 'Faena de Limpieza Comunal')
+
+        # Auto-detección histórica por nombre
+        self.assertTrue(ev_historico_faena.es_faena)
+        self.assertFalse(ev_historico_faena.es_asamblea)
+        self.assertEqual(ev_historico_faena.tipo_nombre, 'Faena Comunal')
+
+    def test_filtrar_asistencias_por_faena_y_asamblea(self):
+        tipo_faena, _ = TipoEvento.objects.get_or_create(
+            nombre='Faena General',
+            defaults={'categoria': TipoEvento.CATEGORIA_FAENA, 'color': '#047857'}
+        )
+        tipo_asamblea, _ = TipoEvento.objects.get_or_create(
+            nombre='Asamblea Extraordinaria Comunal',
+            defaults={'categoria': TipoEvento.CATEGORIA_ASAMBLEA, 'color': '#7c3aed'}
+        )
+
+        ev_faena = Evento.objects.create(
+            nombre='Faena Mantenimiento',
+            tipo_evento=tipo_faena,
+            fecha=date(2026, 8, 10),
+            hora_ingreso=time(8, 0),
+        )
+        ev_asamblea = Evento.objects.create(
+            nombre='Asamblea de Presupuesto',
+            tipo_evento=tipo_asamblea,
+            fecha=date(2026, 8, 15),
+            hora_ingreso=time(9, 0),
+        )
+
+        socio_1 = Usuario.objects.create(nombre='Javier', apellido='Mayhua', dni='55443322', estado=Usuario.ESTADO_ACTIVO)
+        Asistencia.objects.create(
+            usuario=socio_1,
+            fecha=ev_faena.fecha,
+            hora_ingreso=time(8, 5),
+            hora_salida=time(12, 0),
+            evento=ev_faena,
+            confirmada=True,
+        )
+
+        # Filtro por FAENA
+        data_faena = get_filtered_attendance_data({'categoria_evento': 'FAENA'})
+        eventos_faena = [it.evento.id for it in data_faena['unified_report'] if getattr(it, 'evento', None)]
+        self.assertTrue(all(ev_id == ev_faena.id for ev_id in eventos_faena if ev_id))
+
+        # Filtro por ASAMBLEA
+        data_asamblea = get_filtered_attendance_data({'categoria_evento': 'ASAMBLEA'})
+        eventos_asamblea = [it.evento.id for it in data_asamblea['unified_report'] if getattr(it, 'evento', None)]
+        self.assertTrue(all(ev_id != ev_faena.id for ev_id in eventos_asamblea if ev_id))
+
+    def test_excel_diferencia_faltas_faenas_vs_asambleas(self):
+        import openpyxl
+        # Limpiar eventos previos para aislar exactamente los dos eventos de la prueba
+        Evento.objects.all().delete()
+
+        tipo_faena, _ = TipoEvento.objects.get_or_create(
+            nombre='Faena de Obras',
+            defaults={'categoria': TipoEvento.CATEGORIA_FAENA, 'color': '#047857'}
+        )
+        tipo_asamblea, _ = TipoEvento.objects.get_or_create(
+            nombre='Asamblea del Pueblo',
+            defaults={'categoria': TipoEvento.CATEGORIA_ASAMBLEA, 'color': '#1e40af'}
+        )
+
+        ev_faena = Evento.objects.create(
+            nombre='Faena Limpieza Reservorio',
+            tipo_evento=tipo_faena,
+            fecha=date(2026, 9, 5),
+            hora_ingreso=time(7, 30),
+        )
+        ev_asamblea = Evento.objects.create(
+            nombre='Asamblea Elección Directiva',
+            tipo_evento=tipo_asamblea,
+            fecha=date(2026, 9, 20),
+            hora_ingreso=time(8, 30),
+        )
+
+        socio_asiste_todo = Usuario.objects.create(nombre='Héctor', apellido='Alanya', dni='10203040', estado=Usuario.ESTADO_ACTIVO)
+        socio_falta_faena = Usuario.objects.create(nombre='Marcos', apellido='Casas', dni='20304050', estado=Usuario.ESTADO_ACTIVO)
+        socio_falta_todo = Usuario.objects.create(nombre='Nelly', apellido='Meza', dni='30405060', estado=Usuario.ESTADO_ACTIVO)
+
+        # Héctor asiste a ambos
+        Asistencia.objects.create(usuario=socio_asiste_todo, evento=ev_faena, fecha=ev_faena.fecha, hora_ingreso=time(7, 30), hora_salida=time(12, 0), confirmada=True)
+        Asistencia.objects.create(usuario=socio_asiste_todo, evento=ev_asamblea, fecha=ev_asamblea.fecha, hora_ingreso=time(8, 30), hora_salida=time(13, 0), confirmada=True)
+
+        # Marcos asiste solo a asamblea (falta a faena)
+        Asistencia.objects.create(usuario=socio_falta_faena, evento=ev_asamblea, fecha=ev_asamblea.fecha, hora_ingreso=time(8, 30), hora_salida=time(13, 0), confirmada=True)
+
+        # Nelly no asiste a ninguno (falta a faena y asamblea)
+
+        # 1. Probar exportar_asistencias_excel
+        response_excel = self.client.get(reverse('exportar_asistencias_excel'))
+        self.assertEqual(response_excel.status_code, 200)
+        wb = openpyxl.load_workbook(BytesIO(response_excel.content))
+
+        # Verificar que se generaron las pestañas especializadas de faenas y asambleas
+        self.assertIn('Faltas a Faenas', wb.sheetnames)
+        self.assertIn('Faltas a Asambleas', wb.sheetnames)
+        self.assertIn('Consolidado por Comunero', wb.sheetnames)
+
+        ws_faenas = wb['Faltas a Faenas']
+        ws_asambleas = wb['Faltas a Asambleas']
+        ws_consolidado = wb['Consolidado por Comunero']
+
+        # En Faltas a Faenas deben estar Marcos y Nelly (no Héctor)
+        dnis_faltas_faenas = [str(ws_faenas.cell(row=r, column=3).value) for r in range(6, ws_faenas.max_row + 1)]
+        self.assertIn('20304050', dnis_faltas_faenas)
+        self.assertIn('30405060', dnis_faltas_faenas)
+        self.assertNotIn('10203040', dnis_faltas_faenas)
+
+        # En Faltas a Asambleas debe estar Nelly (no Marcos ni Héctor)
+        dnis_faltas_asambleas = [str(ws_asambleas.cell(row=r, column=3).value) for r in range(6, ws_asambleas.max_row + 1)]
+        self.assertIn('30405060', dnis_faltas_asambleas)
+        self.assertNotIn('20304050', dnis_faltas_asambleas)
+        self.assertNotIn('10203040', dnis_faltas_asambleas)
+
+        # 2. Probar exportar_reporte_global_excel
+        response_global = self.client.get(reverse('exportar_reporte_global_excel'))
+        self.assertEqual(response_global.status_code, 200)
+        wb_global = openpyxl.load_workbook(BytesIO(response_global.content))
+
+        self.assertIn('Matriz de Asambleas', wb_global.sheetnames)
+        self.assertIn('Consolidado por Comunero', wb_global.sheetnames)
+        self.assertIn('Faltas a Faenas', wb_global.sheetnames)
+        self.assertIn('Faltas a Asambleas', wb_global.sheetnames)
+
+        # Probar filtro categoria=FAENA en exportar_reporte_global_excel
+        response_solo_faenas = self.client.get(reverse('exportar_reporte_global_excel'), {'categoria': 'FAENA'})
+        self.assertEqual(response_solo_faenas.status_code, 200)
+        wb_faenas_global = openpyxl.load_workbook(BytesIO(response_solo_faenas.content))
+        self.assertIn('Consolidado por Comunero', wb_faenas_global.sheetnames)
+
     def test_historial_con_filtro_avanzado_por_fecha_muestra_resultados(self):
         evento_marzo = Evento.objects.create(
             nombre='Reunion Marzo',
@@ -512,8 +809,8 @@ class AttendanceEnhancementsTests(TestCase):
 class AdminMassPhotoUploadTests(TestCase):
     def setUp(self):
         self.temp_media_root = tempfile.mkdtemp(prefix='test-media-')
-        self._original_media_root = settings.MEDIA_ROOT
-        settings.MEDIA_ROOT = self.temp_media_root
+        self._media_override = override_settings(MEDIA_ROOT=self.temp_media_root)
+        self._media_override.enable()
 
         self.admin_user = User.objects.create_superuser(
             username='admin',
@@ -524,7 +821,7 @@ class AdminMassPhotoUploadTests(TestCase):
         self.client.force_login(self.admin_user)
 
     def tearDown(self):
-        settings.MEDIA_ROOT = self._original_media_root
+        self._media_override.disable()
         shutil.rmtree(self.temp_media_root, ignore_errors=True)
 
     def _build_image(self, name, color):
@@ -586,8 +883,8 @@ class AdminMassPhotoUploadTests(TestCase):
 class CarnetsZipDownloadTests(TestCase):
     def setUp(self):
         self.temp_media_root = tempfile.mkdtemp(prefix='test-media-')
-        self._original_media_root = settings.MEDIA_ROOT
-        settings.MEDIA_ROOT = self.temp_media_root
+        self._media_override = override_settings(MEDIA_ROOT=self.temp_media_root)
+        self._media_override.enable()
 
         self.user = User.objects.create_user(username='manager_zip', password='password')
         self.user.user_permissions.add(Permission.objects.get(codename='can_manage_users'))
@@ -597,7 +894,7 @@ class CarnetsZipDownloadTests(TestCase):
         ConfiguracionSistema.objects.create(nombre_institucion='QUIULACOCHA', tolerancia_minutos=15)
 
     def tearDown(self):
-        settings.MEDIA_ROOT = self._original_media_root
+        self._media_override.disable()
         shutil.rmtree(self.temp_media_root, ignore_errors=True)
 
     def _create_photo_file(self, color=(24, 120, 196)):
@@ -847,3 +1144,208 @@ class GestionCarnetsModuleTests(TestCase):
         self.assertEqual(HistorialCarnet.objects.filter(usuario=usuario, estado='Activo').count(), 1)
         mensajes = [str(m) for m in response.context['messages']]
         self.assertTrue(any('ya cuenta con un carnet activo' in mensaje for mensaje in mensajes))
+
+
+class QRSecurityAndRescueModeTests(TestCase):
+    def setUp(self):
+        self.config, _ = ConfiguracionSistema.objects.get_or_create(
+            defaults={'nombre_institucion': 'QUIULACOCHA', 'tolerancia_minutos': 15}
+        )
+
+    def test_qr_encode_and_decode_roundtrip(self):
+        import uuid
+        from .qr_security import build_qr_encoded_payload, decode_qr_encoded_payload
+
+        qr_uid = uuid.uuid4()
+        payload = build_qr_encoded_payload(qr_uid, 1)
+
+        result = decode_qr_encoded_payload(payload)
+        self.assertEqual(result['kind'], 'uid_v1')
+        self.assertEqual(result['qr_uid'], qr_uid)
+        self.assertEqual(result['qr_version'], 1)
+
+    def test_qr_rescue_mode_accepts_alien_signature(self):
+        import uuid
+        import base64
+        from django.core.signing import Signer
+        from .qr_security import decode_qr_encoded_payload, QR_SIGNING_SALT
+
+        self.config.permitir_carnets_antiguos_sin_firma = True
+        self.config.save()
+
+        qr_uid = uuid.uuid4()
+        raw = f"v1|{qr_uid}|1"
+        alien_signer = Signer(key="alien-secret-from-old-server", salt=QR_SIGNING_SALT)
+        alien_signed = alien_signer.sign(raw)
+        encoded_alien_qr = base64.b64encode(alien_signed.encode()).decode()
+
+        result = decode_qr_encoded_payload(encoded_alien_qr)
+        self.assertEqual(result['kind'], 'uid_v1')
+        self.assertEqual(result['qr_uid'], qr_uid)
+        self.assertEqual(result['qr_version'], 1)
+
+    def test_qr_rescue_mode_disabled_rejects_alien_signature(self):
+        import uuid
+        import base64
+        from django.core.signing import BadSignature, Signer
+        from .qr_security import decode_qr_encoded_payload, QR_SIGNING_SALT
+
+        self.config.permitir_carnets_antiguos_sin_firma = False
+        self.config.save()
+
+        qr_uid = uuid.uuid4()
+        raw = f"v1|{qr_uid}|1"
+        alien_signer = Signer(key="alien-secret-from-old-server", salt=QR_SIGNING_SALT)
+        alien_signed = alien_signer.sign(raw)
+        encoded_alien_qr = base64.b64encode(alien_signed.encode()).decode()
+
+        with self.assertRaises(BadSignature):
+            decode_qr_encoded_payload(encoded_alien_qr)
+
+    def test_qr_config_signing_key_and_fallback(self):
+        import uuid
+        import base64
+        from django.core.signing import Signer
+        from .qr_security import decode_qr_encoded_payload, QR_SIGNING_SALT
+
+        self.config.permitir_carnets_antiguos_sin_firma = False
+        self.config.qr_signing_key = "current-custom-key"
+        self.config.qr_fallback_keys = "fallback-key-1, fallback-key-2"
+        self.config.save()
+
+        qr_uid1 = uuid.uuid4()
+        signer_current = Signer(key="current-custom-key", salt=QR_SIGNING_SALT)
+        encoded1 = base64.b64encode(signer_current.sign(f"v1|{qr_uid1}|1").encode()).decode()
+        res1 = decode_qr_encoded_payload(encoded1)
+        self.assertEqual(res1['qr_uid'], qr_uid1)
+
+        qr_uid2 = uuid.uuid4()
+        signer_fallback = Signer(key="fallback-key-2", salt=QR_SIGNING_SALT)
+        encoded2 = base64.b64encode(signer_fallback.sign(f"v1|{qr_uid2}|2").encode()).decode()
+        res2 = decode_qr_encoded_payload(encoded2)
+        self.assertEqual(res2['qr_uid'], qr_uid2)
+
+    def test_qr_malformed_input_raises_bad_signature(self):
+        from django.core.signing import BadSignature
+        from .qr_security import decode_qr_encoded_payload
+
+        with self.assertRaises(BadSignature):
+            decode_qr_encoded_payload("not-valid-base64-!@#$%^&*()")
+
+        with self.assertRaises(BadSignature):
+            import base64
+            # valid base64 but invalid content
+            decode_qr_encoded_payload(base64.b64encode(b"v1|not-a-uuid|1").decode())
+
+
+class BackupRestoreWebTests(TransactionTestCase):
+    def setUp(self):
+        self.temp_media_root = tempfile.mkdtemp(prefix='test-media-')
+        self._media_override = override_settings(MEDIA_ROOT=self.temp_media_root)
+        self._media_override.enable()
+
+        self.superuser = User.objects.create_superuser(
+            username='admin_backup',
+            email='admin@example.com',
+            password='password'
+        )
+        self.regular_user = User.objects.create_user(
+            username='regular',
+            password='password'
+        )
+        self.regular_user.user_permissions.add(Permission.objects.get(codename='can_manage_users'))
+
+    def tearDown(self):
+        self._media_override.disable()
+        shutil.rmtree(self.temp_media_root, ignore_errors=True)
+
+    def test_non_superuser_denied(self):
+        self.client.force_login(self.regular_user)
+        response = self.client.post(reverse('restaurar_backup'), follow=True)
+        self.assertEqual(response.status_code, 200)
+        messages = [str(m) for m in response.context['messages']]
+        self.assertTrue(any('Solo superusuarios pueden restaurar' in m for m in messages))
+
+    def test_invalid_extension_rejected(self):
+        self.client.force_login(self.superuser)
+        bad_file = SimpleUploadedFile("backup.zip", b"fake zip content", content_type="application/zip")
+        response = self.client.post(reverse('restaurar_backup'), {'backup_file': bad_file}, follow=True)
+        self.assertEqual(response.status_code, 200)
+        messages = [str(m) for m in response.context['messages']]
+        self.assertTrue(any('debe ser un .tar.gz valido' in m for m in messages))
+
+    def test_restore_backup_tar_gz_with_media_and_database(self):
+        import tarfile
+        self.client.force_login(self.superuser)
+
+        test_tar_dir = tempfile.mkdtemp()
+        try:
+            media_content_dir = os.path.join(test_tar_dir, 'media_content')
+            os.makedirs(os.path.join(media_content_dir, 'perfil_fotos'), exist_ok=True)
+            with open(os.path.join(media_content_dir, 'perfil_fotos', 'test_photo.jpg'), 'wb') as f:
+                f.write(b'fake_photo_data')
+
+            media_tar_path = os.path.join(test_tar_dir, 'media.tar.gz')
+            with tarfile.open(media_tar_path, 'w:gz') as mt:
+                mt.add(media_content_dir, arcname='media')
+
+            db_sql_path = os.path.join(test_tar_dir, 'database.sql')
+            with open(db_sql_path, 'w', encoding='utf-8') as f:
+                f.write('-- empty sql dump\n')
+
+            main_tar_path = os.path.join(test_tar_dir, 'backup.tar.gz')
+            with tarfile.open(main_tar_path, 'w:gz') as main_tar:
+                main_tar.add(media_tar_path, arcname='media.tar.gz')
+                main_tar.add(db_sql_path, arcname='database.sql')
+
+            with open(main_tar_path, 'rb') as f:
+                uploaded = SimpleUploadedFile('backup_test.tar.gz', f.read(), content_type='application/gzip')
+
+            response = self.client.post(reverse('restaurar_backup'), {'backup_file': uploaded}, follow=True)
+            self.assertEqual(response.status_code, 200)
+
+            restored_photo = os.path.join(settings.MEDIA_ROOT, 'perfil_fotos', 'test_photo.jpg')
+            self.assertTrue(os.path.exists(restored_photo))
+        finally:
+            shutil.rmtree(test_tar_dir, ignore_errors=True)
+
+    def test_restore_backup_tar_gz_ajax(self):
+        import tarfile
+        self.client.force_login(self.superuser)
+
+        test_tar_dir = tempfile.mkdtemp()
+        try:
+            media_content_dir = os.path.join(test_tar_dir, 'media_content')
+            os.makedirs(os.path.join(media_content_dir, 'perfil_fotos'), exist_ok=True)
+            with open(os.path.join(media_content_dir, 'perfil_fotos', 'ajax_photo.jpg'), 'wb') as f:
+                f.write(b'fake_ajax_photo')
+
+            media_tar_path = os.path.join(test_tar_dir, 'media.tar.gz')
+            with tarfile.open(media_tar_path, 'w:gz') as mt:
+                mt.add(media_content_dir, arcname='media')
+
+            db_sql_path = os.path.join(test_tar_dir, 'database.sql')
+            with open(db_sql_path, 'w', encoding='utf-8') as f:
+                f.write('-- empty sql dump\n')
+
+            main_tar_path = os.path.join(test_tar_dir, 'backup.tar.gz')
+            with tarfile.open(main_tar_path, 'w:gz') as main_tar:
+                main_tar.add(media_tar_path, arcname='media.tar.gz')
+                main_tar.add(db_sql_path, arcname='database.sql')
+
+            with open(main_tar_path, 'rb') as f:
+                uploaded = SimpleUploadedFile('backup_test.tar.gz', f.read(), content_type='application/gzip')
+
+            response = self.client.post(
+                reverse('restaurar_backup'),
+                {'backup_file': uploaded},
+                HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+            )
+            self.assertEqual(response.status_code, 200)
+            data = response.json()
+            self.assertTrue(data.get('ok'))
+            self.assertIn('Sistema restaurado exitosamente', data.get('message'))
+        finally:
+            shutil.rmtree(test_tar_dir, ignore_errors=True)
+
+
