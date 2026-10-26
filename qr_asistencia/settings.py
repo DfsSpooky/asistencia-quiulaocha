@@ -113,11 +113,23 @@ WSGI_APPLICATION = "qr_asistencia.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-POSTGRES_DB = get_first("POSTGRES_DB", "DB_NAME")
-POSTGRES_USER = get_first("POSTGRES_USER", "DB_USER")
-POSTGRES_PASSWORD = get_first("POSTGRES_PASSWORD", "DB_PASSWORD")
-POSTGRES_HOST = get_first("POSTGRES_HOST", "DB_HOST")
-POSTGRES_PORT = get_first("POSTGRES_PORT", "DB_PORT")
+DATABASE_URL = get_first("DATABASE_URL")
+if DATABASE_URL:
+    from urllib.parse import urlparse, unquote
+    _parsed_db = urlparse(DATABASE_URL)
+    _db_user = unquote(_parsed_db.username or "")
+    _db_pass = unquote(_parsed_db.password or "")
+    _db_host = _parsed_db.hostname or ""
+    _db_port = str(_parsed_db.port or 5432)
+    _db_name = _parsed_db.path.lstrip("/")
+else:
+    _db_user = _db_pass = _db_host = _db_port = _db_name = None
+
+POSTGRES_DB = get_first("POSTGRES_DB", "DB_NAME") or _db_name
+POSTGRES_USER = get_first("POSTGRES_USER", "DB_USER") or _db_user
+POSTGRES_PASSWORD = get_first("POSTGRES_PASSWORD", "DB_PASSWORD") or _db_pass
+POSTGRES_HOST = get_first("POSTGRES_HOST", "DB_HOST") or _db_host
+POSTGRES_PORT = get_first("POSTGRES_PORT", "DB_PORT") or _db_port
 
 if all([POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_HOST, POSTGRES_PORT]):
     DATABASES = {

@@ -7,6 +7,19 @@ DB_HOST_VALUE="${POSTGRES_HOST:-${DB_HOST:-}}"
 DB_NAME_VALUE="${POSTGRES_DB:-${DB_NAME:-}}"
 DB_USER_VALUE="${POSTGRES_USER:-${DB_USER:-}}"
 
+if [ -z "${DB_HOST_VALUE}" ] && [ -n "${DATABASE_URL:-}" ]; then
+    eval $(python -c "
+from urllib.parse import urlparse, unquote
+import os
+url = os.environ.get('DATABASE_URL', '')
+if url:
+    p = urlparse(url)
+    print(f'DB_HOST_VALUE=\"{p.hostname or \"\"}\"')
+    print(f'DB_NAME_VALUE=\"{p.path.lstrip(\"/\")}\"')
+    print(f'DB_USER_VALUE=\"{unquote(p.username or \"\")}\"')
+")
+fi
+
 if [ -n "${DB_HOST_VALUE}" ] && [ -n "${DB_NAME_VALUE}" ] && [ -n "${DB_USER_VALUE}" ]; then
     echo "Waiting for PostgreSQL at ${DB_HOST_VALUE}..."
     ATTEMPTS=0
