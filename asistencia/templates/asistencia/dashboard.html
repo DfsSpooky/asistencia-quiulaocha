@@ -332,25 +332,61 @@
             </div>
 
             <!-- Success Summary Box (Hidden Initially) -->
-            <div id="restore-success-box" class="hidden bg-emerald-50 border border-emerald-200 rounded-2xl p-4 mb-6">
-                <div class="flex items-center gap-2 text-emerald-800 font-bold text-sm mb-2">
-                    <i class="bi bi-check-circle-fill text-emerald-600 text-lg"></i>
+            <div id="restore-success-box" class="hidden bg-emerald-50 border border-emerald-200 rounded-2xl p-4 md:p-5 mb-6 text-left">
+                <div class="flex items-center gap-2.5 text-emerald-800 font-bold text-sm mb-2">
+                    <i class="bi bi-check-circle-fill text-emerald-600 text-xl"></i>
                     <span>¡Restauración Finalizada con Éxito!</span>
                 </div>
-                <p id="restore-success-message" class="text-xs text-emerald-700 mb-3"></p>
-                <div class="grid grid-cols-3 gap-2 text-center">
-                    <div class="bg-white p-2 rounded-xl border border-emerald-100 shadow-sm">
-                        <span id="stat-usuarios" class="block font-black text-slate-900 text-base">0</span>
-                        <span class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Usuarios</span>
+                <p id="restore-success-message" class="text-xs text-emerald-700 mb-4 leading-relaxed font-medium"></p>
+                
+                <!-- 6 Metric Cards -->
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-2 text-center mb-4">
+                    <div class="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-sm">
+                        <span class="block text-slate-400 text-xs mb-0.5 font-medium">👥 Comuneros</span>
+                        <span id="stat-usuarios" class="block font-black text-slate-900 text-lg md:text-xl">0</span>
+                        <span class="text-[10px] text-emerald-600 font-semibold">En Padrón</span>
                     </div>
-                    <div class="bg-white p-2 rounded-xl border border-emerald-100 shadow-sm">
-                        <span id="stat-asistencias" class="block font-black text-slate-900 text-base">0</span>
-                        <span class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Asistencias</span>
+                    <div class="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-sm">
+                        <span class="block text-slate-400 text-xs mb-0.5 font-medium">📋 Asistencias</span>
+                        <span id="stat-asistencias" class="block font-black text-slate-900 text-lg md:text-xl">0</span>
+                        <span class="text-[10px] text-emerald-600 font-semibold">Historial</span>
                     </div>
-                    <div class="bg-white p-2 rounded-xl border border-emerald-100 shadow-sm">
-                        <span id="stat-eventos" class="block font-black text-slate-900 text-base">0</span>
-                        <span class="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">Eventos</span>
+                    <div class="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-sm">
+                        <span class="block text-slate-400 text-xs mb-0.5 font-medium">📅 Reuniones</span>
+                        <span id="stat-eventos" class="block font-black text-slate-900 text-lg md:text-xl">0</span>
+                        <span class="text-[10px] text-slate-500 font-semibold">Totales</span>
                     </div>
+                    <div class="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-sm">
+                        <span class="block text-slate-400 text-xs mb-0.5 font-medium">📸 Fotos Perfil</span>
+                        <span id="stat-fotos" class="block font-black text-slate-900 text-lg md:text-xl">0</span>
+                        <span class="text-[10px] text-emerald-600 font-semibold">Restauradas</span>
+                    </div>
+                    <div class="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-sm">
+                        <span class="block text-slate-400 text-xs mb-0.5 font-medium">📱 Códigos QR</span>
+                        <span id="stat-qr" class="block font-black text-slate-900 text-lg md:text-xl">0</span>
+                        <span class="text-[10px] text-emerald-600 font-semibold">Carnets QR</span>
+                    </div>
+                    <div class="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-sm">
+                        <span class="block text-slate-400 text-xs mb-0.5 font-medium">💾 Multimedia</span>
+                        <span id="stat-media" class="block font-black text-slate-900 text-lg md:text-xl">0 MB</span>
+                        <span class="text-[10px] text-slate-500 font-semibold">En /media/</span>
+                    </div>
+                </div>
+
+                <!-- Classification Status Pills -->
+                <div class="flex flex-wrap gap-2 text-[11px] justify-center text-slate-700 bg-white/80 p-2.5 rounded-xl border border-emerald-100">
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-semibold">
+                        <i class="bi bi-shield-check"></i> Base PostgreSQL: OK
+                    </span>
+                    <span id="badge-faenas" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-semibold">
+                        🚜 Faenas: 0
+                    </span>
+                    <span id="badge-asambleas" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-100 text-indigo-800 font-semibold">
+                        🏛️ Asambleas: 0
+                    </span>
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-100 text-blue-800 font-semibold">
+                        <i class="bi bi-folder-check"></i> Archivos Multimedia: OK
+                    </span>
                 </div>
             </div>
 
@@ -576,33 +612,40 @@
                         modalIconContainer.className = 'h-16 w-16 mx-auto rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-3';
                         modalIcon.className = 'bi bi-check-circle-fill text-3xl';
                         modalTitle.textContent = '¡Restauración Exitosa!';
-                        modalSubtitle.textContent = 'Todos los datos y archivos multimedia han sido restablecidos.';
+                        modalSubtitle.textContent = 'Revisa el resumen completo de datos y multimedia restaurados abajo.';
 
-                        statusStage.textContent = 'Completado';
-                        statusDetail.textContent = '100% finalizado';
+                        statusStage.textContent = 'Restauración 100% Completada';
+                        statusDetail.textContent = 'Datos, fotos y carnets sincronizados';
 
-                        successMessage.textContent = response.message || 'El sistema fue restaurado correctamente.';
+                        successMessage.textContent = response.message || 'El sistema fue restaurado correctamente con todos sus datos, fotos y carnets.';
                         statUsuarios.textContent = response.usuarios !== undefined ? response.usuarios : '-';
                         statAsistencias.textContent = response.asistencias !== undefined ? response.asistencias : '-';
                         statEventos.textContent = response.eventos !== undefined ? response.eventos : '-';
+
+                        const statFotos = document.getElementById('stat-fotos');
+                        if (statFotos) statFotos.textContent = response.fotos !== undefined ? response.fotos : '-';
+
+                        const statQr = document.getElementById('stat-qr');
+                        if (statQr) statQr.textContent = response.qr_codes !== undefined ? response.qr_codes : '-';
+
+                        const statMedia = document.getElementById('stat-media');
+                        if (statMedia) statMedia.textContent = response.media_size !== undefined ? response.media_size : '-';
+
+                        const badgeFaenas = document.getElementById('badge-faenas');
+                        if (badgeFaenas) badgeFaenas.textContent = '🚜 Faenas: ' + (response.faenas !== undefined ? response.faenas : '0');
+
+                        const badgeAsambleas = document.getElementById('badge-asambleas');
+                        if (badgeAsambleas) badgeAsambleas.textContent = '🏛️ Asambleas: ' + (response.asambleas !== undefined ? response.asambleas : '0');
+
                         successBox.classList.remove('hidden');
 
+                        // Mantener la confirmación visible sin recargar bruscamente
                         reloadBtn.classList.remove('hidden');
-
-                        let countdown = 3;
-                        reloadBtn.innerHTML = '<i class="bi bi-arrow-clockwise animate-spin"></i> <span>Recargando en ' + countdown + 's...</span>';
-                        const timer = setInterval(() => {
-                            countdown--;
-                            if (countdown <= 0) {
-                                clearInterval(timer);
-                                window.location.reload();
-                            } else {
-                                reloadBtn.innerHTML = '<i class="bi bi-arrow-clockwise animate-spin"></i> <span>Recargando en ' + countdown + 's...</span>';
-                            }
-                        }, 1000);
-
+                        reloadBtn.className = 'flex-1 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm transition-all shadow-lg hover:shadow-emerald-200 flex items-center justify-center gap-2 cursor-pointer';
+                        reloadBtn.innerHTML = '<i class="bi bi-check-circle-fill text-base"></i> <span>Entrar al Dashboard Actualizado</span>';
                         reloadBtn.onclick = function() {
-                            clearInterval(timer);
+                            reloadBtn.disabled = true;
+                            reloadBtn.innerHTML = '<i class="bi bi-arrow-clockwise animate-spin text-base"></i> <span>Cargando Dashboard...</span>';
                             window.location.reload();
                         };
                     } else {

@@ -1525,9 +1525,29 @@ def restaurar_backup(request):
                 'eventos': Evento.objects.count(),
             }
 
+            # Métricas detalladas de los archivos multimedia y tipos de reunión restaurados
+            media_root = settings.MEDIA_ROOT
+            perfil_fotos_dir = os.path.join(media_root, 'perfil_fotos')
+            qr_codes_dir = os.path.join(media_root, 'qr_codes')
+            logos_dir = os.path.join(media_root, 'logos')
+
+            fotos_count = len(os.listdir(perfil_fotos_dir)) if os.path.exists(perfil_fotos_dir) else 0
+            qr_count = len(os.listdir(qr_codes_dir)) if os.path.exists(qr_codes_dir) else 0
+            logos_count = len(os.listdir(logos_dir)) if os.path.exists(logos_dir) else 0
+
+            media_bytes = _dir_size(media_root) if os.path.exists(media_root) else 0
+            media_size_str = _format_bytes(media_bytes)
+
+            from asistencia.models import TipoEvento
+            tipos_count = TipoEvento.objects.count()
+            faenas_count = Evento.objects.filter(tipo_evento__categoria='FAENA').count()
+            asambleas_count = Evento.objects.filter(tipo_evento__categoria='ASAMBLEA').count()
+
             msg = (
-                f"Sistema restaurado exitosamente: {after['usuarios']} usuarios, "
-                f"{after['asistencias']} asistencias y {after['eventos']} eventos restablecidos."
+                f"Sistema restaurado exitosamente: {after['usuarios']} comuneros, "
+                f"{after['asistencias']} asistencias, {after['eventos']} reuniones "
+                f"({asambleas_count} asambleas, {faenas_count} faenas), "
+                f"{fotos_count} fotos de perfil y {qr_count} códigos QR sincronizados."
             )
             # Preservar al superusuario en la base de datos restaurada y mantener su sesión activa
             try:
@@ -1589,6 +1609,13 @@ def restaurar_backup(request):
                     'usuarios': after['usuarios'],
                     'asistencias': after['asistencias'],
                     'eventos': after['eventos'],
+                    'fotos': fotos_count,
+                    'qr_codes': qr_count,
+                    'logos': logos_count,
+                    'media_size': media_size_str,
+                    'faenas': faenas_count,
+                    'asambleas': asambleas_count,
+                    'tipos_evento': tipos_count,
                 })
 
         except Exception as e:

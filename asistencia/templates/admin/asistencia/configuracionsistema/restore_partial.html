@@ -249,29 +249,47 @@
                 </div>
                 
                 <div class="row text-center mb-3">
-                    <div class="col-4">
-                        <div class="bg-white p-3 rounded border shadow-sm">
-                            <span id="adm-stat-u" class="d-block font-weight-bold text-dark" style="font-size: 22px; color: #1e293b;">0</span>
-                            <small class="text-muted text-uppercase font-weight-bold" style="font-size: 10px; letter-spacing: 0.05em;">Usuarios</small>
+                    <div class="col-4 col-md-2 mb-2">
+                        <div class="bg-white p-2.5 rounded border shadow-sm">
+                            <span id="adm-stat-u" class="d-block font-weight-bold text-dark" style="font-size: 20px; color: #1e293b;">0</span>
+                            <small class="text-muted text-uppercase font-weight-bold" style="font-size: 9.5px;">Usuarios</small>
                         </div>
                     </div>
-                    <div class="col-4">
-                        <div class="bg-white p-3 rounded border shadow-sm">
-                            <span id="adm-stat-a" class="d-block font-weight-bold text-dark" style="font-size: 22px; color: #1e293b;">0</span>
-                            <small class="text-muted text-uppercase font-weight-bold" style="font-size: 10px; letter-spacing: 0.05em;">Asistencias</small>
+                    <div class="col-4 col-md-2 mb-2">
+                        <div class="bg-white p-2.5 rounded border shadow-sm">
+                            <span id="adm-stat-a" class="d-block font-weight-bold text-dark" style="font-size: 20px; color: #1e293b;">0</span>
+                            <small class="text-muted text-uppercase font-weight-bold" style="font-size: 9.5px;">Asistencias</small>
                         </div>
                     </div>
-                    <div class="col-4">
-                        <div class="bg-white p-3 rounded border shadow-sm">
-                            <span id="adm-stat-e" class="d-block font-weight-bold text-dark" style="font-size: 22px; color: #1e293b;">0</span>
-                            <small class="text-muted text-uppercase font-weight-bold" style="font-size: 10px; letter-spacing: 0.05em;">Eventos</small>
+                    <div class="col-4 col-md-2 mb-2">
+                        <div class="bg-white p-2.5 rounded border shadow-sm">
+                            <span id="adm-stat-e" class="d-block font-weight-bold text-dark" style="font-size: 20px; color: #1e293b;">0</span>
+                            <small class="text-muted text-uppercase font-weight-bold" style="font-size: 9.5px;">Eventos</small>
+                        </div>
+                    </div>
+                    <div class="col-4 col-md-2 mb-2">
+                        <div class="bg-white p-2.5 rounded border shadow-sm">
+                            <span id="adm-stat-f" class="d-block font-weight-bold text-success" style="font-size: 20px;">0</span>
+                            <small class="text-muted text-uppercase font-weight-bold" style="font-size: 9.5px;">Fotos</small>
+                        </div>
+                    </div>
+                    <div class="col-4 col-md-2 mb-2">
+                        <div class="bg-white p-2.5 rounded border shadow-sm">
+                            <span id="adm-stat-q" class="d-block font-weight-bold text-primary" style="font-size: 20px;">0</span>
+                            <small class="text-muted text-uppercase font-weight-bold" style="font-size: 9.5px;">Carnets QR</small>
+                        </div>
+                    </div>
+                    <div class="col-4 col-md-2 mb-2">
+                        <div class="bg-white p-2.5 rounded border shadow-sm">
+                            <span id="adm-stat-m" class="d-block font-weight-bold text-dark" style="font-size: 20px; color: #1e293b;">0 MB</span>
+                            <small class="text-muted text-uppercase font-weight-bold" style="font-size: 9.5px;">Multimedia</small>
                         </div>
                     </div>
                 </div>
 
-                <div class="text-center">
+                <div class="text-center mt-3">
                     <button type="button" class="btn btn-success font-weight-bold px-4 py-2" style="border-radius: 8px;" onclick="window.location.reload();">
-                        <i class="fas fa-sync-alt mr-1"></i> Recargar Página del Sistema
+                        <i class="fas fa-check-circle mr-1"></i> Continuar al Sistema
                     </button>
                 </div>
             </div>
@@ -498,16 +516,21 @@
                     progressStage.innerHTML = '<i class="fas fa-check-circle text-success mr-1"></i> ¡Proceso Completado!';
                     progressBar.className = 'progress-bar bg-success font-weight-bold';
 
-                    successMsg.textContent = resp.message || 'Restauración completada satisfactoriamente.';
+                    successMsg.textContent = resp.message || 'Restauración completada satisfactoriamente con todos los datos y fotos.';
                     statU.textContent = resp.usuarios !== undefined ? resp.usuarios : '-';
                     statA.textContent = resp.asistencias !== undefined ? resp.asistencias : '-';
                     statE.textContent = resp.eventos !== undefined ? resp.eventos : '-';
 
-                    successBox.style.display = 'block';
+                    var statF = document.getElementById('adm-stat-f');
+                    if (statF) statF.textContent = resp.fotos !== undefined ? resp.fotos : '-';
 
-                    setTimeout(function() {
-                        window.location.reload();
-                    }, 4000);
+                    var statQ = document.getElementById('adm-stat-q');
+                    if (statQ) statQ.textContent = resp.qr_codes !== undefined ? resp.qr_codes : '-';
+
+                    var statM = document.getElementById('adm-stat-m');
+                    if (statM) statM.textContent = resp.media_size !== undefined ? resp.media_size : '-';
+
+                    successBox.style.display = 'block';
                 } else {
                     var errText = 'Error durante la restauración.';
                     try {
