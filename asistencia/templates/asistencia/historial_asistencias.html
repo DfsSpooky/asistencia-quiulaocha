@@ -7,68 +7,98 @@
 {% endblock title %}
 {% block content %}
     <div class="space-y-8 animate-fade-in pb-20">
-        <!-- Header with Yellow/Global Branding -->
-        <div class="relative overflow-hidden rounded-[3rem] bg-gradient-to-br from-slate-900 via-slate-800 to-primary-900 p-10 text-white shadow-2xl">
-            <div class="absolute -right-20 -top-20 h-80 w-80 rounded-full bg-primary-500/10 blur-[100px]"></div>
-            <div class="absolute -left-20 -bottom-20 h-80 w-80 rounded-full bg-emerald-500/10 blur-[100px]"></div>
-            <div class="relative flex flex-col lg:flex-row lg:items-center justify-between gap-8">
-                <div>
-                    <nav class="flex items-center gap-2 text-primary-300 text-[10px] font-black uppercase tracking-[0.3em] mb-4">
-                        <span class="opacity-50">Administración</span>
-                        <i class="bi bi-chevron-right text-[8px]"></i>
-                        <span>Centro de Reportes</span>
-                    </nav>
-                    <h2 class="text-5xl font-black tracking-tighter leading-none mb-4">
-                        Historial <span class="bg-gradient-to-r from-primary-400 to-amber-400 bg-clip-text text-transparent">Digital</span>
+        <!-- Header Hero Rediseñado - Premium & Executive -->
+        <div class="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-6 sm:p-8 lg:p-10 text-white shadow-2xl border border-slate-800/80">
+            <!-- Glows decorativos sutiles -->
+            <div class="absolute -right-16 -top-16 h-72 w-72 rounded-full bg-amber-500/10 blur-[90px] pointer-events-none"></div>
+            <div class="absolute -left-16 -bottom-16 h-72 w-72 rounded-full bg-emerald-500/10 blur-[90px] pointer-events-none"></div>
+            
+            <div class="relative z-10 flex flex-col xl:flex-row xl:items-center justify-between gap-8">
+                <!-- Branding & Título -->
+                <div class="space-y-3 max-w-xl">
+                    <div class="flex items-center gap-2">
+                        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[10px] font-black uppercase tracking-[0.2em]">
+                            <i class="bi bi-shield-check"></i>
+                            Administración Comunal
+                        </span>
+                        <span class="text-slate-600">•</span>
+                        <span class="text-xs font-bold text-slate-400 uppercase tracking-widest">Centro de Reportes</span>
+                    </div>
+
+                    <h2 class="text-4xl sm:text-5xl font-black tracking-tight leading-tight">
+                        Historial <span class="bg-gradient-to-r from-amber-400 via-primary-300 to-yellow-200 bg-clip-text text-transparent">Digital</span>
                     </h2>
-                    <div class="flex items-center gap-4 text-slate-400 font-medium">
-                        <div class="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-full border border-white/10 backdrop-blur-md text-xs">
-                             <span class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                             Control de Asistencias e Inasistencias
-                        </div>
+
+                    <div class="flex items-center gap-3 text-slate-400 text-xs font-medium">
+                        <span class="relative flex h-2.5 w-2.5">
+                            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                        </span>
+                        <span>Control Centralizado de Asistencias, Inasistencias y Regularizaciones</span>
                     </div>
                 </div>
-                <!-- Global Actions -->
-                <div class="flex flex-wrap items-center gap-3">
+
+                <!-- Botones de Acción Globales - Grid Balanceado -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5 w-full xl:w-auto xl:min-w-[620px]">
+                    <!-- Botón 1: Regularizar Pendientes -->
                     {% if perms.asistencia.can_manage_users or user.is_staff %}
                     <button type="button"
-                            onclick="window.dispatchEvent(new CustomEvent('open-regularizar-modal'))"
-                            class="group flex items-center gap-4 px-8 py-5 bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 rounded-[2rem] font-black transition-all duration-300 shadow-xl shadow-amber-500/25 transform hover:-translate-y-1 active:scale-95">
-                        <div class="h-10 w-10 bg-slate-950 text-amber-400 rounded-xl flex items-center justify-center group-hover:rotate-12 transition-transform shadow-md">
-                            <i class="bi bi-person-check-fill text-xl"></i>
-                        </div>
-                        <div class="text-left">
-                            <div class="flex items-center gap-2 mb-1">
-                                <p class="text-[10px] uppercase tracking-widest leading-none opacity-75">Validar Asistencias</p>
-                                {% if total_pendientes_global > 0 %}
-                                    <span class="px-2 py-0.5 rounded-full bg-slate-950 text-amber-300 text-[9px] font-black leading-none">
-                                        {{ total_pendientes_global }}
-                                    </span>
-                                {% endif %}
+                            onclick="openRegularizarModal()"
+                            class="group relative flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 transition-all duration-300 shadow-xl shadow-amber-500/20 transform hover:-translate-y-1 active:scale-95 text-left border border-amber-400/30">
+                        <div class="flex items-center justify-between gap-2 mb-3">
+                            <div class="h-9 w-9 rounded-xl bg-slate-950/15 flex items-center justify-center text-slate-950 text-base font-black group-hover:scale-110 transition-transform">
+                                <i class="bi bi-person-check-fill"></i>
                             </div>
-                            <p class="text-sm leading-none font-black">MARCAR PENDIENTES</p>
+                            {% if total_pendientes_global > 0 %}
+                                <span class="px-2 py-0.5 rounded-full bg-slate-950 text-amber-300 text-[10px] font-black tracking-wider leading-none shadow-sm animate-pulse">
+                                    {{ total_pendientes_global }} PENDIENTES
+                                </span>
+                            {% else %}
+                                <span class="px-2 py-0.5 rounded-full bg-slate-950/20 text-slate-900 text-[10px] font-black leading-none">
+                                    AL DÍA
+                                </span>
+                            {% endif %}
+                        </div>
+                        <div>
+                            <p class="text-[9px] uppercase tracking-widest font-black opacity-80 mb-0.5">Validar Salidas</p>
+                            <h6 class="text-sm font-black leading-tight">Marcar Pendientes</h6>
                         </div>
                     </button>
                     {% endif %}
-                    <button onclick="descargarReporteGlobal()"
+
+                    <!-- Botón 2: Reporte Global PDF -->
+                    <button type="button"
+                            onclick="descargarReporteGlobal()"
                             data-global-report-url="{% url 'descargar_reporte_global_pdf' %}"
-                       class="group flex items-center gap-4 px-8 py-5 bg-primary-500 hover:bg-primary-400 text-slate-900 rounded-[2rem] font-black transition-all duration-300 shadow-xl shadow-primary-500/20 transform hover:-translate-y-1 active:scale-95">
-                        <div class="h-10 w-10 bg-slate-900 text-white rounded-xl flex items-center justify-center group-hover:rotate-12 transition-transform">
-                            <i class="bi bi-file-earmark-pdf-fill text-xl"></i>
+                            class="group relative flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-rose-600 to-red-700 hover:from-rose-500 hover:to-red-600 text-white transition-all duration-300 shadow-xl shadow-rose-600/20 transform hover:-translate-y-1 active:scale-95 text-left border border-rose-500/30">
+                        <div class="flex items-center justify-between gap-2 mb-3">
+                            <div class="h-9 w-9 rounded-xl bg-white/20 flex items-center justify-center text-white text-base font-black group-hover:rotate-12 transition-transform">
+                                <i class="bi bi-file-earmark-pdf-fill"></i>
+                            </div>
+                            <span class="px-2 py-0.5 rounded-full bg-white/20 text-rose-100 text-[10px] font-black tracking-wider leading-none">
+                                PDF ANUAL
+                            </span>
                         </div>
-                        <div class="text-left">
-                            <p class="text-[10px] uppercase tracking-widest leading-none opacity-60 mb-1">Exportar Todo</p>
-                            <p class="text-sm leading-none">REPORTE GLOBAL PDF</p>
+                        <div>
+                            <p class="text-[9px] uppercase tracking-widest font-black text-rose-200 mb-0.5">Exportar Todo</p>
+                            <h6 class="text-sm font-black leading-tight">Reporte Global PDF</h6>
                         </div>
                     </button>
+
+                    <!-- Botón 3: Sábana Global Excel -->
                     <a href="{% url 'exportar_reporte_global_excel' %}"
-                       class="group flex items-center gap-4 px-8 py-5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-[2rem] font-black transition-all duration-300 shadow-xl shadow-emerald-600/20 transform hover:-translate-y-1 active:scale-95">
-                        <div class="h-10 w-10 bg-emerald-800 text-white rounded-xl flex items-center justify-center group-hover:rotate-12 transition-transform">
-                            <i class="bi bi-file-earmark-excel-fill text-xl"></i>
+                       class="group relative flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white transition-all duration-300 shadow-xl shadow-emerald-600/20 transform hover:-translate-y-1 active:scale-95 text-left border border-emerald-500/30">
+                        <div class="flex items-center justify-between gap-2 mb-3">
+                            <div class="h-9 w-9 rounded-xl bg-white/20 flex items-center justify-center text-white text-base font-black group-hover:rotate-12 transition-transform">
+                                <i class="bi bi-file-earmark-excel-fill"></i>
+                            </div>
+                            <span class="px-2 py-0.5 rounded-full bg-white/20 text-emerald-100 text-[10px] font-black tracking-wider leading-none">
+                                EXCEL
+                            </span>
                         </div>
-                        <div class="text-left">
-                            <p class="text-[10px] uppercase tracking-widest leading-none opacity-80 mb-1">Matriz y Consolidado</p>
-                            <p class="text-sm leading-none">SÁBANA GLOBAL EXCEL</p>
+                        <div>
+                            <p class="text-[9px] uppercase tracking-widest font-black text-emerald-200 mb-0.5">Matriz y Padrón</p>
+                            <h6 class="text-sm font-black leading-tight">Sábana Anual Excel</h6>
                         </div>
                     </a>
                 </div>

@@ -1,51 +1,41 @@
-<!-- Modal Regularizar Asistencias Pendientes -->
-<div x-data="regularizarPendientesModal()"
+<!-- Modal Regularizar Asistencias Pendientes (Diseño Moderno & Fail-Safe) -->
+<div id="modal-regularizar-pendientes"
+     x-data="regularizarPendientesModal()"
      x-init="initModal()"
-     x-cloak
-     class="relative z-50">
+     :class="{ 'hidden': !isOpen }"
+     class="hidden fixed inset-0 z-[999] overflow-y-auto"
+     role="dialog"
+     aria-modal="true">
 
-    <!-- Modal Backdrop and Container -->
-    <div x-show="isOpen"
-         x-transition:enter="ease-out duration-300"
-         x-transition:enter-start="opacity-0"
-         x-transition:enter-end="opacity-100"
-         x-transition:leave="ease-in duration-200"
-         x-transition:leave-start="opacity-100"
-         x-transition:leave-end="opacity-0"
-         class="fixed inset-0 bg-slate-950/75 backdrop-blur-md transition-opacity"></div>
+    <!-- Backdrop con blur moderno -->
+    <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-md transition-opacity"
+         @click="if(!submitting) close()"></div>
 
-    <div x-show="isOpen"
-         x-transition:enter="ease-out duration-300"
-         x-transition:enter-start="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-         x-transition:enter-end="opacity-100 translate-y-0 sm:scale-100"
-         x-transition:leave="ease-in duration-200"
-         x-transition:leave-start="opacity-100 translate-y-0 sm:scale-100"
-         x-transition:leave-end="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-         class="fixed inset-0 z-50 overflow-y-auto p-4 sm:p-6 lg:p-8 flex items-center justify-center">
-
-        <div class="relative w-full max-w-4xl bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[90vh]"
+    <!-- Contenedor centrado -->
+    <div class="relative min-h-screen flex items-center justify-center p-4 sm:p-6 lg:p-8">
+        <div class="relative w-full max-w-4xl bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[90vh] my-auto animate-fade-in"
              @click.outside="if(!submitting) close()">
 
-            <!-- Header con gradiente institucional y acento ámbar -->
-            <div class="relative bg-gradient-to-br from-slate-900 via-slate-800 to-amber-950 p-6 sm:p-8 text-white shrink-0">
-                <div class="absolute -right-10 -top-10 h-40 w-40 rounded-full bg-amber-500/10 blur-[50px] pointer-events-none"></div>
+            <!-- Header con gradiente ámbar/slate institucional -->
+            <div class="relative bg-gradient-to-br from-slate-950 via-slate-900 to-amber-950 p-6 sm:p-8 text-white shrink-0 border-b border-white/5">
+                <div class="absolute -right-10 -top-10 h-44 w-44 rounded-full bg-amber-500/15 blur-[60px] pointer-events-none"></div>
                 <div class="flex items-start justify-between gap-4 relative z-10">
                     <div class="flex items-center gap-4">
-                        <div class="h-14 w-14 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center shadow-lg shadow-amber-500/25 shrink-0">
-                            <i class="bi bi-person-check-fill text-2xl"></i>
+                        <div class="h-14 w-14 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center shadow-lg shadow-amber-500/30 shrink-0 font-black text-2xl">
+                            <i class="bi bi-person-check-fill"></i>
                         </div>
                         <div>
                             <div class="flex items-center gap-2">
                                 <span class="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-black uppercase tracking-widest border border-amber-500/30">
-                                    Regularización Operativa
+                                    Regularización Rápida
                                 </span>
-                                <span x-show="totalPendientesGlobal > 0" class="text-xs text-amber-400 font-bold" x-text="`${totalPendientesGlobal} pendientes en total`"></span>
+                                <span x-show="totalPendientesGlobal > 0" class="text-xs text-amber-400 font-bold" x-text="`${totalPendientesGlobal} comuneros pendientes`"></span>
                             </div>
                             <h3 class="text-2xl sm:text-3xl font-black tracking-tight text-white mt-1">
                                 Validar Asistencias Pendientes
                             </h3>
                             <p class="text-xs text-slate-300 mt-1 max-w-xl">
-                                Comuneros que marcaron ingreso pero no registraron salida (por salir por otra puerta o cierre de asamblea). Valídalos aquí como asistencia completa.
+                                Comuneros que marcaron ingreso pero no registraron su salida (salida por otra puerta o fin de reunión). Puedes completarlos para que figuren con asistencia normal.
                             </p>
                         </div>
                     </div>
@@ -58,35 +48,35 @@
                 </div>
             </div>
 
-            <!-- Cuerpo del Modal (Scrolleable) -->
+            <!-- Cuerpo del Modal -->
             <div class="p-6 sm:p-8 overflow-y-auto space-y-6 flex-1">
 
                 <!-- Alert de Notificación / Mensajes de Éxito o Error -->
                 <div x-show="errorMessage" x-cloak class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl flex items-center gap-3 text-xs font-bold">
-                    <i class="bi bi-exclamation-triangle-fill text-lg text-red-500"></i>
+                    <i class="bi bi-exclamation-triangle-fill text-lg text-red-500 shrink-0"></i>
                     <span x-text="errorMessage"></span>
                 </div>
 
-                <div x-show="successMessage" x-cloak class="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl flex items-center gap-3 text-xs font-bold animate-fade-in">
-                    <i class="bi bi-check-circle-fill text-lg text-emerald-600"></i>
+                <div x-show="successMessage" x-cloak class="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl flex items-center gap-3 text-xs font-bold">
+                    <i class="bi bi-check-circle-fill text-lg text-emerald-600 shrink-0"></i>
                     <span x-text="successMessage"></span>
                 </div>
 
                 <!-- Estado de Carga Inicial -->
                 <div x-show="loadingEventos" class="py-16 text-center space-y-3">
                     <div class="inline-block h-8 w-8 animate-spin rounded-full border-4 border-amber-500 border-r-transparent"></div>
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-widest">Cargando eventos con comuneros pendientes...</p>
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-widest">Consultando eventos con comuneros pendientes...</p>
                 </div>
 
                 <!-- Estado cuando NO hay ningún evento con pendientes -->
-                <div x-show="!loadingEventos && eventos.length === 0" x-cloak class="py-16 text-center space-y-4">
+                <div x-show="!loadingEventos && eventos.length === 0" x-cloak class="py-14 text-center space-y-4">
                     <div class="h-20 w-20 mx-auto rounded-3xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-4xl shadow-inner">
                         <i class="bi bi-check2-all"></i>
                     </div>
                     <div>
-                        <h4 class="text-xl font-black text-slate-900">¡Todo en orden!</h4>
+                        <h4 class="text-xl font-black text-slate-900">¡Todo al día!</h4>
                         <p class="text-xs font-medium text-slate-500 max-w-md mx-auto mt-1">
-                            No se encontraron eventos con comuneros pendientes de salida. Todos los ingresos cuentan con su registro de salida o confirmación correspondiente.
+                            No se encontraron reuniones ni faenas con comuneros pendientes de salida. Todos los registros cuentan con su salida o confirmación correspondiente.
                         </p>
                     </div>
                     <button type="button" @click="close()" class="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black uppercase tracking-wider transition-colors">
@@ -95,7 +85,7 @@
                 </div>
 
                 <!-- Contenido Principal: Cuando hay eventos -->
-                <div x-show="!loadingEventos && eventos.length > 0" x-cloak class="space-y-6">
+                <div x-show="!loadingEventos && eventos.length > 0" class="space-y-6">
 
                     <!-- Paso 1: Selector de Evento -->
                     <div class="bg-slate-50 border border-slate-200/80 rounded-2xl p-5 space-y-3">
@@ -112,16 +102,16 @@
                                 class="w-full h-12 px-4 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none transition-all shadow-sm">
                             <option value="">-- Elige una reunión o faena comunal --</option>
                             <template x-for="ev in eventos" :key="ev.id">
-                                <option :value="ev.id" x-text="`${ev.fecha} - ${ev.nombre} (${ev.total_pendientes} comuneros pendientes)`"></option>
+                                <option :value="ev.id" x-text="`${ev.fecha} - ${ev.nombre} (${ev.total_pendientes} pendientes)`"></option>
                             </template>
                         </select>
                     </div>
 
                     <!-- Paso 2: Detalles del evento y Parámetros de Regularización -->
-                    <div x-show="selectedEventoId && !loadingPendientes" x-cloak class="space-y-6">
+                    <div x-show="selectedEventoId && !loadingPendientes" class="space-y-6">
 
                         <!-- Resumen del evento seleccionado -->
-                        <div class="flex flex-wrap items-center justify-between gap-4 p-4 bg-amber-50/60 border border-amber-200/60 rounded-2xl">
+                        <div class="flex flex-wrap items-center justify-between gap-4 p-4 bg-amber-50/70 border border-amber-200/70 rounded-2xl">
                             <div class="flex items-center gap-3">
                                 <span class="px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest text-white shadow-sm"
                                       :style="`background-color: ${selectedEvento?.color_badge || '#1e40af'}`"
@@ -132,8 +122,8 @@
                                 </div>
                             </div>
                             <div class="text-right">
-                                <span class="text-[10px] uppercase font-bold text-amber-700">Pendientes en este evento</span>
-                                <p class="text-xl font-black text-amber-600 leading-none" x-text="`${pendientes.length} comuneros`"></p>
+                                <span class="text-[10px] uppercase font-bold text-amber-800">Total en este evento</span>
+                                <p class="text-2xl font-black text-amber-600 leading-none" x-text="`${pendientes.length} comuneros`"></p>
                             </div>
                         </div>
 
@@ -148,20 +138,20 @@
                                        x-model="horaSalida"
                                        class="w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none">
                                 <p class="text-[9px] text-slate-400 font-semibold leading-tight">
-                                    Hora que figurará en los reportes de salida y constancias.
+                                    Hora que figurará en los reportes oficiales y constancias.
                                 </p>
                             </div>
                             <div class="sm:col-span-7 space-y-1.5">
                                 <label class="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
                                     <i class="bi bi-chat-left-text-fill text-amber-500"></i>
-                                    Nota / Observación para Auditoría
+                                    Nota para el Registro de Auditoría
                                 </label>
                                 <input type="text"
                                        x-model="observacion"
-                                       placeholder="Ej: Salida no marcada en mesa - Regularizado en asamblea"
+                                       placeholder="Ej: Regularizado en asamblea - Salida por otra puerta"
                                        class="w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none">
                                 <p class="text-[9px] text-slate-400 font-semibold leading-tight">
-                                    Queda guardado en el historial de acciones con tu usuario.
+                                    Queda registrado con tu usuario para respaldo de directiva.
                                 </p>
                             </div>
                         </div>
@@ -174,19 +164,19 @@
                                         <span class="h-5 w-5 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center text-[10px] font-black">2</span>
                                         Comuneros a Regularizar
                                     </label>
-                                    <span class="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold"
+                                    <span class="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-black"
                                           x-text="`${selectedIds.length} de ${pendientes.length} seleccionados`"></span>
                                 </div>
                                 <div class="flex items-center gap-2">
                                     <button type="button"
                                             @click="selectAll()"
-                                            class="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-colors">
-                                        Todos
+                                            class="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors">
+                                        Seleccionar Todos
                                     </button>
                                     <button type="button"
                                             @click="deselectAll()"
-                                            class="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-colors">
-                                        Ninguno
+                                            class="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors">
+                                        Deseleccionar
                                     </button>
                                 </div>
                             </div>
@@ -196,14 +186,14 @@
                                 <i class="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
                                 <input type="text"
                                        x-model="searchQuery"
-                                       placeholder="Buscar por DNI o apellido dentro de la lista..."
+                                       placeholder="Filtrar por DNI, nombre o apellido dentro de la lista..."
                                        class="w-full h-10 pl-10 pr-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-amber-500 outline-none">
                             </div>
 
                             <!-- Lista con scroll -->
                             <div class="border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100 max-h-72 overflow-y-auto bg-white shadow-inner">
                                 <template x-for="item in filteredPendientes()" :key="item.asistencia_id">
-                                    <label class="flex items-center gap-4 p-3.5 hover:bg-amber-50/40 cursor-pointer transition-colors select-none">
+                                    <label class="flex items-center gap-4 p-3.5 hover:bg-amber-50/50 cursor-pointer transition-colors select-none">
                                         <input type="checkbox"
                                                :value="item.asistencia_id"
                                                x-model="selectedIds"
@@ -271,7 +261,7 @@
                     <button type="button"
                             @click="submitRegularizacion()"
                             :disabled="submitting || !selectedEventoId || selectedIds.length === 0"
-                            class="w-full sm:w-auto flex items-center justify-center gap-3 px-8 py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black rounded-xl shadow-lg shadow-amber-500/25 transition-all transform hover:-translate-y-0.5 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none">
+                            class="w-full sm:w-auto flex items-center justify-center gap-3 px-8 py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-xl shadow-lg shadow-amber-500/30 transition-all transform hover:-translate-y-0.5 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none">
                         <template x-if="submitting">
                             <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-slate-950 border-r-transparent"></span>
                         </template>
@@ -289,10 +279,10 @@
 
 </div>
 
-<!-- Alpine Logic Component -->
+<!-- Script del Modal con Soporte Híbrido (Alpine + Vanilla JS Fallback) -->
 <script>
-    function regularizarPendientesModal() {
-        return {
+    (function() {
+        const componentDefinition = {
             isOpen: false,
             loadingEventos: false,
             loadingPendientes: false,
@@ -303,26 +293,22 @@
             pendientes: [],
             selectedIds: [],
             horaSalida: '13:00',
-            observacion: 'Regularización de asistencia - Comunero marcó ingreso pero no salida',
+            observacion: 'Regularización de asistencia - Salida no marcada en puerta',
             searchQuery: '',
             successMessage: '',
             errorMessage: '',
             totalPendientesGlobal: parseInt('{{ total_pendientes_global|default:0 }}') || 0,
 
             initModal() {
-                // Escuchar evento global para abrir el modal desde cualquier botón de la interfaz
                 window.addEventListener('open-regularizar-modal', (e) => {
                     this.open(e.detail?.eventoId);
                 });
-
-                // Si la URL contiene el parámetro ?abrir_regularizar=1, abrir automáticamente
-                const urlParams = new URLSearchParams(window.location.search);
-                if (urlParams.get('abrir_regularizar') === '1') {
-                    this.open();
-                }
             },
 
             async open(preselectedEventoId = null) {
+                const modalEl = document.getElementById('modal-regularizar-pendientes');
+                if (modalEl) modalEl.classList.remove('hidden');
+
                 this.isOpen = true;
                 this.errorMessage = '';
                 this.successMessage = '';
@@ -338,7 +324,6 @@
                         this.eventos = data.eventos || [];
                         this.totalPendientesGlobal = data.total_pendientes_global || 0;
 
-                        // Si se pasó un ID o hay al menos un evento, preseleccionarlo
                         if (preselectedEventoId) {
                             this.selectedEventoId = preselectedEventoId;
                             this.onEventoSelected();
@@ -361,6 +346,8 @@
                 this.isOpen = false;
                 this.searchQuery = '';
                 this.errorMessage = '';
+                const modalEl = document.getElementById('modal-regularizar-pendientes');
+                if (modalEl) modalEl.classList.add('hidden');
             },
 
             async onEventoSelected() {
@@ -384,7 +371,6 @@
                     if (data.success) {
                         this.selectedEvento = data.evento;
                         this.pendientes = data.pendientes || [];
-                        // Preseleccionar TODOS por defecto para agilizar el trabajo
                         this.selectedIds = this.pendientes.map(p => p.asistencia_id);
                         if (data.sugerencia_hora_salida) {
                             this.horaSalida = data.sugerencia_hora_salida;
@@ -455,11 +441,8 @@
                     }
 
                     this.successMessage = data.message || `¡Éxito! Se regularizó la asistencia de ${data.count} comuneros.`;
-
-                    // Actualizar contadores
                     this.totalPendientesGlobal = Math.max(0, this.totalPendientesGlobal - data.count);
 
-                    // Esperar 1.2 segundos para que el usuario vea el mensaje y recargar la página para reflejar los reportes
                     setTimeout(() => {
                         window.location.reload();
                     }, 1400);
@@ -470,5 +453,51 @@
                 }
             }
         };
-    }
+
+        // Función global de fábrica para Alpine
+        window.regularizarPendientesModal = function() {
+            return componentDefinition;
+        };
+
+        // Registrar en Alpine si está disponible
+        if (window.Alpine) {
+            Alpine.data('regularizarPendientesModal', () => componentDefinition);
+        } else {
+            document.addEventListener('alpine:init', () => {
+                Alpine.data('regularizarPendientesModal', () => componentDefinition);
+            });
+        }
+
+        // Función directa para abrir el modal desde cualquier botón
+        window.openRegularizarModal = function(eventoId) {
+            const modalEl = document.getElementById('modal-regularizar-pendientes');
+            if (modalEl) {
+                modalEl.classList.remove('hidden');
+                if (window.Alpine) {
+                    const alpineData = Alpine.$data(modalEl);
+                    if (alpineData && typeof alpineData.open === 'function') {
+                        alpineData.open(eventoId);
+                        return;
+                    }
+                }
+            }
+            window.dispatchEvent(new CustomEvent('open-regularizar-modal', { detail: { eventoId } }));
+        };
+
+        // Auto-abrir si la URL tiene ?abrir_regularizar=1
+        function checkAutoOpen() {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('abrir_regularizar') === '1') {
+                setTimeout(() => {
+                    window.openRegularizarModal();
+                }, 200);
+            }
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', checkAutoOpen);
+        } else {
+            checkAutoOpen();
+        }
+    })();
 </script>

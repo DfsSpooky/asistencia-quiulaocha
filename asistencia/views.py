@@ -1785,12 +1785,14 @@ def confirmar_asistencia(request, asistencia_id):
 
 
 @login_required
-@permission_required('asistencia.can_manage_users', raise_exception=True)
 def api_eventos_con_pendientes(request):
     """
     Retorna la lista de eventos que tienen comuneros pendientes de salida,
     junto con el contador de pendientes por cada evento y el total global.
     """
+    if not (request.user.is_superuser or request.user.is_staff or request.user.has_perm('asistencia.can_manage_users')):
+        return JsonResponse({'error': 'No tiene permisos para acceder a la regularización.'}, status=403)
+
     eventos_qs = Evento.objects.filter(
         asistencia__hora_ingreso__isnull=False,
         asistencia__hora_salida__isnull=True,
@@ -1827,11 +1829,13 @@ def api_eventos_con_pendientes(request):
 
 
 @login_required
-@permission_required('asistencia.can_manage_users', raise_exception=True)
 def api_evento_pendientes(request, evento_id):
     """
     Retorna el listado de comuneros con ingreso pero sin salida de un evento específico.
     """
+    if not (request.user.is_superuser or request.user.is_staff or request.user.has_perm('asistencia.can_manage_users')):
+        return JsonResponse({'error': 'No tiene permisos para acceder a la regularización.'}, status=403)
+
     evento = get_object_or_404(Evento, id=evento_id)
 
     pendientes_qs = Asistencia.objects.filter(
@@ -1883,11 +1887,13 @@ def api_evento_pendientes(request, evento_id):
 
 
 @login_required
-@permission_required('asistencia.can_manage_users', raise_exception=True)
 def regularizar_pendientes_evento(request):
     """
     Endpoint POST para marcar las asistencias pendientes de un evento como completadas.
     """
+    if not (request.user.is_superuser or request.user.is_staff or request.user.has_perm('asistencia.can_manage_users')):
+        return JsonResponse({'error': 'No tiene permisos para regularizar asistencias.'}, status=403)
+
     if request.method != 'POST':
         return JsonResponse({'error': 'Método no permitido. Se requiere POST.'}, status=405)
 
