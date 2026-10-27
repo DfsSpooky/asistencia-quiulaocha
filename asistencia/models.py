@@ -192,6 +192,15 @@ class Evento(models.Model):
     def __str__(self):
         return f"{self.nombre} ({self.fecha})"
 
+    class Meta:
+        ordering = ['-fecha', '-id']
+        verbose_name = "Evento"
+        verbose_name_plural = "Eventos"
+        indexes = [
+            models.Index(fields=['fecha']),
+            models.Index(fields=['activo']),
+        ]
+
 class Usuario(models.Model):
     FOTO_PERFIL_SIZE = (320, 320)
     FOTO_PERFIL_QUALITY = 72
@@ -327,6 +336,8 @@ class Usuario(models.Model):
         ]
         indexes = [
             models.Index(fields=['dni']),
+            models.Index(fields=['estado']),
+            models.Index(fields=['apellido', 'nombre']),
         ]
 
 class Asistencia(models.Model):
@@ -364,6 +375,9 @@ class Asistencia(models.Model):
             models.Index(fields=['fecha']),
             models.Index(fields=['usuario']),
             models.Index(fields=['evento']),
+            models.Index(fields=['evento', 'hora_salida']),
+            models.Index(fields=['evento', 'es_justificada']),
+            models.Index(fields=['usuario', 'evento']),
         ]
         constraints = [
             models.UniqueConstraint(
@@ -444,6 +458,10 @@ class Justificacion(models.Model):
                 fields=['usuario', 'evento'],
                 name='uniq_justificacion_usuario_evento',
             ),
+        ]
+        indexes = [
+            models.Index(fields=['evento', 'estado']),
+            models.Index(fields=['usuario', 'estado']),
         ]
 
 class LogAccion(models.Model):
@@ -549,6 +567,8 @@ class ConfiguracionSistema(models.Model):
     )
 
     def save(self, *args, **kwargs):
+        from django.core.cache import cache
+        cache.delete('sistema_config')
         if ConfiguracionSistema.objects.exists() and not self.pk:
             raise ValidationError("Solo puede existir una configuración del sistema. Edita la existente en lugar de crear una nueva.")
         super().save(*args, **kwargs)
@@ -591,6 +611,11 @@ class ConfiguracionSistema(models.Model):
                 super().save(*args, **kwargs)
             except Exception as e:
                 print(f"Error al procesar avatar de carnet por defecto: {e}")
+
+    def delete(self, *args, **kwargs):
+        from django.core.cache import cache
+        cache.delete('sistema_config')
+        super().delete(*args, **kwargs)
 
     def __str__(self):
         return "Configuración del Sistema"
@@ -651,3 +676,11 @@ class HistorialCarnet(models.Model):
 
     def __str__(self):
         return f"Carnet {self.motivo} - {self.usuario} ({self.estado})"
+
+    class Meta:
+        verbose_name = "Historial de Carnet"
+        verbose_name_plural = "Historial de Carnets"
+        indexes = [
+            models.Index(fields=['usuario', 'estado']),
+            models.Index(fields=['estado_entrega']),
+        ]

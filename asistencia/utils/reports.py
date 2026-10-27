@@ -637,40 +637,51 @@ def _build_excel_data_sheet(
         cell.alignment = align_header
         cell.border = border_bottom_thick
 
+    # Precomputar tipos y formatos de columna para acelerar la generación de filas
+    col_configs = []
+    for h in headers:
+        if h == 'N°':
+            col_configs.append(('NUM', align_center, font_correlativo, None))
+        elif h == 'DNI':
+            col_configs.append(('DNI', align_center, font_data, '@'))
+        elif h in ['FECHA', 'INGRESO', 'SALIDA', 'PUNTUALIDAD', 'CONFIRMADA']:
+            col_configs.append(('CENTER', align_center, font_data, None))
+        elif h in ['ESTADO', 'ESTADO GENERAL', 'ESTADO COMUNAL']:
+            col_configs.append(('STATUS', align_center, font_data, None))
+        else:
+            col_configs.append(('LEFT', align_left, font_data, None))
+
     # Datos en fila 6+
     curr_row = 6
     for idx, row in enumerate(rows_data, 1):
         row_fill = fill_zebra_even if (idx % 2 == 0) else fill_zebra_odd
         
-        for col_idx, value in enumerate(row, 1):
-            cell = ws.cell(row=curr_row, column=col_idx, value=value)
-            cell.font = font_data
+        for col_idx, value in enumerate(row):
+            cell = ws.cell(row=curr_row, column=col_idx + 1, value=value)
+            ctype, align, fnt, num_fmt = col_configs[col_idx]
             cell.border = border_soft
-            cell.fill = row_fill
-            header_name = headers[col_idx - 1]
-            
-            val_str = str(value or '').strip()
-            if header_name == 'N°':
-                cell.alignment = align_center
-                cell.font = font_correlativo
-            elif header_name == 'DNI':
-                cell.number_format = '@'
-                cell.alignment = align_center
-            elif header_name in ['FECHA', 'INGRESO', 'SALIDA', 'PUNTUALIDAD', 'CONFIRMADA']:
-                cell.alignment = align_center
-            elif header_name in ['ESTADO', 'ESTADO GENERAL', 'ESTADO COMUNAL']:
-                cell.alignment = align_center
-                upper_val = val_str.upper()
-                matched_badge = None
-                for k, b in badge_styles.items():
-                    if k in upper_val:
-                        matched_badge = b
-                        break
-                if matched_badge:
-                    cell.fill = matched_badge['fill']
-                    cell.font = matched_badge['font']
+            cell.alignment = align
+
+            if num_fmt:
+                cell.number_format = num_fmt
+
+            if ctype == 'STATUS':
+                val_str = str(value or '').strip().upper()
+                badge = badge_styles.get(val_str)
+                if not badge and val_str:
+                    for k, b in badge_styles.items():
+                        if k in val_str:
+                            badge = b
+                            break
+                if badge:
+                    cell.fill = badge['fill']
+                    cell.font = badge['font']
+                else:
+                    cell.fill = row_fill
+                    cell.font = fnt
             else:
-                cell.alignment = align_left
+                cell.fill = row_fill
+                cell.font = fnt
 
         curr_row += 1
 
@@ -889,17 +900,28 @@ def _build_excel_summary_sheet(ws_resumen, config, evento_nombre, fecha_descarga
     ws_resumen.column_dimensions['G'].width = 18
 
 
-def _build_excel_matrix_sheet(ws_matrix, config, report_data, sorted_users):
+def _build_excel_matrix_sheet(
+    ws_matrix,
+    config,
+    report_data,
+    sorted_users,
+    sheet_title="Matriz de Asambleas",
+    tab_color="0D9488",
+    categoria=None,
+):
     """
-    Construye la Sábana / Matriz Horizontal de Asistencias:
+    Construye la Sábana / Matriz Horizontal de Asistencias por Comunero:
     - Columnas fijas: N°, DNI, Apellidos y Nombres, Condición
-    - Columnas por cada reunión con fecha y nombre
-    - Columnas finales de totales: Total Reuniones, Asistencias, Faltas, Justificadas, % Asistencia, Estado Comunal
+    - Columnas por cada evento con formato claro:
+        * 'Reunión DD/MM/AAAA' para asambleas
+        * 'Faena DD/MM/AAAA' para faenas
+    - Celdas: ASISTIÓ (verde), FALTA (rojo), JUSTIFICADA (azul), EXONERADO (morado), PENDIENTE (ámbar)
+    - Columnas finales de totales según la categoría seleccionada (Asambleas, Faenas o General)
     - Freeze Panes en E6 (fija columnas A-D y fila de encabezados)
     - AutoFiltros en todos los encabezados
     """
-    ws_matrix.title = "Matriz de Asambleas"
-    ws_matrix.sheet_properties.tabColor = "0D9488"
+    ws_matrix.title = sheet_title
+    ws_matrix.sheet_properties.tabColor = tab_color
     ws_matrix.views.sheetView[0].showGridLines = True
 
     font_banner_title = Font(name="Calibri", size=13, bold=True, color="0F172A")
@@ -908,7 +930,7 @@ def _build_excel_matrix_sheet(ws_matrix, config, report_data, sorted_users):
     font_data = Font(name="Calibri", size=9, color="0F172A")
     font_correlativo = Font(name="Calibri", size=9, color="64748B")
 
-    fill_matrix_header = PatternFill(start_color="0F766E", end_color="0F766E", fill_type="solid")
+    fill_matrix_header = PatternFill(start_color=tab_color, end_color=tab_color, fill_type="solid")
     fill_summary_header = PatternFill(start_color="1E293B", end_color="1E293B", fill_type="solid")
     fill_zebra_even = PatternFill(start_color="F8FAFC", end_color="F8FAFC", fill_type="solid")
     fill_zebra_odd = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
@@ -971,6 +993,10 @@ def _build_excel_matrix_sheet(ws_matrix, config, report_data, sorted_users):
             'fill': PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid"),
             'font': Font(name="Calibri", size=9, bold=True, color="991B1B"),
         },
+        'ADEUDA': {
+            'fill': PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid"),
+            'font': Font(name="Calibri", size=9, bold=True, color="991B1B"),
+        },
     }
 
     align_center = Alignment(horizontal="center", vertical="center")
@@ -982,37 +1008,73 @@ def _build_excel_matrix_sheet(ws_matrix, config, report_data, sorted_users):
     ws_matrix.row_dimensions[2].height = 22
     ws_matrix.row_dimensions[3].height = 18
     ws_matrix.row_dimensions[4].height = 8
-    ws_matrix.row_dimensions[5].height = 34
+    ws_matrix.row_dimensions[5].height = 36
+
+    # Filtrar eventos según la categoría deseada
+    if categoria == 'ASAMBLEA':
+        event_list = [ev_data['evento'] for ev_data in report_data if ev_data['evento'].es_asamblea]
+        banner_title = "CONTROL DE ASISTENCIA: ASAMBLEAS Y REUNIONES COMUNALES"
+        banner_sub = f"Control individual por comunero | Total Comuneros: {len(sorted_users)} | Total Asambleas y Reuniones: {len(event_list)}"
+    elif categoria == 'FAENA':
+        event_list = [ev_data['evento'] for ev_data in report_data if ev_data['evento'].es_faena]
+        banner_title = "CONTROL DE ASISTENCIA: FAENAS COMUNALES DE TRABAJO"
+        banner_sub = f"Control individual por comunero | Total Comuneros: {len(sorted_users)} | Total Faenas Comunales: {len(event_list)}"
+    else:
+        event_list = [ev_data['evento'] for ev_data in report_data]
+        banner_title = "SÁBANA GENERAL DE ASISTENCIA (REUNIONES Y FAENAS)"
+        banner_sub = f"Control horizontal de asistencias y faltas por comunero | Total Comuneros: {len(sorted_users)} | Total Eventos: {len(event_list)}"
 
     inst_nombre = (config.nombre_institucion if config else "COMUNIDAD CAMPESINA DE QUIULACOCHA").upper()
-    ws_matrix['A2'] = f"{inst_nombre} - SÁBANA / MATRIZ GENERAL DE ASISTENCIA"
+    ws_matrix['A2'] = f"{inst_nombre} - {banner_title}"
     ws_matrix['A2'].font = font_banner_title
-    ws_matrix['A3'] = f"Control horizontal de asistencias y faltas por comunero | Total Comuneros: {len(sorted_users)} | Total Eventos: {len(report_data)}"
+    ws_matrix['A3'] = banner_sub
     ws_matrix['A3'].font = font_banner_sub
 
     # Base headers
     headers = ['N°', 'DNI', 'APELLIDOS Y NOMBRES', 'CONDICIÓN']
-    
-    # Event headers
-    event_list = [ev_data['evento'] for ev_data in report_data]
-    for ev in event_list:
-        tag = "[FAENA]" if getattr(ev, 'es_faena', False) else "[ASAMB]"
-        ev_title = f"{tag} {ev.fecha.strftime('%d/%m/%y')}\n{ev.nombre[:16]}"
-        headers.append(ev_title)
-        
-    # Summary columns
-    headers.extend([
-        'TOTAL REUNIONES',
-        'ASISTENCIAS',
-        'FALTAS TOTALES',
-        'FALTAS ASAMBLEAS',
-        'FALTAS FAENAS',
-        'JUSTIFICADAS',
-        '% ASISTENCIA',
-        'ESTADO COMUNAL',
-    ])
 
-    # Write headers
+    # Event headers con nombres claros y fecha (como solicitó el presidente)
+    for ev in event_list:
+        if categoria == 'ASAMBLEA':
+            ev_title = f"Reunión {ev.fecha.strftime('%d/%m/%Y')}\n{ev.nombre}"
+        elif categoria == 'FAENA':
+            ev_title = f"Faena {ev.fecha.strftime('%d/%m/%Y')}\n{ev.nombre}"
+        else:
+            prefix = "Faena" if ev.es_faena else "Reunión"
+            ev_title = f"{prefix} {ev.fecha.strftime('%d/%m/%Y')}\n{ev.nombre}"
+        headers.append(ev_title)
+
+    # Summary columns específicas por categoría
+    if categoria == 'ASAMBLEA':
+        headers.extend([
+            'TOTAL REUNIONES',
+            'ASISTENCIAS',
+            'FALTAS A REUNIONES',
+            'JUSTIFICADAS',
+            '% ASISTENCIA',
+            'ESTADO EN REUNIONES',
+        ])
+    elif categoria == 'FAENA':
+        headers.extend([
+            'TOTAL FAENAS',
+            'FAENAS ASISTIDAS',
+            'FALTAS A FAENAS (JORNALES)',
+            'JUSTIFICADAS',
+            '% CUMPLIMIENTO',
+            'ESTADO EN FAENAS',
+        ])
+    else:
+        headers.extend([
+            'TOTAL REUNIONES',
+            'ASISTENCIAS',
+            'FALTAS TOTALES',
+            'FALTAS ASAMBLEAS',
+            'FALTAS FAENAS',
+            'JUSTIFICADAS',
+            '% ASISTENCIA',
+            'ESTADO COMUNAL',
+        ])
+
     num_events = len(event_list)
     for col_idx, header in enumerate(headers, 1):
         cell = ws_matrix.cell(row=5, column=col_idx, value=header)
@@ -1024,12 +1086,11 @@ def _build_excel_matrix_sheet(ws_matrix, config, report_data, sorted_users):
         cell.alignment = align_header
         cell.border = border_bottom_thick
 
-    # Write data rows
     curr_row = 6
     for idx, u in enumerate(sorted_users, 1):
         row_fill = fill_zebra_even if (idx % 2 == 0) else fill_zebra_odd
         col_idx = 1
-        
+
         # 1. N°
         c = ws_matrix.cell(row=curr_row, column=col_idx, value=idx)
         c.font = font_correlativo
@@ -1037,7 +1098,7 @@ def _build_excel_matrix_sheet(ws_matrix, config, report_data, sorted_users):
         c.border = border_soft
         c.fill = row_fill
         col_idx += 1
-        
+
         # 2. DNI
         c = ws_matrix.cell(row=curr_row, column=col_idx, value=u['dni'])
         c.font = font_data
@@ -1046,7 +1107,7 @@ def _build_excel_matrix_sheet(ws_matrix, config, report_data, sorted_users):
         c.border = border_soft
         c.fill = row_fill
         col_idx += 1
-        
+
         # 3. Socio
         c = ws_matrix.cell(row=curr_row, column=col_idx, value=u['socio'])
         c.font = font_data
@@ -1054,7 +1115,7 @@ def _build_excel_matrix_sheet(ws_matrix, config, report_data, sorted_users):
         c.border = border_soft
         c.fill = row_fill
         col_idx += 1
-        
+
         # 4. Condición
         c = ws_matrix.cell(row=curr_row, column=col_idx, value=u['condicion'])
         c.font = font_data
@@ -1062,19 +1123,20 @@ def _build_excel_matrix_sheet(ws_matrix, config, report_data, sorted_users):
         c.border = border_soft
         c.fill = row_fill
         col_idx += 1
-        
-        # Event columns
+
+        # Event columns (Reunión / Faena)
         for ev in event_list:
             status = u['eventos'].get(ev.id, 'FALTA')
             c = ws_matrix.cell(row=curr_row, column=col_idx, value=status)
             c.border = border_soft
             c.alignment = align_center
-            
-            matched_badge = None
-            for k, b in badge_styles.items():
-                if k in status:
-                    matched_badge = b
-                    break
+
+            matched_badge = badge_styles.get(status)
+            if not matched_badge:
+                for k, b in badge_styles.items():
+                    if k in status:
+                        matched_badge = b
+                        break
             if matched_badge:
                 c.fill = matched_badge['fill']
                 c.font = matched_badge['font']
@@ -1082,80 +1144,219 @@ def _build_excel_matrix_sheet(ws_matrix, config, report_data, sorted_users):
                 c.fill = row_fill
                 c.font = font_data
             col_idx += 1
-            
-        # Summary metrics
-        # Total reuniones
-        c = ws_matrix.cell(row=curr_row, column=col_idx, value=u['total_eventos'])
-        c.alignment = align_center
-        c.border = border_soft
-        c.fill = row_fill
-        c.font = font_data
-        col_idx += 1
-        
-        # Asistencias
-        c = ws_matrix.cell(row=curr_row, column=col_idx, value=u['asistencias'])
-        c.alignment = align_center
-        c.border = border_soft
-        c.fill = row_fill
-        c.font = Font(name="Calibri", size=9, bold=True, color="166534")
-        col_idx += 1
-        
-        # Faltas Totales
-        c = ws_matrix.cell(row=curr_row, column=col_idx, value=u['faltas'])
-        c.alignment = align_center
-        c.border = border_soft
-        c.fill = row_fill
-        c.font = Font(name="Calibri", size=9, bold=True, color="991B1B" if u['faltas'] > 0 else "64748B")
-        col_idx += 1
 
-        # Faltas Asambleas
-        c = ws_matrix.cell(row=curr_row, column=col_idx, value=u.get('faltas_asambleas', 0))
-        c.alignment = align_center
-        c.border = border_soft
-        c.fill = row_fill
-        c.font = Font(name="Calibri", size=9, bold=True, color="1E40AF" if u.get('faltas_asambleas', 0) > 0 else "64748B")
-        col_idx += 1
+        # Columnas de resumen según categoría
+        if categoria == 'ASAMBLEA':
+            sub_total = len(event_list)
+            sub_asist = sum(1 for ev in event_list if 'ASISTIÓ' in u['eventos'].get(ev.id, 'FALTA'))
+            sub_faltas = sum(1 for ev in event_list if u['eventos'].get(ev.id, 'FALTA') == 'FALTA')
+            sub_just = sum(1 for ev in event_list if 'JUSTIFICADA' in u['eventos'].get(ev.id, 'FALTA'))
+            sub_pct = ((sub_asist + sub_just) / sub_total * 100) if sub_total > 0 else 0
+            if str(u.get('condicion', '')).upper() == 'EXONERADO' or getattr(u.get('usuario'), 'estado', None) == Usuario.ESTADO_EXONERADO:
+                sub_estado = 'EXONERADO'
+            elif sub_faltas == 0:
+                sub_estado = 'AL DÍA (0 FALTAS)'
+            elif sub_faltas <= 2:
+                sub_estado = f'OBSERVADO ({sub_faltas} FALTAS)'
+            else:
+                sub_estado = f'CON SANCIÓN ({sub_faltas} FALTAS)'
 
-        # Faltas Faenas
-        c = ws_matrix.cell(row=curr_row, column=col_idx, value=u.get('faltas_faenas', 0))
-        c.alignment = align_center
-        c.border = border_soft
-        c.fill = row_fill
-        c.font = Font(name="Calibri", size=9, bold=True, color="047857" if u.get('faltas_faenas', 0) > 0 else "64748B")
-        col_idx += 1
-        
-        # Justificadas
-        c = ws_matrix.cell(row=curr_row, column=col_idx, value=u['justificadas'])
-        c.alignment = align_center
-        c.border = border_soft
-        c.fill = row_fill
-        c.font = font_data
-        col_idx += 1
-        
-        # % Asistencia
-        c = ws_matrix.cell(row=curr_row, column=col_idx, value=f"{u['porcentaje_asistencia']:.1f}%")
-        c.alignment = align_center
-        c.border = border_soft
-        c.fill = row_fill
-        c.font = Font(name="Calibri", size=9, bold=True, color="0F172A")
-        col_idx += 1
-        
-        # Estado Comunal
-        c = ws_matrix.cell(row=curr_row, column=col_idx, value=u['estado_comunal'])
-        c.alignment = align_center
-        c.border = border_soft
-        matched_badge = None
-        for k, b in badge_styles.items():
-            if k in u['estado_comunal']:
-                matched_badge = b
-                break
-        if matched_badge:
-            c.fill = matched_badge['fill']
-            c.font = matched_badge['font']
-        else:
+            # Total Reuniones
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=sub_total)
+            c.alignment = align_center
+            c.border = border_soft
             c.fill = row_fill
             c.font = font_data
-        col_idx += 1
+            col_idx += 1
+
+            # Asistencias
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=sub_asist)
+            c.alignment = align_center
+            c.border = border_soft
+            c.fill = row_fill
+            c.font = Font(name="Calibri", size=9, bold=True, color="166534")
+            col_idx += 1
+
+            # Faltas
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=sub_faltas)
+            c.alignment = align_center
+            c.border = border_soft
+            c.fill = row_fill
+            c.font = Font(name="Calibri", size=9, bold=True, color="991B1B" if sub_faltas > 0 else "64748B")
+            col_idx += 1
+
+            # Justificadas
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=sub_just)
+            c.alignment = align_center
+            c.border = border_soft
+            c.fill = row_fill
+            c.font = font_data
+            col_idx += 1
+
+            # % Asistencia
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=f"{sub_pct:.1f}%")
+            c.alignment = align_center
+            c.border = border_soft
+            c.fill = row_fill
+            c.font = Font(name="Calibri", size=9, bold=True, color="0F172A")
+            col_idx += 1
+
+            # Estado en Reuniones
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=sub_estado)
+            c.alignment = align_center
+            c.border = border_soft
+            matched_badge = badge_styles.get(sub_estado)
+            if not matched_badge:
+                for k, b in badge_styles.items():
+                    if k in sub_estado:
+                        matched_badge = b
+                        break
+            if matched_badge:
+                c.fill = matched_badge['fill']
+                c.font = matched_badge['font']
+            else:
+                c.fill = row_fill
+                c.font = font_data
+            col_idx += 1
+
+        elif categoria == 'FAENA':
+            sub_total = len(event_list)
+            sub_asist = sum(1 for ev in event_list if 'ASISTIÓ' in u['eventos'].get(ev.id, 'FALTA'))
+            sub_faltas = sum(1 for ev in event_list if u['eventos'].get(ev.id, 'FALTA') == 'FALTA')
+            sub_just = sum(1 for ev in event_list if 'JUSTIFICADA' in u['eventos'].get(ev.id, 'FALTA'))
+            sub_pct = ((sub_asist + sub_just) / sub_total * 100) if sub_total > 0 else 0
+            if str(u.get('condicion', '')).upper() == 'EXONERADO' or getattr(u.get('usuario'), 'estado', None) == Usuario.ESTADO_EXONERADO:
+                sub_estado = 'EXONERADO'
+            elif sub_faltas == 0:
+                sub_estado = 'AL DÍA (0 FALTAS)'
+            else:
+                sub_estado = f'ADEUDA {sub_faltas} JORNAL(ES)'
+
+            # Total Faenas
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=sub_total)
+            c.alignment = align_center
+            c.border = border_soft
+            c.fill = row_fill
+            c.font = font_data
+            col_idx += 1
+
+            # Faenas Asistidas
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=sub_asist)
+            c.alignment = align_center
+            c.border = border_soft
+            c.fill = row_fill
+            c.font = Font(name="Calibri", size=9, bold=True, color="047857")
+            col_idx += 1
+
+            # Faltas a Faenas (Jornales)
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=sub_faltas)
+            c.alignment = align_center
+            c.border = border_soft
+            c.fill = row_fill
+            c.font = Font(name="Calibri", size=9, bold=True, color="991B1B" if sub_faltas > 0 else "64748B")
+            col_idx += 1
+
+            # Justificadas
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=sub_just)
+            c.alignment = align_center
+            c.border = border_soft
+            c.fill = row_fill
+            c.font = font_data
+            col_idx += 1
+
+            # % Cumplimiento
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=f"{sub_pct:.1f}%")
+            c.alignment = align_center
+            c.border = border_soft
+            c.fill = row_fill
+            c.font = Font(name="Calibri", size=9, bold=True, color="0F172A")
+            col_idx += 1
+
+            # Estado en Faenas
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=sub_estado)
+            c.alignment = align_center
+            c.border = border_soft
+            matched_badge = badge_styles.get(sub_estado)
+            if not matched_badge:
+                for k, b in badge_styles.items():
+                    if k in sub_estado:
+                        matched_badge = b
+                        break
+            if matched_badge:
+                c.fill = matched_badge['fill']
+                c.font = matched_badge['font']
+            else:
+                c.fill = row_fill
+                c.font = font_data
+            col_idx += 1
+
+        else:
+            # Resumen general existente
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=u.get('total_eventos', len(event_list)))
+            c.alignment = align_center
+            c.border = border_soft
+            c.fill = row_fill
+            c.font = font_data
+            col_idx += 1
+
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=u['asistencias'])
+            c.alignment = align_center
+            c.border = border_soft
+            c.fill = row_fill
+            c.font = Font(name="Calibri", size=9, bold=True, color="166534")
+            col_idx += 1
+
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=u['faltas'])
+            c.alignment = align_center
+            c.border = border_soft
+            c.fill = row_fill
+            c.font = Font(name="Calibri", size=9, bold=True, color="991B1B" if u['faltas'] > 0 else "64748B")
+            col_idx += 1
+
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=u.get('faltas_asambleas', 0))
+            c.alignment = align_center
+            c.border = border_soft
+            c.fill = row_fill
+            c.font = Font(name="Calibri", size=9, bold=True, color="1E40AF" if u.get('faltas_asambleas', 0) > 0 else "64748B")
+            col_idx += 1
+
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=u.get('faltas_faenas', 0))
+            c.alignment = align_center
+            c.border = border_soft
+            c.fill = row_fill
+            c.font = Font(name="Calibri", size=9, bold=True, color="047857" if u.get('faltas_faenas', 0) > 0 else "64748B")
+            col_idx += 1
+
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=u['justificadas'])
+            c.alignment = align_center
+            c.border = border_soft
+            c.fill = row_fill
+            c.font = font_data
+            col_idx += 1
+
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=f"{u['porcentaje_asistencia']:.1f}%")
+            c.alignment = align_center
+            c.border = border_soft
+            c.fill = row_fill
+            c.font = Font(name="Calibri", size=9, bold=True, color="0F172A")
+            col_idx += 1
+
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=u['estado_comunal'])
+            c.alignment = align_center
+            c.border = border_soft
+            matched_badge = badge_styles.get(u['estado_comunal'])
+            if not matched_badge:
+                for k, b in badge_styles.items():
+                    if k in u['estado_comunal']:
+                        matched_badge = b
+                        break
+            if matched_badge:
+                c.fill = matched_badge['fill']
+                c.font = matched_badge['font']
+            else:
+                c.fill = row_fill
+                c.font = font_data
+            col_idx += 1
 
         curr_row += 1
 
@@ -1172,21 +1373,22 @@ def _build_excel_matrix_sheet(ws_matrix, config, report_data, sorted_users):
     if len(sorted_users) > 0:
         ws_matrix.auto_filter.ref = f"A5:{last_col_letter}{curr_row - 1}"
 
-    # Column dimensions
-    ws_matrix.column_dimensions['A'].width = 6
-    ws_matrix.column_dimensions['B'].width = 13
-    ws_matrix.column_dimensions['C'].width = 34
-    ws_matrix.column_dimensions['D'].width = 14
-    for c_i in range(5, 5 + num_events):
-        ws_matrix.column_dimensions[get_column_letter(c_i)].width = 16
-    ws_matrix.column_dimensions[get_column_letter(5 + num_events)].width = 16
-    ws_matrix.column_dimensions[get_column_letter(6 + num_events)].width = 14
-    ws_matrix.column_dimensions[get_column_letter(7 + num_events)].width = 14
-    ws_matrix.column_dimensions[get_column_letter(8 + num_events)].width = 16
-    ws_matrix.column_dimensions[get_column_letter(9 + num_events)].width = 14
-    ws_matrix.column_dimensions[get_column_letter(10 + num_events)].width = 14
-    ws_matrix.column_dimensions[get_column_letter(11 + num_events)].width = 14
-    ws_matrix.column_dimensions[get_column_letter(12 + num_events)].width = 24
+    # Anchos de columna dinámicos y legibles
+    for c_i, h in enumerate(headers, 1):
+        col_letter = get_column_letter(c_i)
+        if c_i == 1:
+            ws_matrix.column_dimensions[col_letter].width = 6
+        elif c_i == 2:
+            ws_matrix.column_dimensions[col_letter].width = 13
+        elif c_i == 3:
+            ws_matrix.column_dimensions[col_letter].width = 34
+        elif c_i == 4:
+            ws_matrix.column_dimensions[col_letter].width = 14
+        elif c_i <= 4 + num_events:
+            ws_matrix.column_dimensions[col_letter].width = 22
+        else:
+            first_line = h.split('\n')[0]
+            ws_matrix.column_dimensions[col_letter].width = max(len(first_line) + 4, 15)
 
 
 def generate_attendance_excel(unified_list, filename="asistencias.xlsx", system_config=None, titulo=None):
@@ -1927,9 +2129,46 @@ def generate_global_attendance_excel(report_data, system_config):
         else:
             u['estado_comunal'] = f'CON SANCIÓN ({u["faltas"]} FALTAS)'
 
-    # --- HOJA 2: MATRIZ GENERAL DE ASAMBLEAS (SÁBANA DE CONTROL) ---
+    has_asambleas = any(ev_data['evento'].es_asamblea for ev_data in report_data)
+    has_faenas = any(ev_data['evento'].es_faena for ev_data in report_data)
+
+    # --- HOJA 2: MATRIZ DE REUNIONES Y ASAMBLEAS ---
     ws_matrix = wb.create_sheet("Matriz de Asambleas")
-    _build_excel_matrix_sheet(ws_matrix, system_config, report_data, sorted_users)
+    _build_excel_matrix_sheet(
+        ws_matrix,
+        system_config,
+        report_data,
+        sorted_users,
+        sheet_title="Matriz de Asambleas",
+        tab_color="1E40AF",
+        categoria="ASAMBLEA" if has_asambleas else None,
+    )
+
+    # --- HOJA 3: MATRIZ DE FAENAS COMUNALES (SI HAY FAENAS) ---
+    if has_faenas:
+        ws_matrix_faenas = wb.create_sheet("Matriz de Faenas")
+        _build_excel_matrix_sheet(
+            ws_matrix_faenas,
+            system_config,
+            report_data,
+            sorted_users,
+            sheet_title="Matriz de Faenas",
+            tab_color="047857",
+            categoria="FAENA",
+        )
+
+    # --- HOJA 4: SÁBANA GENERAL (SI HAY TANTO ASAMBLEAS COMO FAENAS) ---
+    if has_asambleas and has_faenas:
+        ws_matrix_general = wb.create_sheet("Sábana General")
+        _build_excel_matrix_sheet(
+            ws_matrix_general,
+            system_config,
+            report_data,
+            sorted_users,
+            sheet_title="Sábana General",
+            tab_color="0D9488",
+            categoria=None,
+        )
 
     # --- HOJA 3: CONSOLIDADO POR COMUNERO ---
     ws_user_summary = wb.create_sheet("Consolidado por Comunero")
@@ -2237,10 +2476,12 @@ def generate_user_attendance_excel(usuario, unified_list, stats, system_config=N
         ("B7", "CONDICIÓN:", condicion_str),
         ("D5", "TOTAL CONVOCADAS:", total_ev),
         ("D6", "ASISTENCIAS:", stats.get('asistencias', 0)),
-        ("D7", "FALTAS:", faltas_count),
+        ("D7", "FALTAS TOTALES:", faltas_count),
+        ("D8", "FALTAS ASAMBLEAS:", stats.get('faltas_asambleas', 0)),
         ("F5", "JUSTIFICADAS:", stats.get('justificadas', 0)),
         ("F6", "% ASISTENCIA:", score_str),
         ("F7", "SITUACIÓN:", situacion),
+        ("F8", "FALTAS FAENAS (JORNALES):", stats.get('faltas_faenas', 0)),
     ]
 
     for cell_pos, label, val in cards:
@@ -2263,7 +2504,7 @@ def generate_user_attendance_excel(usuario, unified_list, stats, system_config=N
         if label == "DNI:":
             val_cell.number_format = '@'
 
-    headers = ['N°', 'EVENTO / ASAMBLEA', 'FECHA', 'UBICACIÓN', 'HORA INGRESO', 'HORA SALIDA', 'ESTADO', 'OBSERVACIÓN']
+    headers = ['N°', 'EVENTO / REUNIÓN', 'TIPO', 'FECHA', 'UBICACIÓN', 'HORA INGRESO', 'HORA SALIDA', 'ESTADO', 'OBSERVACIÓN']
     ws.row_dimensions[9].height = 6
     ws.row_dimensions[10].height = 26
     for col_idx, h in enumerate(headers, 1):
@@ -2281,6 +2522,7 @@ def generate_user_attendance_excel(usuario, unified_list, stats, system_config=N
         row_fill = fill_zebra_even if (idx % 2 == 0) else fill_zebra_odd
         ev = getattr(item, 'evento', None)
         ev_nombre = ev.nombre if ev else "Sin evento"
+        tipo_str = ev.tipo_nombre if ev else "General"
 
         fecha_val = getattr(item, 'fecha', None)
         fecha_str = fecha_val.strftime('%d/%m/%Y') if fecha_val else (ev.fecha.strftime('%d/%m/%Y') if ev and ev.fecha else "--")
@@ -2317,6 +2559,7 @@ def generate_user_attendance_excel(usuario, unified_list, stats, system_config=N
         row_vals = [
             (idx, align_center, font_correlativo),
             (ev_nombre, align_left, font_data),
+            (tipo_str, align_center, font_data),
             (fecha_str, align_center, font_data),
             (ubicacion_str, align_left, font_data),
             (ingreso_str, align_center, font_data),
@@ -2332,7 +2575,7 @@ def generate_user_attendance_excel(usuario, unified_list, stats, system_config=N
             c.alignment = alignment
             c.font = font_style
 
-            if col_idx == 7:
+            if col_idx == 8:
                 for k, b in badge_styles.items():
                     if k in status_text:
                         c.fill = b['fill']
@@ -2349,16 +2592,17 @@ def generate_user_attendance_excel(usuario, unified_list, stats, system_config=N
     ws.freeze_panes = "A11"
 
     if len(unified_list) > 0:
-        ws.auto_filter.ref = f"A10:H{curr_row - 1}"
+        ws.auto_filter.ref = f"A10:I{curr_row - 1}"
 
     ws.column_dimensions['A'].width = 6
-    ws.column_dimensions['B'].width = 32
-    ws.column_dimensions['C'].width = 14
-    ws.column_dimensions['D'].width = 20
-    ws.column_dimensions['E'].width = 15
+    ws.column_dimensions['B'].width = 34
+    ws.column_dimensions['C'].width = 22
+    ws.column_dimensions['D'].width = 14
+    ws.column_dimensions['E'].width = 20
     ws.column_dimensions['F'].width = 15
-    ws.column_dimensions['G'].width = 18
-    ws.column_dimensions['H'].width = 30
+    ws.column_dimensions['G'].width = 15
+    ws.column_dimensions['H'].width = 18
+    ws.column_dimensions['I'].width = 30
 
     output = BytesIO()
     wb.save(output)

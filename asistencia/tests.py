@@ -448,6 +448,27 @@ class AttendanceEnhancementsTests(TestCase):
         self.assertEqual(ws.freeze_panes, "A11")
         self.assertIsNotNone(ws.auto_filter.ref)
 
+    def test_reporte_usuario_seguridad_sin_fuga_de_datos(self):
+        """Verifica que un comunero regular no pueda ver reportes de otros pero sí el suyo."""
+        from django.contrib.auth.models import User
+        user_a = User.objects.create_user(username='comunero_a', password='password123')
+        socio_a = Usuario.objects.create(user=user_a, nombre='Comunero', apellido='A', dni='11112222', estado=Usuario.ESTADO_ACTIVO)
+
+        socio_b = Usuario.objects.create(nombre='Comunero', apellido='B', dni='33334444', estado=Usuario.ESTADO_ACTIVO)
+
+        self.client.force_login(user_a)
+
+        # Intento de acceder a reporte de socio_b -> 403 Forbidden (sin fuga de datos)
+        resp_pdf_b = self.client.get(reverse('descargar_reporte_usuario_pdf', kwargs={'dni': socio_b.dni}))
+        self.assertEqual(resp_pdf_b.status_code, 403)
+
+        resp_excel_b = self.client.get(reverse('descargar_reporte_usuario_excel', kwargs={'dni': socio_b.dni}))
+        self.assertEqual(resp_excel_b.status_code, 403)
+
+        # Acceso a su propio reporte -> 200 OK
+        resp_excel_a = self.client.get(reverse('descargar_reporte_usuario_excel', kwargs={'dni': socio_a.dni}))
+        self.assertEqual(resp_excel_a.status_code, 200)
+
     def test_tipo_evento_clasificacion_asamblea_y_faena(self):
         tipo_asamblea = TipoEvento.objects.create(
             nombre='Asamblea Ordinaria Anual',
@@ -606,6 +627,8 @@ class AttendanceEnhancementsTests(TestCase):
         wb_global = openpyxl.load_workbook(BytesIO(response_global.content))
 
         self.assertIn('Matriz de Asambleas', wb_global.sheetnames)
+        self.assertIn('Matriz de Faenas', wb_global.sheetnames)
+        self.assertIn('Sábana General', wb_global.sheetnames)
         self.assertIn('Consolidado por Comunero', wb_global.sheetnames)
         self.assertIn('Faltas a Faenas', wb_global.sheetnames)
         self.assertIn('Faltas a Asambleas', wb_global.sheetnames)
@@ -826,6 +849,15 @@ class AttendanceEnhancementsTests(TestCase):
             hora_ingreso=time(8, 20),
             hora_salida=None,
             confirmada=False,
+        )
+        # Asistencia de comunero exonerado en el mismo evento (no debe excluir el evento ni contarse en pendientes)
+        Asistencia.objects.create(
+            usuario=user_exonerado,
+            evento=self.evento,
+            fecha=self.evento.fecha,
+            hora_ingreso=time(8, 25),
+            hora_salida=None,
+            confirmada=True,
         )
 
         # 1. Probar GET api_eventos_con_pendientes

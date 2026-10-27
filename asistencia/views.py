@@ -5,7 +5,7 @@ from django.contrib.auth.models import User, Group
 from django.contrib.auth.decorators import login_required, permission_required
 from django.contrib.auth.views import LoginView, LogoutView
 from django.contrib import messages
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ValidationError, PermissionDenied
 from django.core.signing import BadSignature
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_POST
@@ -853,10 +853,13 @@ class RegistrarAsistencia(APIView):
             else:
                 usuario = Usuario.objects.get(dni=decoded_qr["dni"])
             
-            # Obtener evento si fue especificado
+            # Obtener evento si fue especificado, o auto-vincular al evento activo de hoy
             evento = None
             if evento_id:
                 evento = Evento.objects.get(id=evento_id, activo=True)
+            elif not evento_id:
+                fecha_efectiva = fecha_registro.date() if fecha_registro else date.today()
+                evento = Evento.objects.filter(activo=True, fecha=fecha_efectiva).first()
             
             # Obtener ubicación si fue especificada
             ubicacion = None
@@ -1138,13 +1141,11 @@ def descargar_reporte_global_pdf(request):
                 total_general_asistencias += 1
                 
         for u in no_asistentes:
-            # Buscar justificación
-            just = Justificacion.objects.filter(usuario=u, evento=ev, estado='APROBADO').first()
             records.append({
                 'usuario': u,
                 'is_absent': True,
-                'es_justificada': just is not None,
-                'justificacion_obs': just.motivo if just else ""
+                'es_justificada': getattr(u, 'es_justificada', False),
+                'justificacion_obs': getattr(u, 'justificacion_obs', '') or ''
             })
             
         # Estadísticas del evento
@@ -1729,12 +1730,11 @@ def exportar_reporte_global_excel(request):
             })
                 
         for u in no_asistentes:
-            just = Justificacion.objects.filter(usuario=u, evento=ev, estado='APROBADO').first()
             records.append({
                 'usuario': u,
                 'is_absent': True,
-                'es_justificada': just is not None,
-                'justificacion_obs': just.motivo if just else ""
+                'es_justificada': getattr(u, 'es_justificada', False),
+                'justificacion_obs': getattr(u, 'justificacion_obs', '') or ''
             })
             
         total_padron = len(records)
@@ -1793,14 +1793,16 @@ def api_eventos_con_pendientes(request):
     if not (request.user.is_superuser or request.user.is_staff or request.user.has_perm('asistencia.can_manage_users')):
         return JsonResponse({'error': 'No tiene permisos para acceder a la regularización.'}, status=403)
 
-    eventos_qs = Evento.objects.filter(
+    pendientes_filter = Q(
         asistencia__hora_ingreso__isnull=False,
         asistencia__hora_salida__isnull=True,
         asistencia__es_justificada=False,
-    ).exclude(
-        asistencia__usuario__estado=Usuario.ESTADO_EXONERADO
+    ) & ~Q(asistencia__usuario__estado=Usuario.ESTADO_EXONERADO)
+
+    eventos_qs = Evento.objects.filter(
+        pendientes_filter
     ).annotate(
-        total_pendientes=Count('asistencia', distinct=True)
+        total_pendientes=Count('asistencia', filter=pendientes_filter, distinct=True)
     ).filter(
         total_pendientes__gt=0
     ).order_by('-fecha', '-id')
@@ -1985,8 +1987,13 @@ def descargar_reporte_pdf(request):
     return generate_pdf_report('asistencia/reporte_asistencias.html', context, "reporte_asistencias.pdf")
 
 @login_required
-@permission_required('asistencia.can_manage_users', raise_exception=True)
 def descargar_reporte_usuario_pdf(request, dni):
+    # Seguridad y prevención de fuga de datos: acceso exclusivo a administradores o al titular del DNI
+    es_admin = request.user.has_perm('asistencia.can_manage_users')
+    es_duenio = hasattr(request.user, 'usuario') and str(request.user.usuario.dni) == str(dni)
+    if not (es_admin or es_duenio):
+        raise PermissionDenied("No tienes autorización para acceder a los reportes de otros comuneros.")
+
     usuario = get_object_or_404(Usuario, dni=dni)
     sistema_config = ConfiguracionSistema.objects.first()
     tardanza_activa = bool(sistema_config and sistema_config.tardanza_activa)
@@ -1994,9 +2001,22 @@ def descargar_reporte_usuario_pdf(request, dni):
     # 1. Obtener TODOS los eventos históricos ordenados por fecha descendente
     todos_eventos = Evento.objects.all().order_by('-fecha', '-hora_ingreso')
     
-    # 2. Obtener asistencias del usuario mapeadas por ID de evento
+    # 2. Obtener asistencias del usuario mapeadas por ID de evento (con enlace defensivo por fecha)
     asistencias = Asistencia.objects.filter(usuario=usuario).select_related('evento', 'ubicacion')
-    asistencia_map = {a.evento_id: a for a in asistencias}
+    asistencia_map = {}
+    for a in asistencias:
+        ev_id = a.evento_id
+        if not ev_id and a.fecha:
+            matching_ev = next((ev for ev in todos_eventos if ev.fecha == a.fecha), None)
+            if matching_ev:
+                ev_id = matching_ev.id
+        if ev_id:
+            if ev_id not in asistencia_map:
+                asistencia_map[ev_id] = a
+            else:
+                existing = asistencia_map[ev_id]
+                if (a.hora_salida and not existing.hora_salida) or (a.es_justificada and not existing.es_justificada):
+                    asistencia_map[ev_id] = a
     
     # 3. Obtener justificaciones APROBADAS mapeadas por ID de evento
     justificaciones = Justificacion.objects.filter(usuario=usuario, estado='APROBADO')
@@ -2008,9 +2028,7 @@ def descargar_reporte_usuario_pdf(request, dni):
     for evento in todos_eventos:
         if evento.id in asistencia_map:
             # CASO 1: ASISTIÓ (O PENDIENTE)
-            # El usuario tiene un registro de asistencia
             item = asistencia_map[evento.id]
-            # Mantener el estado real de justificación guardado en el registro.
             item.es_justificada = bool(getattr(item, 'es_justificada', False))
             item.is_late_absent = bool(
                 tardanza_activa
@@ -2022,27 +2040,41 @@ def descargar_reporte_usuario_pdf(request, dni):
             
         elif evento.id in justificacion_map:
             # CASO 2: FALTA JUSTIFICADA
-            # No tiene asistencia pero sí justificación aprobada
             justificacion = justificacion_map[evento.id]
-            
-            # Crear objeto mock para el template
             mock_item = type('MockAsistencia', (object,), {
                 'fecha': evento.fecha,
                 'hora_ingreso': None,
                 'hora_salida': None,
                 'evento': evento,
-                'ubicacion': None, # No hay ubicación registrada para la falta
+                'ubicacion': None,
                 'usuario': usuario,
-                'is_absent': True, # Es ausencia física
-                'es_justificada': True, # Pero justificada
+                'is_absent': True,
+                'es_justificada': True,
+                'is_late_absent': False,
                 'justificacion_obs': justificacion.motivo,
                 'estado_display': 'JUSTIFICADA'
             })
             unified_list.append(mock_item)
             
+        elif usuario.estado == Usuario.ESTADO_EXONERADO:
+            # CASO EXONERADO: No computable como falta por tercera edad
+            mock_item = type('MockAsistencia', (object,), {
+                'fecha': evento.fecha,
+                'hora_ingreso': None,
+                'hora_salida': None,
+                'evento': evento,
+                'ubicacion': None,
+                'usuario': usuario,
+                'is_absent': False,
+                'es_justificada': False,
+                'is_late_absent': False,
+                'justificacion_obs': 'Exonerado por tercera edad',
+                'estado_display': 'EXONERADO'
+            })
+            unified_list.append(mock_item)
+            
         else:
             # CASO 3: FALTA INJUSTIFICADA
-            # No hay registro ni justificación
             mock_item = type('MockAsistencia', (object,), {
                 'fecha': evento.fecha,
                 'hora_ingreso': None,
@@ -2052,6 +2084,8 @@ def descargar_reporte_usuario_pdf(request, dni):
                 'usuario': usuario,
                 'is_absent': True,
                 'es_justificada': False,
+                'is_late_absent': False,
+                'justificacion_obs': 'No asistió (Sin justificación)',
                 'estado_display': 'FALTA'
             })
             unified_list.append(mock_item)
@@ -2059,22 +2093,30 @@ def descargar_reporte_usuario_pdf(request, dni):
     # Calcular métricas avanzadas sobre la lista completa
     total_eventos = len(todos_eventos)
     
-    # Confirmadas: Tiene salida O es exonerado (y no es mock de falta/justificada)
-    # Nota: Los mocks tienen is_absent=True. Los objetos reales Asistencia tienen is_absent=False (seteado arriba) o default False.
-    asistencias_confirmadas = sum(1 for item in unified_list 
-                                  if not getattr(item, 'is_absent', False) and 
-                                  (getattr(item, 'hora_salida', None) or item.usuario.estado == 'EXONERADO'))
-                                  
+    asistencias_confirmadas = sum(
+        1 for item in unified_list 
+        if not getattr(item, 'is_absent', False) and 
+        (getattr(item, 'hora_salida', None) or item.usuario.estado == Usuario.ESTADO_EXONERADO)
+    )
     justificadas = sum(1 for item in unified_list if getattr(item, 'es_justificada', False))
-    
-    # Faltas reales: Absent=True y Justificada=False
     faltas = sum(1 for item in unified_list if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False))
+    pendientes = sum(
+        1 for item in unified_list 
+        if not getattr(item, 'is_absent', False) and 
+        not getattr(item, 'hora_salida', None) and 
+        item.usuario.estado != Usuario.ESTADO_EXONERADO
+    )
     
-    # Pendientes: No es absent, no tiene salida, no es exonerado
-    pendientes = sum(1 for item in unified_list 
-                     if not getattr(item, 'is_absent', False) and 
-                     not getattr(item, 'hora_salida', None) and 
-                     item.usuario.estado != 'EXONERADO')
+    faltas_asambleas = sum(
+        1 for item in unified_list 
+        if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False)
+        and not getattr(getattr(item, 'evento', None), 'es_faena', False)
+    )
+    faltas_faenas = sum(
+        1 for item in unified_list 
+        if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False)
+        and getattr(getattr(item, 'evento', None), 'es_faena', False)
+    )
     
     # Score de asistencia
     total_participaciones = asistencias_confirmadas + justificadas
@@ -2121,6 +2163,8 @@ def descargar_reporte_usuario_pdf(request, dni):
             'asistencias': asistencias_confirmadas,
             'justificadas': justificadas,
             'faltas': faltas,
+            'faltas_asambleas': faltas_asambleas,
+            'faltas_faenas': faltas_faenas,
             'pendientes': pendientes,
             'score': round(score_asistencia, 1),
             'racha_actual': racha_actual,
@@ -2138,11 +2182,16 @@ def descargar_reporte_usuario_pdf(request, dni):
     return generate_pdf_report('asistencia/reporte_asistencias_usuario.html', context, f"reporte_asistencias_{usuario.dni}.pdf")
 
 @login_required
-@permission_required('asistencia.can_manage_users', raise_exception=True)
 def descargar_reporte_usuario_excel(request, dni):
     """
     Genera un Excel individual completo de asistencias e inasistencias para un comunero específico.
     """
+    # Seguridad y prevención de fuga de datos: acceso exclusivo a administradores o al titular del DNI
+    es_admin = request.user.has_perm('asistencia.can_manage_users')
+    es_duenio = hasattr(request.user, 'usuario') and str(request.user.usuario.dni) == str(dni)
+    if not (es_admin or es_duenio):
+        raise PermissionDenied("No tienes autorización para acceder a los reportes de otros comuneros.")
+
     from .utils.reports import generate_user_attendance_excel
     usuario = get_object_or_404(Usuario, dni=dni)
     sistema_config = ConfiguracionSistema.objects.first()
@@ -2150,7 +2199,20 @@ def descargar_reporte_usuario_excel(request, dni):
     
     todos_eventos = Evento.objects.all().order_by('-fecha', '-hora_ingreso')
     asistencias = Asistencia.objects.filter(usuario=usuario).select_related('evento', 'ubicacion')
-    asistencia_map = {a.evento_id: a for a in asistencias}
+    asistencia_map = {}
+    for a in asistencias:
+        ev_id = a.evento_id
+        if not ev_id and a.fecha:
+            matching_ev = next((ev for ev in todos_eventos if ev.fecha == a.fecha), None)
+            if matching_ev:
+                ev_id = matching_ev.id
+        if ev_id:
+            if ev_id not in asistencia_map:
+                asistencia_map[ev_id] = a
+            else:
+                existing = asistencia_map[ev_id]
+                if (a.hora_salida and not existing.hora_salida) or (a.es_justificada and not existing.es_justificada):
+                    asistencia_map[ev_id] = a
     
     justificaciones = Justificacion.objects.filter(usuario=usuario, estado='APROBADO')
     justificacion_map = {j.evento_id: j for j in justificaciones}
@@ -2186,6 +2248,22 @@ def descargar_reporte_usuario_excel(request, dni):
             })
             unified_list.append(mock_item)
             
+        elif usuario.estado == Usuario.ESTADO_EXONERADO:
+            mock_item = type('MockAsistencia', (object,), {
+                'fecha': evento.fecha,
+                'hora_ingreso': None,
+                'hora_salida': None,
+                'evento': evento,
+                'ubicacion': None,
+                'usuario': usuario,
+                'is_absent': False,
+                'es_justificada': False,
+                'is_late_absent': False,
+                'justificacion_obs': 'Exonerado por tercera edad',
+                'estado_display': 'EXONERADO'
+            })
+            unified_list.append(mock_item)
+            
         else:
             mock_item = type('MockAsistencia', (object,), {
                 'fecha': evento.fecha,
@@ -2206,7 +2284,7 @@ def descargar_reporte_usuario_excel(request, dni):
     asistencias_confirmadas = sum(
         1 for item in unified_list 
         if not getattr(item, 'is_absent', False) and 
-        (getattr(item, 'hora_salida', None) or item.usuario.estado == 'EXONERADO')
+        (getattr(item, 'hora_salida', None) or item.usuario.estado == Usuario.ESTADO_EXONERADO)
     )
     justificadas = sum(1 for item in unified_list if getattr(item, 'es_justificada', False))
     faltas = sum(1 for item in unified_list if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False))
@@ -2214,9 +2292,20 @@ def descargar_reporte_usuario_excel(request, dni):
         1 for item in unified_list 
         if not getattr(item, 'is_absent', False) and 
         not getattr(item, 'hora_salida', None) and 
-        item.usuario.estado != 'EXONERADO'
+        item.usuario.estado != Usuario.ESTADO_EXONERADO
     )
     
+    faltas_asambleas = sum(
+        1 for item in unified_list 
+        if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False)
+        and not getattr(getattr(item, 'evento', None), 'es_faena', False)
+    )
+    faltas_faenas = sum(
+        1 for item in unified_list 
+        if getattr(item, 'is_absent', False) and not getattr(item, 'es_justificada', False)
+        and getattr(getattr(item, 'evento', None), 'es_faena', False)
+    )
+
     total_participaciones = asistencias_confirmadas + justificadas
     score_asistencia = (total_participaciones / total_eventos * 100) if total_eventos > 0 else 0
     
@@ -2225,6 +2314,8 @@ def descargar_reporte_usuario_excel(request, dni):
         'asistencias': asistencias_confirmadas,
         'justificadas': justificadas,
         'faltas': faltas,
+        'faltas_asambleas': faltas_asambleas,
+        'faltas_faenas': faltas_faenas,
         'pendientes': pendientes,
         'score': round(score_asistencia, 1),
     }

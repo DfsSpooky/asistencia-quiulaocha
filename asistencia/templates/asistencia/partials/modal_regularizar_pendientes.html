@@ -1,20 +1,17 @@
-<!-- Modal Regularizar Asistencias Pendientes (Diseño Moderno & Fail-Safe) -->
+<!-- Modal Regularizar Asistencias Pendientes (100% Nativo, Rápido y Fail-Safe) -->
 <div id="modal-regularizar-pendientes"
-     x-data="regularizarPendientesModal()"
-     x-init="initModal()"
-     :class="{ 'hidden': !isOpen }"
      class="hidden fixed inset-0 z-[999] overflow-y-auto"
      role="dialog"
      aria-modal="true">
 
     <!-- Backdrop con blur moderno -->
     <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-md transition-opacity"
-         @click="if(!submitting) close()"></div>
+         onclick="closeRegularizarModal()"></div>
 
     <!-- Contenedor centrado -->
     <div class="relative min-h-screen flex items-center justify-center p-4 sm:p-6 lg:p-8">
         <div class="relative w-full max-w-4xl bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[90vh] my-auto animate-fade-in"
-             @click.outside="if(!submitting) close()">
+             onclick="event.stopPropagation()">
 
             <!-- Header con gradiente ámbar/slate institucional -->
             <div class="relative bg-gradient-to-br from-slate-950 via-slate-900 to-amber-950 p-6 sm:p-8 text-white shrink-0 border-b border-white/5">
@@ -29,20 +26,19 @@
                                 <span class="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-black uppercase tracking-widest border border-amber-500/30">
                                     Regularización Rápida
                                 </span>
-                                <span x-show="totalPendientesGlobal > 0" class="text-xs text-amber-400 font-bold" x-text="`${totalPendientesGlobal} comuneros pendientes`"></span>
+                                <span id="reg-header-total" class="text-xs text-amber-400 font-bold"></span>
                             </div>
                             <h3 class="text-2xl sm:text-3xl font-black tracking-tight text-white mt-1">
                                 Validar Asistencias Pendientes
                             </h3>
                             <p class="text-xs text-slate-300 mt-1 max-w-xl">
-                                Comuneros que marcaron ingreso pero no registraron su salida (salida por otra puerta o fin de reunión). Puedes completarlos para que figuren con asistencia normal.
+                                Comuneros que marcaron ingreso pero no registraron su salida (salida por otra puerta o fin de reunión). Valídalos aquí para completar su asistencia.
                             </p>
                         </div>
                     </div>
                     <button type="button"
-                            @click="close()"
-                            :disabled="submitting"
-                            class="h-10 w-10 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors shrink-0 disabled:opacity-50">
+                            onclick="closeRegularizarModal()"
+                            class="h-10 w-10 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors shrink-0">
                         <i class="bi bi-x-lg text-lg"></i>
                     </button>
                 </div>
@@ -51,25 +47,17 @@
             <!-- Cuerpo del Modal -->
             <div class="p-6 sm:p-8 overflow-y-auto space-y-6 flex-1">
 
-                <!-- Alert de Notificación / Mensajes de Éxito o Error -->
-                <div x-show="errorMessage" x-cloak class="p-4 bg-red-50 border border-red-200 text-red-700 rounded-2xl flex items-center gap-3 text-xs font-bold">
-                    <i class="bi bi-exclamation-triangle-fill text-lg text-red-500 shrink-0"></i>
-                    <span x-text="errorMessage"></span>
-                </div>
-
-                <div x-show="successMessage" x-cloak class="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl flex items-center gap-3 text-xs font-bold">
-                    <i class="bi bi-check-circle-fill text-lg text-emerald-600 shrink-0"></i>
-                    <span x-text="successMessage"></span>
-                </div>
+                <!-- Alert de Notificación (Error o Éxito) -->
+                <div id="reg-alert" class="hidden p-4 rounded-2xl text-xs font-bold flex items-center gap-3"></div>
 
                 <!-- Estado de Carga Inicial -->
-                <div x-show="loadingEventos" class="py-16 text-center space-y-3">
+                <div id="reg-loading" class="py-16 text-center space-y-3">
                     <div class="inline-block h-8 w-8 animate-spin rounded-full border-4 border-amber-500 border-r-transparent"></div>
-                    <p class="text-xs font-bold text-slate-500 uppercase tracking-widest">Consultando eventos con comuneros pendientes...</p>
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-widest">Consultando reuniones y faenas con comuneros pendientes...</p>
                 </div>
 
                 <!-- Estado cuando NO hay ningún evento con pendientes -->
-                <div x-show="!loadingEventos && eventos.length === 0" x-cloak class="py-14 text-center space-y-4">
+                <div id="reg-empty" class="hidden py-14 text-center space-y-4">
                     <div class="h-20 w-20 mx-auto rounded-3xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-4xl shadow-inner">
                         <i class="bi bi-check2-all"></i>
                     </div>
@@ -79,13 +67,13 @@
                             No se encontraron reuniones ni faenas con comuneros pendientes de salida. Todos los registros cuentan con su salida o confirmación correspondiente.
                         </p>
                     </div>
-                    <button type="button" @click="close()" class="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black uppercase tracking-wider transition-colors">
+                    <button type="button" onclick="closeRegularizarModal()" class="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black uppercase tracking-wider transition-colors">
                         Cerrar Ventana
                     </button>
                 </div>
 
-                <!-- Contenido Principal: Cuando hay eventos -->
-                <div x-show="!loadingEventos && eventos.length > 0" class="space-y-6">
+                <!-- Contenido Principal (Formulario y Selección) -->
+                <div id="reg-content" class="hidden space-y-6">
 
                     <!-- Paso 1: Selector de Evento -->
                     <div class="bg-slate-50 border border-slate-200/80 rounded-2xl p-5 space-y-3">
@@ -94,36 +82,31 @@
                                 <span class="h-5 w-5 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center text-[10px] font-black">1</span>
                                 Selecciona el Evento a Regularizar
                             </label>
-                            <span class="text-[10px] font-bold text-slate-500" x-text="`${eventos.length} evento(s) con pendientes`"></span>
+                            <span id="reg-eventos-count" class="text-[10px] font-bold text-slate-500"></span>
                         </div>
 
-                        <select x-model="selectedEventoId"
-                                @change="onEventoSelected()"
+                        <select id="reg-evento-select"
+                                onchange="onRegularizarEventoChange()"
                                 class="w-full h-12 px-4 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none transition-all shadow-sm">
                             <option value="">-- Elige una reunión o faena comunal --</option>
-                            <template x-for="ev in eventos" :key="ev.id">
-                                <option :value="ev.id" x-text="`${ev.fecha} - ${ev.nombre} (${ev.total_pendientes} pendientes)`"></option>
-                            </template>
                         </select>
                     </div>
 
-                    <!-- Paso 2: Detalles del evento y Parámetros de Regularización -->
-                    <div x-show="selectedEventoId && !loadingPendientes" class="space-y-6">
+                    <!-- Paso 2: Detalles del Evento y Parámetros -->
+                    <div id="reg-evento-details" class="hidden space-y-6">
 
                         <!-- Resumen del evento seleccionado -->
                         <div class="flex flex-wrap items-center justify-between gap-4 p-4 bg-amber-50/70 border border-amber-200/70 rounded-2xl">
                             <div class="flex items-center gap-3">
-                                <span class="px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest text-white shadow-sm"
-                                      :style="`background-color: ${selectedEvento?.color_badge || '#1e40af'}`"
-                                      x-text="selectedEvento?.tipo || 'Reunión'"></span>
+                                <span id="reg-badge-tipo" class="px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest text-white shadow-sm bg-primary-600">Reunión</span>
                                 <div>
-                                    <h5 class="text-sm font-black text-slate-900" x-text="selectedEvento?.nombre"></h5>
-                                    <p class="text-[10px] font-semibold text-slate-500" x-text="`Fecha: ${selectedEvento?.fecha} | Ingreso programado: ${selectedEvento?.hora_ingreso} hrs`"></p>
+                                    <h5 id="reg-evento-nombre" class="text-sm font-black text-slate-900"></h5>
+                                    <p id="reg-evento-sub" class="text-[10px] font-semibold text-slate-500"></p>
                                 </div>
                             </div>
                             <div class="text-right">
                                 <span class="text-[10px] uppercase font-bold text-amber-800">Total en este evento</span>
-                                <p class="text-2xl font-black text-amber-600 leading-none" x-text="`${pendientes.length} comuneros`"></p>
+                                <p id="reg-evento-total-pendientes" class="text-2xl font-black text-amber-600 leading-none">0 comuneros</p>
                             </div>
                         </div>
 
@@ -135,10 +118,11 @@
                                     Hora de Salida Oficial
                                 </label>
                                 <input type="time"
-                                       x-model="horaSalida"
+                                       id="reg-hora-salida"
+                                       value="13:00"
                                        class="w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none">
                                 <p class="text-[9px] text-slate-400 font-semibold leading-tight">
-                                    Hora que figurará en los reportes oficiales y constancias.
+                                    Hora que figurará en los reportes de salida y constancias.
                                 </p>
                             </div>
                             <div class="sm:col-span-7 space-y-1.5">
@@ -147,8 +131,8 @@
                                     Nota para el Registro de Auditoría
                                 </label>
                                 <input type="text"
-                                       x-model="observacion"
-                                       placeholder="Ej: Regularizado en asamblea - Salida por otra puerta"
+                                       id="reg-observacion"
+                                       value="Regularización de asistencia - Salida no marcada en mesa"
                                        class="w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none">
                                 <p class="text-[9px] text-slate-400 font-semibold leading-tight">
                                     Queda registrado con tu usuario para respaldo de directiva.
@@ -164,17 +148,18 @@
                                         <span class="h-5 w-5 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center text-[10px] font-black">2</span>
                                         Comuneros a Regularizar
                                     </label>
-                                    <span class="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-black"
-                                          x-text="`${selectedIds.length} de ${pendientes.length} seleccionados`"></span>
+                                    <span id="reg-selected-counter" class="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-black">
+                                        0 seleccionados
+                                    </span>
                                 </div>
                                 <div class="flex items-center gap-2">
                                     <button type="button"
-                                            @click="selectAll()"
+                                            onclick="regSelectAll()"
                                             class="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors">
                                         Seleccionar Todos
                                     </button>
                                     <button type="button"
-                                            @click="deselectAll()"
+                                            onclick="regDeselectAll()"
                                             class="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors">
                                         Deseleccionar
                                     </button>
@@ -185,63 +170,24 @@
                             <div class="relative">
                                 <i class="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
                                 <input type="text"
-                                       x-model="searchQuery"
+                                       id="reg-search-input"
+                                       oninput="regFilterList()"
                                        placeholder="Filtrar por DNI, nombre o apellido dentro de la lista..."
                                        class="w-full h-10 pl-10 pr-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-amber-500 outline-none">
                             </div>
 
+                            <!-- Spinner de carga para la lista de pendientes -->
+                            <div id="reg-list-loading" class="hidden py-12 text-center space-y-2">
+                                <div class="inline-block h-6 w-6 animate-spin rounded-full border-3 border-amber-500 border-r-transparent"></div>
+                                <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Cargando comuneros pendientes...</p>
+                            </div>
+
                             <!-- Lista con scroll -->
-                            <div class="border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100 max-h-72 overflow-y-auto bg-white shadow-inner">
-                                <template x-for="item in filteredPendientes()" :key="item.asistencia_id">
-                                    <label class="flex items-center gap-4 p-3.5 hover:bg-amber-50/50 cursor-pointer transition-colors select-none">
-                                        <input type="checkbox"
-                                               :value="item.asistencia_id"
-                                               x-model="selectedIds"
-                                               class="h-5 w-5 rounded-lg border-slate-300 text-amber-600 focus:ring-amber-500 transition-all cursor-pointer">
-
-                                        <!-- Foto de Perfil -->
-                                        <div class="h-10 w-10 rounded-xl bg-slate-100 overflow-hidden shrink-0 border border-slate-200 flex items-center justify-center">
-                                            <img :src="item.foto_url"
-                                                 :alt="item.nombre_completo"
-                                                 class="h-full w-full object-cover"
-                                                 onerror="this.onerror=null; this.src='/static/images/default_avatar.svg';">
-                                        </div>
-
-                                        <!-- Info del Socio -->
-                                        <div class="flex-1 min-w-0">
-                                            <div class="flex items-center gap-2">
-                                                <h6 class="text-xs font-black text-slate-900 truncate" x-text="item.nombre_completo"></h6>
-                                                <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-mono font-bold" x-text="item.dni"></span>
-                                            </div>
-                                            <div class="flex items-center gap-2 mt-0.5">
-                                                <span class="text-[10px] text-slate-400 font-semibold" x-text="`Ingreso: ${item.hora_ingreso}`"></span>
-                                                <span class="text-[9px] px-2 py-0.2 rounded-full font-bold"
-                                                      :class="item.es_tarde ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'"
-                                                      x-text="item.puntualidad"></span>
-                                            </div>
-                                        </div>
-
-                                        <div class="text-right shrink-0">
-                                            <span class="text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
-                                                Sin Salida
-                                            </span>
-                                        </div>
-                                    </label>
-                                </template>
-
-                                <!-- Mensaje si la búsqueda no arroja resultados -->
-                                <div x-show="filteredPendientes().length === 0" class="py-8 text-center text-slate-400 text-xs font-semibold">
-                                    No se encontraron comuneros que coincidan con "<span x-text="searchQuery"></span>".
-                                </div>
+                            <div id="reg-pendientes-container" class="border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100 max-h-72 overflow-y-auto bg-white shadow-inner">
+                                <!-- Filas inyectadas dinámicamente -->
                             </div>
                         </div>
 
-                    </div>
-
-                    <!-- Spinner de carga para la lista de pendientes -->
-                    <div x-show="loadingPendientes" class="py-12 text-center space-y-2">
-                        <div class="inline-block h-6 w-6 animate-spin rounded-full border-3 border-amber-500 border-r-transparent"></div>
-                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Cargando comuneros pendientes...</p>
                     </div>
 
                 </div>
@@ -251,253 +197,364 @@
             <!-- Footer con Botones de Acción -->
             <div class="p-6 bg-slate-50 border-t border-slate-200/80 flex flex-col-reverse sm:flex-row items-center justify-between gap-4 shrink-0">
                 <button type="button"
-                        @click="close()"
-                        :disabled="submitting"
-                        class="w-full sm:w-auto px-6 py-3 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs uppercase tracking-wider transition-colors disabled:opacity-50">
+                        onclick="closeRegularizarModal()"
+                        class="w-full sm:w-auto px-6 py-3 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs uppercase tracking-wider transition-colors">
                     Cerrar
                 </button>
 
                 <div class="flex items-center gap-3 w-full sm:w-auto justify-end">
                     <button type="button"
-                            @click="submitRegularizacion()"
-                            :disabled="submitting || !selectedEventoId || selectedIds.length === 0"
-                            class="w-full sm:w-auto flex items-center justify-center gap-3 px-8 py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-xl shadow-lg shadow-amber-500/30 transition-all transform hover:-translate-y-0.5 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none">
-                        <template x-if="submitting">
-                            <span class="inline-block h-4 w-4 animate-spin rounded-full border-2 border-slate-950 border-r-transparent"></span>
-                        </template>
-                        <template x-if="!submitting">
-                            <i class="bi bi-check-circle-fill text-lg"></i>
-                        </template>
-                        <span x-text="submitting ? 'Procesando regularización...' : `Marcar ${selectedIds.length} Pendiente(s) como Completos`"></span>
+                            id="reg-submit-btn"
+                            disabled
+                            onclick="submitRegularizar()"
+                            class="w-full sm:w-auto flex items-center justify-center gap-3 px-8 py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-xl shadow-lg shadow-amber-500/30 transition-all transform hover:-translate-y-0.5 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none">
+                        <i class="bi bi-check-circle-fill text-lg"></i>
+                        <span id="reg-submit-text">Marcar Pendientes como Completos</span>
                     </button>
                 </div>
             </div>
 
         </div>
-
     </div>
-
 </div>
 
-<!-- Script del Modal con Soporte Híbrido (Alpine + Vanilla JS Fallback) -->
+<!-- Lógica Nativa JavaScript (Sin Dependencias Frágiles) -->
 <script>
-    (function() {
-        const componentDefinition = {
-            isOpen: false,
-            loadingEventos: false,
-            loadingPendientes: false,
-            submitting: false,
-            eventos: [],
-            selectedEventoId: '',
-            selectedEvento: null,
-            pendientes: [],
-            selectedIds: [],
-            horaSalida: '13:00',
-            observacion: 'Regularización de asistencia - Salida no marcada en puerta',
-            searchQuery: '',
-            successMessage: '',
-            errorMessage: '',
-            totalPendientesGlobal: parseInt('{{ total_pendientes_global|default:0 }}') || 0,
+(function() {
+    // Estado del modal en memoria
+    const state = {
+        eventos: [],
+        selectedEventoId: null,
+        selectedEvento: null,
+        pendientes: [],
+        submitting: false,
+    };
 
-            initModal() {
-                window.addEventListener('open-regularizar-modal', (e) => {
-                    this.open(e.detail?.eventoId);
-                });
-            },
+    function showAlert(msg, isSuccess = false) {
+        const el = document.getElementById('reg-alert');
+        if (!el) return;
+        el.className = isSuccess 
+            ? 'p-4 rounded-2xl text-xs font-bold flex items-center gap-3 bg-emerald-50 border border-emerald-200 text-emerald-800'
+            : 'p-4 rounded-2xl text-xs font-bold flex items-center gap-3 bg-red-50 border border-red-200 text-red-700';
+        el.innerHTML = isSuccess 
+            ? `<i class="bi bi-check-circle-fill text-lg text-emerald-600 shrink-0"></i><span>${msg}</span>`
+            : `<i class="bi bi-exclamation-triangle-fill text-lg text-red-500 shrink-0"></i><span>${msg}</span>`;
+        el.classList.remove('hidden');
+    }
 
-            async open(preselectedEventoId = null) {
-                const modalEl = document.getElementById('modal-regularizar-pendientes');
-                if (modalEl) modalEl.classList.remove('hidden');
+    function clearAlert() {
+        const el = document.getElementById('reg-alert');
+        if (el) {
+            el.innerHTML = '';
+            el.classList.add('hidden');
+        }
+    }
 
-                this.isOpen = true;
-                this.errorMessage = '';
-                this.successMessage = '';
-                this.loadingEventos = true;
+    window.closeRegularizarModal = function() {
+        if (state.submitting) return;
+        const modal = document.getElementById('modal-regularizar-pendientes');
+        if (modal) modal.classList.add('hidden');
+        clearAlert();
+    };
 
-                try {
-                    const res = await fetch("{% url 'api_eventos_con_pendientes' %}", {
-                        headers: { 'Accept': 'application/json' }
-                    });
-                    if (!res.ok) throw new Error('No se pudo consultar los eventos con pendientes.');
-                    const data = await res.json();
-                    if (data.success) {
-                        this.eventos = data.eventos || [];
-                        this.totalPendientesGlobal = data.total_pendientes_global || 0;
+    window.openRegularizarModal = async function(preselectedEventoId = null) {
+        const modal = document.getElementById('modal-regularizar-pendientes');
+        if (!modal) return;
+        modal.classList.remove('hidden');
+        clearAlert();
 
-                        if (preselectedEventoId) {
-                            this.selectedEventoId = preselectedEventoId;
-                            this.onEventoSelected();
-                        } else if (this.eventos.length === 1) {
-                            this.selectedEventoId = this.eventos[0].id;
-                            this.onEventoSelected();
-                        }
-                    } else {
-                        this.errorMessage = data.error || 'Error al cargar eventos.';
-                    }
-                } catch (err) {
-                    this.errorMessage = err.message || 'Error de conexión con el servidor.';
-                } finally {
-                    this.loadingEventos = false;
-                }
-            },
+        const loadingEl = document.getElementById('reg-loading');
+        const emptyEl = document.getElementById('reg-empty');
+        const contentEl = document.getElementById('reg-content');
+        const selectEl = document.getElementById('reg-evento-select');
 
-            close() {
-                if (this.submitting) return;
-                this.isOpen = false;
-                this.searchQuery = '';
-                this.errorMessage = '';
-                const modalEl = document.getElementById('modal-regularizar-pendientes');
-                if (modalEl) modalEl.classList.add('hidden');
-            },
+        loadingEl.classList.remove('hidden');
+        emptyEl.classList.add('hidden');
+        contentEl.classList.add('hidden');
+        document.getElementById('reg-evento-details').classList.add('hidden');
 
-            async onEventoSelected() {
-                if (!this.selectedEventoId) {
-                    this.selectedEvento = null;
-                    this.pendientes = [];
-                    this.selectedIds = [];
-                    return;
-                }
-
-                this.loadingPendientes = true;
-                this.errorMessage = '';
-                this.searchQuery = '';
-
-                try {
-                    const url = `{% url 'api_evento_pendientes' 0 %}`.replace('/0/', `/${this.selectedEventoId}/`);
-                    const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
-                    if (!res.ok) throw new Error('No se pudo obtener la lista de pendientes.');
-                    const data = await res.json();
-
-                    if (data.success) {
-                        this.selectedEvento = data.evento;
-                        this.pendientes = data.pendientes || [];
-                        this.selectedIds = this.pendientes.map(p => p.asistencia_id);
-                        if (data.sugerencia_hora_salida) {
-                            this.horaSalida = data.sugerencia_hora_salida;
-                        }
-                    } else {
-                        this.errorMessage = data.error || 'Error al obtener pendientes.';
-                    }
-                } catch (err) {
-                    this.errorMessage = err.message || 'Error de conexión.';
-                } finally {
-                    this.loadingPendientes = false;
-                }
-            },
-
-            filteredPendientes() {
-                if (!this.searchQuery.trim()) return this.pendientes;
-                const q = this.searchQuery.toLowerCase().trim();
-                return this.pendientes.filter(p =>
-                    (p.nombre_completo && p.nombre_completo.toLowerCase().includes(q)) ||
-                    (p.dni && p.dni.includes(q))
-                );
-            },
-
-            selectAll() {
-                this.selectedIds = this.filteredPendientes().map(p => p.asistencia_id);
-            },
-
-            deselectAll() {
-                this.selectedIds = [];
-            },
-
-            getCsrfToken() {
-                const cookieValue = document.cookie
-                    .split('; ')
-                    .find(row => row.startsWith('csrftoken='))
-                    ?.split('=')[1];
-                return cookieValue || '{{ csrf_token }}';
-            },
-
-            async submitRegularizacion() {
-                if (!this.selectedEventoId || this.selectedIds.length === 0 || this.submitting) return;
-
-                this.submitting = true;
-                this.errorMessage = '';
-                this.successMessage = '';
-
-                try {
-                    const payload = {
-                        evento_id: parseInt(this.selectedEventoId),
-                        marcar_todos: this.selectedIds.length === this.pendientes.length,
-                        asistencia_ids: this.selectedIds,
-                        hora_salida: this.horaSalida,
-                        observacion: this.observacion
-                    };
-
-                    const res = await fetch("{% url 'regularizar_pendientes_evento' %}", {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'X-CSRFToken': this.getCsrfToken()
-                        },
-                        body: JSON.stringify(payload)
-                    });
-
-                    const data = await res.json();
-                    if (!res.ok || !data.success) {
-                        throw new Error(data.error || 'No se pudo completar la regularización.');
-                    }
-
-                    this.successMessage = data.message || `¡Éxito! Se regularizó la asistencia de ${data.count} comuneros.`;
-                    this.totalPendientesGlobal = Math.max(0, this.totalPendientesGlobal - data.count);
-
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 1400);
-
-                } catch (err) {
-                    this.errorMessage = err.message || 'Ocurrió un error al procesar la solicitud.';
-                    this.submitting = false;
-                }
-            }
-        };
-
-        // Función global de fábrica para Alpine
-        window.regularizarPendientesModal = function() {
-            return componentDefinition;
-        };
-
-        // Registrar en Alpine si está disponible
-        if (window.Alpine) {
-            Alpine.data('regularizarPendientesModal', () => componentDefinition);
-        } else {
-            document.addEventListener('alpine:init', () => {
-                Alpine.data('regularizarPendientesModal', () => componentDefinition);
+        try {
+            const res = await fetch("{% url 'api_eventos_con_pendientes' %}", {
+                headers: { 'Accept': 'application/json' }
             });
-        }
+            if (!res.ok) throw new Error('No se pudo consultar los eventos con pendientes.');
+            const data = await res.json();
 
-        // Función directa para abrir el modal desde cualquier botón
-        window.openRegularizarModal = function(eventoId) {
-            const modalEl = document.getElementById('modal-regularizar-pendientes');
-            if (modalEl) {
-                modalEl.classList.remove('hidden');
-                if (window.Alpine) {
-                    const alpineData = Alpine.$data(modalEl);
-                    if (alpineData && typeof alpineData.open === 'function') {
-                        alpineData.open(eventoId);
-                        return;
-                    }
-                }
+            loadingEl.classList.add('hidden');
+
+            if (!data.success) {
+                showAlert(data.error || 'Error al obtener eventos.');
+                return;
             }
-            window.dispatchEvent(new CustomEvent('open-regularizar-modal', { detail: { eventoId } }));
-        };
 
-        // Auto-abrir si la URL tiene ?abrir_regularizar=1
-        function checkAutoOpen() {
-            const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.get('abrir_regularizar') === '1') {
-                setTimeout(() => {
-                    window.openRegularizarModal();
-                }, 200);
+            state.eventos = data.eventos || [];
+            const totalGlobal = data.total_pendientes_global || 0;
+            const headerTotalEl = document.getElementById('reg-header-total');
+            if (headerTotalEl) {
+                headerTotalEl.textContent = totalGlobal > 0 ? `${totalGlobal} comuneros pendientes` : '';
             }
+
+            if (state.eventos.length === 0) {
+                emptyEl.classList.remove('hidden');
+                return;
+            }
+
+            contentEl.classList.remove('hidden');
+            document.getElementById('reg-eventos-count').textContent = `${state.eventos.length} reunión(es) con pendientes`;
+
+            // Llenar select
+            selectEl.innerHTML = '<option value="">-- Elige una reunión o faena comunal --</option>';
+            state.eventos.forEach(ev => {
+                const opt = document.createElement('option');
+                opt.value = ev.id;
+                opt.textContent = `${ev.fecha} - ${ev.nombre} (${ev.total_pendientes} pendientes)`;
+                selectEl.appendChild(opt);
+            });
+
+            // Si se pasa un ID o hay eventos, preseleccionar automáticamente el más reciente
+            if (preselectedEventoId) {
+                selectEl.value = preselectedEventoId;
+                window.onRegularizarEventoChange();
+            } else if (state.eventos.length > 0) {
+                selectEl.value = state.eventos[0].id;
+                window.onRegularizarEventoChange();
+            }
+
+        } catch (err) {
+            loadingEl.classList.add('hidden');
+            showAlert(err.message || 'Error de conexión con el servidor.');
+        }
+    };
+
+    window.onRegularizarEventoChange = async function() {
+        const selectEl = document.getElementById('reg-evento-select');
+        const eventoId = selectEl.value;
+        const detailsEl = document.getElementById('reg-evento-details');
+        const listLoadingEl = document.getElementById('reg-list-loading');
+        const containerEl = document.getElementById('reg-pendientes-container');
+        const submitBtn = document.getElementById('reg-submit-btn');
+
+        if (!eventoId) {
+            detailsEl.classList.add('hidden');
+            submitBtn.disabled = true;
+            return;
         }
 
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', checkAutoOpen);
-        } else {
-            checkAutoOpen();
+        state.selectedEventoId = eventoId;
+        detailsEl.classList.remove('hidden');
+        listLoadingEl.classList.remove('hidden');
+        containerEl.innerHTML = '';
+        submitBtn.disabled = true;
+        clearAlert();
+
+        try {
+            const url = `{% url 'api_evento_pendientes' 0 %}`.replace('/0/', `/${eventoId}/`);
+            const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+            if (!res.ok) throw new Error('No se pudo obtener la lista de pendientes.');
+            const data = await res.json();
+
+            listLoadingEl.classList.add('hidden');
+
+            if (!data.success) {
+                showAlert(data.error || 'Error al obtener pendientes.');
+                return;
+            }
+
+            state.selectedEvento = data.evento;
+            state.pendientes = data.pendientes || [];
+
+            // Actualizar datos del evento en pantalla
+            document.getElementById('reg-evento-nombre').textContent = data.evento.nombre;
+            document.getElementById('reg-evento-sub').textContent = `Fecha: ${data.evento.fecha} | Ingreso programado: ${data.evento.hora_ingreso} hrs`;
+            document.getElementById('reg-evento-total-pendientes').textContent = `${data.total} comuneros`;
+            
+            const badgeTipo = document.getElementById('reg-badge-tipo');
+            if (badgeTipo) {
+                badgeTipo.textContent = data.evento.tipo || 'Reunión';
+                badgeTipo.style.backgroundColor = data.evento.color_badge || '#1e40af';
+            }
+
+            if (data.sugerencia_hora_salida) {
+                document.getElementById('reg-hora-salida').value = data.sugerencia_hora_salida;
+            }
+
+            // Renderizar la lista con checkboxes
+            renderPendientesList(state.pendientes);
+
+        } catch (err) {
+            listLoadingEl.classList.add('hidden');
+            showAlert(err.message || 'Error de conexión.');
         }
-    })();
+    };
+
+    function renderPendientesList(items) {
+        const container = document.getElementById('reg-pendientes-container');
+        container.innerHTML = '';
+
+        if (!items || items.length === 0) {
+            container.innerHTML = '<div class="py-8 text-center text-slate-400 text-xs font-semibold">No se encontraron comuneros en esta lista.</div>';
+            updateSelectedCounter();
+            return;
+        }
+
+        items.forEach(item => {
+            const label = document.createElement('label');
+            label.className = 'flex items-center gap-4 p-3.5 hover:bg-amber-50/50 cursor-pointer transition-colors select-none reg-item-row';
+            label.dataset.name = (item.nombre_completo || '').toLowerCase();
+            label.dataset.dni = (item.dni || '').toLowerCase();
+
+            const badgePuntualidad = item.es_tarde
+                ? '<span class="text-[9px] px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-700">Tardanza</span>'
+                : '<span class="text-[9px] px-2 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-700">Puntual</span>';
+
+            label.innerHTML = `
+                <input type="checkbox" value="${item.asistencia_id}" checked onchange="updateSelectedCounter()"
+                       class="reg-checkbox h-5 w-5 rounded-lg border-slate-300 text-amber-600 focus:ring-amber-500 transition-all cursor-pointer">
+                <div class="h-10 w-10 rounded-xl bg-slate-100 overflow-hidden shrink-0 border border-slate-200 flex items-center justify-center">
+                    <img src="${item.foto_url}" alt="${item.nombre_completo}" class="h-full w-full object-cover"
+                         onerror="this.onerror=null; this.src='/static/images/default_avatar.svg';">
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2">
+                        <h6 class="text-xs font-black text-slate-900 truncate">${item.nombre_completo}</h6>
+                        <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-mono font-bold">${item.dni}</span>
+                    </div>
+                    <div class="flex items-center gap-2 mt-0.5">
+                        <span class="text-[10px] text-slate-400 font-semibold">Ingreso: ${item.hora_ingreso}</span>
+                        ${badgePuntualidad}
+                    </div>
+                </div>
+                <div class="text-right shrink-0">
+                    <span class="text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                        Sin Salida
+                    </span>
+                </div>
+            `;
+            container.appendChild(label);
+        });
+
+        updateSelectedCounter();
+    }
+
+    window.updateSelectedCounter = function() {
+        const checked = document.querySelectorAll('.reg-checkbox:checked');
+        const all = document.querySelectorAll('.reg-checkbox');
+        const counterEl = document.getElementById('reg-selected-counter');
+        const submitBtn = document.getElementById('reg-submit-btn');
+        const submitText = document.getElementById('reg-submit-text');
+
+        if (counterEl) {
+            counterEl.textContent = `${checked.length} de ${all.length} seleccionados`;
+        }
+
+        if (submitBtn) {
+            submitBtn.disabled = (checked.length === 0 || state.submitting);
+        }
+
+        if (submitText) {
+            submitText.textContent = checked.length > 0 
+                ? `Marcar ${checked.length} Pendiente(s) como Completos`
+                : 'Selecciona al menos un comunero';
+        }
+    };
+
+    window.regSelectAll = function() {
+        const visibleRows = document.querySelectorAll('.reg-item-row:not(.hidden) .reg-checkbox');
+        visibleRows.forEach(cb => cb.checked = true);
+        updateSelectedCounter();
+    };
+
+    window.regDeselectAll = function() {
+        const all = document.querySelectorAll('.reg-checkbox');
+        all.forEach(cb => cb.checked = false);
+        updateSelectedCounter();
+    };
+
+    window.regFilterList = function() {
+        const q = (document.getElementById('reg-search-input').value || '').toLowerCase().trim();
+        const rows = document.querySelectorAll('.reg-item-row');
+        rows.forEach(row => {
+            const name = row.dataset.name || '';
+            const dni = row.dataset.dni || '';
+            if (!q || name.includes(q) || dni.includes(q)) {
+                row.classList.remove('hidden');
+            } else {
+                row.classList.add('hidden');
+            }
+        });
+    };
+
+    window.submitRegularizar = async function() {
+        if (state.submitting || !state.selectedEventoId) return;
+
+        const checkedBoxes = Array.from(document.querySelectorAll('.reg-checkbox:checked'));
+        if (checkedBoxes.length === 0) return;
+
+        const ids = checkedBoxes.map(cb => parseInt(cb.value));
+        const horaSalida = document.getElementById('reg-hora-salida').value;
+        const observacion = document.getElementById('reg-observacion').value;
+        const submitBtn = document.getElementById('reg-submit-btn');
+        const submitText = document.getElementById('reg-submit-text');
+
+        state.submitting = true;
+        submitBtn.disabled = true;
+        submitText.textContent = 'Procesando regularización...';
+        clearAlert();
+
+        const cookieValue = document.cookie
+            .split('; ')
+            .find(row => row.startsWith('csrftoken='))
+            ?.split('=')[1] || '{{ csrf_token }}';
+
+        try {
+            const res = await fetch("{% url 'regularizar_pendientes_evento' %}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': cookieValue
+                },
+                body: JSON.stringify({
+                    evento_id: parseInt(state.selectedEventoId),
+                    marcar_todos: ids.length === state.pendientes.length,
+                    asistencia_ids: ids,
+                    hora_salida: horaSalida,
+                    observacion: observacion
+                })
+            });
+
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                throw new Error(data.error || 'Ocurrió un error al procesar la regularización.');
+            }
+
+            showAlert(data.message || `¡Éxito! Se regularizó la asistencia de ${data.count} comuneros.`, true);
+
+            setTimeout(() => {
+                window.location.reload();
+            }, 1200);
+
+        } catch (err) {
+            state.submitting = false;
+            submitBtn.disabled = false;
+            updateSelectedCounter();
+            showAlert(err.message || 'Error al conectar con el servidor.');
+        }
+    };
+
+    // Auto-apertura si la URL tiene ?abrir_regularizar=1
+    function checkAutoOpen() {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('abrir_regularizar') === '1') {
+            setTimeout(() => {
+                window.openRegularizarModal();
+            }, 150);
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', checkAutoOpen);
+    } else {
+        checkAutoOpen();
+    }
+})();
 </script>
