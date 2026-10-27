@@ -170,6 +170,14 @@
                 vertical-align: middle;
             }
 
+            thead {
+                display: table-header-group;
+            }
+
+            tr {
+                page-break-inside: avoid;
+            }
+
             tr:nth-child(even) {
                 background-color: #f8fafc;
             }
@@ -349,7 +357,7 @@
                                 {% if item.is_late_absent %}
                                     <span class="badge badge-warning">TARDE</span>
                                 {% endif %}
-                            {% elif item.hora_salida or item.usuario.estado == 'EXONERADO' %}
+                            {% elif item.confirmada or item.hora_salida or item.usuario.estado == 'EXONERADO' %}
                                 <span class="badge badge-success">ASISTIÓ</span>
                             {% else %}
                                 <span class="badge badge-warning">PENDIENTE</span>

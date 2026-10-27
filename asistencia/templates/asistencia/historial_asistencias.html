@@ -85,22 +85,24 @@
                         </div>
                     </button>
 
-                    <!-- Botón 3: Sábana Global Excel -->
-                    <a href="{% url 'exportar_reporte_global_excel' %}"
-                       class="group relative flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white transition-all duration-300 shadow-xl shadow-emerald-600/20 transform hover:-translate-y-1 active:scale-95 text-left border border-emerald-500/30">
+                    <!-- Botón 3: Consolidado General Excel -->
+                    <button type="button"
+                            onclick="descargarConsolidadoGeneralExcel()"
+                            data-global-excel-url="{% url 'exportar_reporte_global_excel' %}"
+                            class="group relative flex flex-col justify-between p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white transition-all duration-300 shadow-xl shadow-emerald-600/20 transform hover:-translate-y-1 active:scale-95 text-left border border-emerald-500/30">
                         <div class="flex items-center justify-between gap-2 mb-3">
                             <div class="h-9 w-9 rounded-xl bg-white/20 flex items-center justify-center text-white text-base font-black group-hover:rotate-12 transition-transform">
                                 <i class="bi bi-file-earmark-excel-fill"></i>
                             </div>
                             <span class="px-2 py-0.5 rounded-full bg-white/20 text-emerald-100 text-[10px] font-black tracking-wider leading-none">
-                                EXCEL
+                                EXCEL ANUAL
                             </span>
                         </div>
                         <div>
                             <p class="text-[9px] uppercase tracking-widest font-black text-emerald-200 mb-0.5">Matriz y Padrón</p>
-                            <h6 class="text-sm font-black leading-tight">Sábana Anual Excel</h6>
+                            <h6 class="text-sm font-black leading-tight">Consolidado General Excel</h6>
                         </div>
-                    </a>
+                    </button>
                 </div>
             </div>
         </div>
@@ -374,8 +376,16 @@
                 const eventId = selector.value;
                 if (!eventId) return;
 
+                const eventName = selector.options[selector.selectedIndex]?.text || `Evento ${eventId}`;
                 const baseUrl = selector.dataset.eventReportBase.replace(/0\/$/, '');
-                window.open(`${baseUrl}${eventId}/`, '_blank');
+                const targetUrl = `${baseUrl}${eventId}/`;
+                downloadFileWithProgress(
+                    targetUrl,
+                    `reporte_evento_${eventId}.pdf`,
+                    '¡Reporte de Evento Listo!',
+                    'Generando Reporte de Evento...',
+                    `Compilando la asistencia oficial de "${eventName}"...`
+                );
             };
 
             window.downloadUserReport = function(format = 'pdf') {
@@ -385,7 +395,17 @@
                 if (dni) {
                     const baseUrl = format === 'excel' ? input.dataset.userReportExcel : input.dataset.userReportBase;
                     const targetUrl = baseUrl.replace('__DNI__', encodeURIComponent(dni));
-                    window.open(targetUrl, '_blank');
+                    if (format === 'excel') {
+                        downloadFileWithProgress(
+                            targetUrl,
+                            `reporte_socio_${dni}.xlsx`,
+                            '¡Excel de Socio Listo!',
+                            'Generando Excel Individual...',
+                            `Compilando historial completo del socio DNI ${dni}...`
+                        );
+                    } else {
+                        window.open(targetUrl, '_blank');
+                    }
                 } else {
                     Swal.fire('Atención', 'Por favor, ingresa un DNI válido.', 'warning');
                 }
@@ -419,6 +439,83 @@
                 return true;
             }
 
+            async function downloadFileWithProgress(url, defaultFilename, successTitle, loadingTitle, loadingMsg) {
+                let secondsElapsed = 0;
+                let timerInterval;
+
+                Swal.fire({
+                    title: loadingTitle || 'Generando archivo Excel...',
+                    html: `
+                        <div class="space-y-3 py-2 text-center">
+                            <p class="text-sm text-slate-600 font-medium">${loadingMsg || 'Consolidando registros de asistencia y estructurando las columnas...'}</p>
+                            <div class="inline-flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-800 rounded-full font-mono text-xs font-bold border border-emerald-200">
+                                <span class="animate-pulse text-emerald-600">●</span> Procesando: <span id="excel-live-timer">0s</span>
+                            </div>
+                            <p class="text-[11px] text-slate-400">Por favor espere, le avisaremos inmediatamente cuando termine.</p>
+                        </div>
+                    `,
+                    allowOutsideClick: false,
+                    allowEscapeKey: false,
+                    showConfirmButton: false,
+                    didOpen: () => {
+                        Swal.showLoading();
+                        timerInterval = setInterval(() => {
+                            secondsElapsed++;
+                            const timerElem = document.getElementById('excel-live-timer');
+                            if (timerElem) timerElem.textContent = `${secondsElapsed}s`;
+                        }, 1000);
+                    }
+                });
+
+                try {
+                    const response = await fetch(url);
+                    clearInterval(timerInterval);
+
+                    if (!response.ok) {
+                        throw new Error(`Error en el servidor: HTTP ${response.status}`);
+                    }
+
+                    let filename = defaultFilename || 'reporte_asistencias.xlsx';
+                    const disposition = response.headers.get('Content-Disposition');
+                    if (disposition && disposition.includes('filename=')) {
+                        const match = disposition.match(/filename="?([^";]+)"?/);
+                        if (match && match[1]) filename = match[1];
+                    }
+
+                    const blob = await response.blob();
+                    const downloadUrl = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = downloadUrl;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(() => {
+                        window.URL.revokeObjectURL(downloadUrl);
+                        a.remove();
+                    }, 2000);
+
+                    Swal.fire({
+                        icon: 'success',
+                        title: successTitle || '¡Reporte Excel Listo!',
+                        html: `<p class="text-sm text-slate-600 mb-1">El archivo <strong>${filename}</strong> se descargó exitosamente.</p><p class="text-xs text-slate-400">Tiempo total: ${secondsElapsed} segundos.</p>`,
+                        confirmButtonColor: '#059669',
+                        confirmButtonText: 'Aceptar',
+                        timer: 5000,
+                        timerProgressBar: true
+                    });
+                } catch (error) {
+                    clearInterval(timerInterval);
+                    console.error('Error generando archivo:', error);
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Error al generar el archivo',
+                        text: 'No se pudo completar la descarga. Por favor intente de nuevo.',
+                        confirmButtonColor: '#dc2626',
+                    });
+                }
+            }
+
             window.exportFilteredReport = function(format) {
                 const params = buildFilterQueryParams();
                 if (!params) return;
@@ -432,7 +529,26 @@
                 const baseUrl = routes[format];
                 if (!baseUrl) return;
                 const url = baseUrl + '?' + params.toString();
-                window.open(url, '_blank');
+
+                if (format === 'excel') {
+                    downloadFileWithProgress(
+                        url,
+                        'asistencias_filtradas.xlsx',
+                        '¡Excel Filtrado Listo!',
+                        'Generando Excel con Consolidado General...',
+                        'Filtrando eventos y construyendo la matriz consolidada de reuniones y faenas...'
+                    );
+                } else if (format === 'pdf') {
+                    downloadFileWithProgress(
+                        url,
+                        'reporte_filtrado.pdf',
+                        '¡Reporte PDF Listo!',
+                        'Generando Reporte PDF...',
+                        'Estructurando y renderizando las páginas del reporte oficial...'
+                    );
+                } else {
+                    window.open(url, '_blank');
+                }
             };
 
             window.exportAdvancedFilteredPdf = function() {
@@ -478,10 +594,72 @@
                     if (result.isConfirmed) {
                         const selectedYear = encodeURIComponent(result.value);
                         const reportUrl = `${trigger.dataset.globalReportUrl}?year=${selectedYear}`;
-                        window.open(reportUrl, '_blank');
+                        downloadFileWithProgress(
+                            reportUrl,
+                            `reporte_global_${selectedYear}.pdf`,
+                            '¡Reporte Global PDF Listo!',
+                            'Generando Reporte Global Anual...',
+                            'Compilando padrón anual y métricas oficiales de todos los eventos...'
+                        );
                     }
                 });
             };
+
+            window.descargarConsolidadoGeneralExcel = function() {
+                const trigger = document.querySelector('[data-global-excel-url]');
+                if (!trigger) return;
+
+                const yearsDataElement = document.getElementById('report-years-data');
+                const availableYears = yearsDataElement ? JSON.parse(yearsDataElement.textContent || '[]') : [];
+
+                if (!availableYears.length) {
+                    downloadFileWithProgress(
+                        trigger.dataset.globalExcelUrl,
+                        'consolidado_general_completo.xlsx',
+                        '¡Consolidado General Listo!',
+                        'Generando Consolidado General Excel...',
+                        'Consolidando todo el historial comunal anual en matriz...'
+                    );
+                    return;
+                }
+
+                const options = { 'ALL': 'Todos los años (Histórico Completo)' };
+                availableYears.forEach((year) => {
+                    options[String(year)] = `Año ${year}`;
+                });
+
+                Swal.fire({
+                    title: 'Descargar Consolidado General Excel',
+                    text: 'Selecciona el período que deseas exportar:',
+                    input: 'select',
+                    inputOptions: options,
+                    inputValue: String(availableYears[0]),
+                    icon: 'info',
+                    showCancelButton: true,
+                    confirmButtonColor: '#059669',
+                    confirmButtonText: 'Generar Consolidado Excel',
+                    cancelButtonText: 'Cancelar',
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        const selectedYear = result.value;
+                        let reportUrl = trigger.dataset.globalExcelUrl;
+                        let defaultName = 'consolidado_general_completo.xlsx';
+                        if (selectedYear && selectedYear !== 'ALL') {
+                            reportUrl += `?year=${encodeURIComponent(selectedYear)}`;
+                            defaultName = `consolidado_general_${selectedYear}.xlsx`;
+                        }
+
+                        downloadFileWithProgress(
+                            reportUrl,
+                            defaultName,
+                            '¡Consolidado General Listo!',
+                            'Generando Consolidado General Excel...',
+                            'Consolidando el historial de reuniones y faenas...'
+                        );
+                    }
+                });
+            };
+            window.descargarSabanaExcel = window.descargarConsolidadoGeneralExcel;
 
             window.setDateRange = function(range) {
                 const today = new Date();

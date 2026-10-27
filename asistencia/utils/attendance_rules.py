@@ -30,8 +30,13 @@ def classify_attendance_item(item, tardanza_activa: bool) -> AttendanceFlags:
     )
     is_absent = bool(is_justificada or is_late_absent or getattr(item, "is_absent", False))
     has_salida = bool(getattr(item, "hora_salida", None))
-    is_pending = bool(not is_absent and not has_salida and not is_exonerado)
-    is_confirmed_presence = bool(not is_absent and (has_salida or is_exonerado))
+    is_confirmada = bool(getattr(item, "confirmada", False))
+    has_ingreso = bool(getattr(item, "hora_ingreso", None))
+    # Un registro sin ingreso, salida, confirmación ni justificación se considera falta/ausente
+    is_empty_or_absent = not has_ingreso and not has_salida and not is_confirmada and not is_justificada and not is_exonerado
+    is_absent = bool(is_justificada or is_late_absent or getattr(item, "is_absent", False) or is_empty_or_absent)
+    is_pending = bool(not is_absent and not has_salida and not is_confirmada and not is_exonerado)
+    is_confirmed_presence = bool(not is_absent and (has_salida or is_confirmada or is_exonerado))
 
     return AttendanceFlags(
         is_exonerado=is_exonerado,

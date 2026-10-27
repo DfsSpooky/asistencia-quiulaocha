@@ -628,10 +628,30 @@ class AttendanceEnhancementsTests(TestCase):
 
         self.assertIn('Matriz de Asambleas', wb_global.sheetnames)
         self.assertIn('Matriz de Faenas', wb_global.sheetnames)
-        self.assertIn('Sábana General', wb_global.sheetnames)
+        self.assertIn('Consolidado General', wb_global.sheetnames)
         self.assertIn('Consolidado por Comunero', wb_global.sheetnames)
         self.assertIn('Faltas a Faenas', wb_global.sheetnames)
         self.assertIn('Faltas a Asambleas', wb_global.sheetnames)
+
+        # Verificar encabezados y estructura de Consolidado General según requerimiento comunal
+        ws_sabana = wb_global['Consolidado General']
+        headers_sabana = [ws_sabana.cell(row=5, column=c).value for c in range(1, ws_sabana.max_column + 1)]
+        self.assertEqual(headers_sabana[:4], ['N°', 'DNI', 'APELLIDOS Y NOMBRES', 'ESTADO'])
+        self.assertEqual(headers_sabana[-5:], ['FALTAS', 'ASISTENCIA', 'JUSTIFICADAS', '% ASISTENCIA', 'ESTADO COMUNAL'])
+
+        # Verificar que en las celdas de eventos sólo hay palabras completas (ASISTIÓ, FALTÓ, JUSTIFICADA) y cero PENDIENTE
+        num_eventos = len(headers_sabana) - 9
+        for r_idx in range(6, ws_sabana.max_row + 1):
+            for c_idx in range(5, 5 + num_eventos):
+                val = ws_sabana.cell(row=r_idx, column=c_idx).value
+                self.assertIn(val, ['ASISTIÓ', 'FALTÓ', 'JUSTIFICADA'])
+                self.assertNotEqual(val, 'PENDIENTE')
+
+            # Verificar cuadre matemático de totales
+            f_val = ws_sabana.cell(row=r_idx, column=5 + num_eventos).value
+            a_val = ws_sabana.cell(row=r_idx, column=6 + num_eventos).value
+            j_val = ws_sabana.cell(row=r_idx, column=7 + num_eventos).value
+            self.assertEqual(f_val + a_val + j_val, num_eventos)
 
         # Probar filtro categoria=FAENA en exportar_reporte_global_excel
         response_solo_faenas = self.client.get(reverse('exportar_reporte_global_excel'), {'categoria': 'FAENA'})
@@ -950,6 +970,98 @@ class AttendanceEnhancementsTests(TestCase):
             content_type='application/json',
         )
         self.assertEqual(res_bad_request.status_code, 400)
+
+    def test_reporte_usuario_pdf_asistencia_confirmada_no_figura_como_pendiente(self):
+        """
+        Verifica que un socio con asistencia confirmada (confirmada=True) sin hora de salida
+        NO figure como PENDIENTE en el reporte PDF, sino como ASISTIÓ y cuente en asistencias confirmadas.
+        """
+        socio_confirmado = Usuario.objects.create(
+            nombre='Carlos',
+            apellido='Medina',
+            dni='99887766',
+            estado=Usuario.ESTADO_ACTIVO,
+        )
+        Asistencia.objects.create(
+            usuario=socio_confirmado,
+            evento=self.evento,
+            fecha=self.evento.fecha,
+            hora_ingreso=time(8, 0),
+            hora_salida=None,
+            confirmada=True,
+            es_justificada=False,
+        )
+
+        response = self.client.get(reverse('descargar_reporte_usuario_pdf', args=[socio_confirmado.dni]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/pdf')
+
+        # Verificar datos del reporte
+        from asistencia.views import _get_user_unified_attendance_data
+        _, unified_list, stats = _get_user_unified_attendance_data(socio_confirmado)
+        self.assertEqual(stats['pendientes'], 0)
+        self.assertGreaterEqual(stats['asistencias'], 1)
+
+    def test_reporte_usuario_excel_asistencia_confirmada_no_figura_como_pendiente(self):
+        """
+        Verifica que el reporte Excel individual clasifique la asistencia confirmada como ASISTIÓ y pendientes=0.
+        """
+        socio_confirmado = Usuario.objects.create(
+            nombre='Beatriz',
+            apellido='Castro',
+            dni='88776655',
+            estado=Usuario.ESTADO_ACTIVO,
+        )
+        Asistencia.objects.create(
+            usuario=socio_confirmado,
+            evento=self.evento,
+            fecha=self.evento.fecha,
+            hora_ingreso=time(8, 30),
+            hora_salida=None,
+            confirmada=True,
+            es_justificada=False,
+        )
+
+        response = self.client.get(reverse('descargar_reporte_usuario_excel', args=[socio_confirmado.dni]))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response['Content-Type'],
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+
+        from asistencia.views import _get_user_unified_attendance_data
+        _, unified_list, stats = _get_user_unified_attendance_data(socio_confirmado)
+        self.assertEqual(stats['pendientes'], 0)
+        self.assertGreaterEqual(stats['asistencias'], 1)
+
+    def test_reporte_usuario_registro_vacio_figura_como_falta_no_pendiente(self):
+        """
+        Verifica que un registro huérfano/vacío (sin ingreso, sin salida, sin confirmar, sin justificar)
+        se clasifique como FALTA (ausente) y jamás como PENDIENTE.
+        """
+        socio_vacio = Usuario.objects.create(
+            nombre='Hugo',
+            apellido='Vargas',
+            dni='77665544',
+            estado=Usuario.ESTADO_ACTIVO,
+        )
+        Asistencia.objects.create(
+            usuario=socio_vacio,
+            evento=self.evento,
+            fecha=self.evento.fecha,
+            hora_ingreso=None,
+            hora_salida=None,
+            confirmada=False,
+            es_justificada=False,
+        )
+
+        from asistencia.views import _get_user_unified_attendance_data
+        _, unified_list, stats = _get_user_unified_attendance_data(socio_vacio)
+        self.assertEqual(stats['pendientes'], 0)
+        self.assertGreaterEqual(stats['faltas'], 1)
+        # El item para este evento debe tener is_absent=True
+        item_ev = next(it for it in unified_list if getattr(it, 'evento', None) == self.evento)
+        self.assertTrue(item_ev.is_absent)
 
 
 class AdminMassPhotoUploadTests(TestCase):

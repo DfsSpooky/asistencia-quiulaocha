@@ -146,6 +146,14 @@
                 border-bottom: 2px solid #3730a3;
             }
 
+            thead {
+                display: table-header-group;
+            }
+
+            tr {
+                page-break-inside: avoid;
+            }
+
             td {
                 padding: 12px;
                 font-size: 11px;
@@ -355,7 +363,7 @@
                                     {% if item.is_late_absent %}
                                         <span class="badge badge-warning">TARDE</span>
                                     {% endif %}
-                                {% elif item.hora_salida or item.usuario.estado == 'EXONERADO' %}
+                                {% elif item.confirmada or item.hora_salida or item.usuario.estado == 'EXONERADO' %}
                                     <span class="badge badge-success">ASISTIÓ</span>
                                 {% else %}
                                     <span class="badge badge-warning">PENDIENTE</span>

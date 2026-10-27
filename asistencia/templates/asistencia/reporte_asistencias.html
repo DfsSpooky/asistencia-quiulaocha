@@ -107,6 +107,14 @@
                 border-bottom: 1px solid #f1f5f9;
             }
 
+            thead {
+                display: table-header-group;
+            }
+
+            tr {
+                page-break-inside: avoid;
+            }
+
             tr:nth-child(even) {
                 background-color: #fafafa;
             }
@@ -346,7 +354,7 @@
                                     {% if item.is_late_absent %}
                                         <span class="status-badge status-no" style="background-color: #fef3c7; color: #92400e;">TARDE</span>
                                     {% endif %}
-                                {% elif item.hora_salida or item.usuario.estado == 'EXONERADO' %}
+                                {% elif item.confirmada or item.hora_salida or item.usuario.estado == 'EXONERADO' %}
                                     <span class="status-badge status-yes">
                                         ASISTIÓ
                                     </span>

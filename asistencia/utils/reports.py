@@ -2,7 +2,7 @@ import csv
 import base64
 import os
 import functools
-from datetime import datetime
+from datetime import datetime, time
 import io
 from io import BytesIO
 from django.http import HttpResponse, FileResponse
@@ -461,6 +461,7 @@ def _normalize_attendance_record(item, tardanza_activa=True):
 
     return {
         'usuario': usuario,
+        'evento': evento,
         'nombre_completo': nombre_completo,
         'dni': dni,
         'condicion_socio': condicion_socio,
@@ -570,6 +571,14 @@ def _build_excel_data_sheet(
             'fill': PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid"),
             'font': Font(name="Calibri", size=10, bold=True, color="991B1B"),
         },
+        'FALTÓ': {
+            'fill': PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid"),
+            'font': Font(name="Calibri", size=10, bold=True, color="991B1B"),
+        },
+        'FALTO': {
+            'fill': PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid"),
+            'font': Font(name="Calibri", size=10, bold=True, color="991B1B"),
+        },
         'ASISTIÓ': {
             'fill': PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid"),
             'font': Font(name="Calibri", size=10, bold=True, color="166534"),
@@ -653,13 +662,15 @@ def _build_excel_data_sheet(
 
     # Datos en fila 6+
     curr_row = 6
+    is_large_sheet = len(rows_data) > 600
     for idx, row in enumerate(rows_data, 1):
         row_fill = fill_zebra_even if (idx % 2 == 0) else fill_zebra_odd
         
         for col_idx, value in enumerate(row):
             cell = ws.cell(row=curr_row, column=col_idx + 1, value=value)
             ctype, align, fnt, num_fmt = col_configs[col_idx]
-            cell.border = border_soft
+            if not is_large_sheet:
+                cell.border = border_soft
             cell.alignment = align
 
             if num_fmt:
@@ -677,10 +688,12 @@ def _build_excel_data_sheet(
                     cell.fill = badge['fill']
                     cell.font = badge['font']
                 else:
-                    cell.fill = row_fill
+                    if not is_large_sheet:
+                        cell.fill = row_fill
                     cell.font = fnt
             else:
-                cell.fill = row_fill
+                if not is_large_sheet:
+                    cell.fill = row_fill
                 cell.font = fnt
 
         curr_row += 1
@@ -949,6 +962,14 @@ def _build_excel_matrix_sheet(
     )
 
     badge_styles = {
+        'FALTÓ': {
+            'fill': PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid"),
+            'font': Font(name="Calibri", size=9, bold=True, color="991B1B"),
+        },
+        'FALTO': {
+            'fill': PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid"),
+            'font': Font(name="Calibri", size=9, bold=True, color="991B1B"),
+        },
         'FALTA': {
             'fill': PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid"),
             'font': Font(name="Calibri", size=9, bold=True, color="991B1B"),
@@ -1021,7 +1042,7 @@ def _build_excel_matrix_sheet(
         banner_sub = f"Control individual por comunero | Total Comuneros: {len(sorted_users)} | Total Faenas Comunales: {len(event_list)}"
     else:
         event_list = [ev_data['evento'] for ev_data in report_data]
-        banner_title = "SÁBANA GENERAL DE ASISTENCIA (REUNIONES Y FAENAS)"
+        banner_title = "CONSOLIDADO GENERAL DE ASISTENCIA (REUNIONES Y FAENAS)"
         banner_sub = f"Control horizontal de asistencias y faltas por comunero | Total Comuneros: {len(sorted_users)} | Total Eventos: {len(event_list)}"
 
     inst_nombre = (config.nombre_institucion if config else "COMUNIDAD CAMPESINA DE QUIULACOCHA").upper()
@@ -1031,45 +1052,40 @@ def _build_excel_matrix_sheet(
     ws_matrix['A3'].font = font_banner_sub
 
     # Base headers
-    headers = ['N°', 'DNI', 'APELLIDOS Y NOMBRES', 'CONDICIÓN']
+    headers = ['N°', 'DNI', 'APELLIDOS Y NOMBRES', 'ESTADO']
 
     # Event headers con nombres claros y fecha (como solicitó el presidente)
     for ev in event_list:
-        if categoria == 'ASAMBLEA':
-            ev_title = f"Reunión {ev.fecha.strftime('%d/%m/%Y')}\n{ev.nombre}"
-        elif categoria == 'FAENA':
-            ev_title = f"Faena {ev.fecha.strftime('%d/%m/%Y')}\n{ev.nombre}"
+        prefix = "FAENAS" if ev.es_faena else "REUNIÓN"
+        date_str = ev.fecha.strftime('%d/%m/%Y')
+        clean_nombre = (ev.nombre or '').strip()
+        if clean_nombre and clean_nombre.upper() not in [prefix, 'REUNIÓN', 'REUNION', 'FAENA', 'FAENAS', 'ASAMBLEA', 'ASAMBLEA GENERAL', 'REUNIÓN ORDINARIA', 'REUNION ORDINARIA', 'EXTRAORDINARIA']:
+            ev_title = f"{prefix} {date_str}\n{clean_nombre}"
         else:
-            prefix = "Faena" if ev.es_faena else "Reunión"
-            ev_title = f"{prefix} {ev.fecha.strftime('%d/%m/%Y')}\n{ev.nombre}"
+            ev_title = f"{prefix} {date_str}"
         headers.append(ev_title)
 
-    # Summary columns específicas por categoría
+    # Summary columns específicas por categoría (orden según requerimiento comunal: Faltas, Asistencia, Justificadas, %)
     if categoria == 'ASAMBLEA':
         headers.extend([
-            'TOTAL REUNIONES',
-            'ASISTENCIAS',
-            'FALTAS A REUNIONES',
+            'FALTAS',
+            'ASISTENCIA',
             'JUSTIFICADAS',
             '% ASISTENCIA',
             'ESTADO EN REUNIONES',
         ])
     elif categoria == 'FAENA':
         headers.extend([
-            'TOTAL FAENAS',
-            'FAENAS ASISTIDAS',
-            'FALTAS A FAENAS (JORNALES)',
+            'FALTAS',
+            'ASISTENCIA',
             'JUSTIFICADAS',
             '% CUMPLIMIENTO',
             'ESTADO EN FAENAS',
         ])
     else:
         headers.extend([
-            'TOTAL REUNIONES',
-            'ASISTENCIAS',
-            'FALTAS TOTALES',
-            'FALTAS ASAMBLEAS',
-            'FALTAS FAENAS',
+            'FALTAS',
+            'ASISTENCIA',
             'JUSTIFICADAS',
             '% ASISTENCIA',
             'ESTADO COMUNAL',
@@ -1116,7 +1132,7 @@ def _build_excel_matrix_sheet(
         c.fill = row_fill
         col_idx += 1
 
-        # 4. Condición
+        # 4. Estado / Condición
         c = ws_matrix.cell(row=curr_row, column=col_idx, value=u['condicion'])
         c.font = font_data
         c.alignment = align_center
@@ -1126,15 +1142,25 @@ def _build_excel_matrix_sheet(
 
         # Event columns (Reunión / Faena)
         for ev in event_list:
-            status = u['eventos'].get(ev.id, 'FALTA')
-            c = ws_matrix.cell(row=curr_row, column=col_idx, value=status)
+            raw_status = u['eventos'].get(ev.id, 'FALTÓ')
+            raw_str = str(raw_status).strip().upper()
+            if 'JUSTIFICAD' in raw_str:
+                status_display = 'JUSTIFICADA'
+            elif 'ASISTI' in raw_str or raw_str == 'PENDIENTE':
+                status_display = 'ASISTIÓ'
+            elif raw_str == 'EXONERADO':
+                status_display = 'ASISTIÓ'
+            else:
+                status_display = 'FALTÓ'
+
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=status_display)
             c.border = border_soft
             c.alignment = align_center
 
-            matched_badge = badge_styles.get(status)
+            matched_badge = badge_styles.get(status_display)
             if not matched_badge:
                 for k, b in badge_styles.items():
-                    if k in status:
+                    if k in status_display:
                         matched_badge = b
                         break
             if matched_badge:
@@ -1145,12 +1171,20 @@ def _build_excel_matrix_sheet(
                 c.font = font_data
             col_idx += 1
 
-        # Columnas de resumen según categoría
+        # Columnas de resumen según categoría (Faltas, Asistencia, Justificadas, %, Estado)
         if categoria == 'ASAMBLEA':
             sub_total = len(event_list)
-            sub_asist = sum(1 for ev in event_list if 'ASISTIÓ' in u['eventos'].get(ev.id, 'FALTA'))
-            sub_faltas = sum(1 for ev in event_list if u['eventos'].get(ev.id, 'FALTA') == 'FALTA')
-            sub_just = sum(1 for ev in event_list if 'JUSTIFICADA' in u['eventos'].get(ev.id, 'FALTA'))
+            sub_asist = sum(
+                1 for ev in event_list
+                if ('ASISTI' in str(u['eventos'].get(ev.id, 'FALTA')).upper() or str(u['eventos'].get(ev.id, '')).upper() == 'PENDIENTE')
+            )
+            sub_just = sum(
+                1 for ev in event_list
+                if 'JUSTIFICAD' in str(u['eventos'].get(ev.id, '')).upper()
+            )
+            sub_faltas = sub_total - sub_asist - sub_just
+            if sub_faltas < 0:
+                sub_faltas = 0
             sub_pct = ((sub_asist + sub_just) / sub_total * 100) if sub_total > 0 else 0
             if str(u.get('condicion', '')).upper() == 'EXONERADO' or getattr(u.get('usuario'), 'estado', None) == Usuario.ESTADO_EXONERADO:
                 sub_estado = 'EXONERADO'
@@ -1161,23 +1195,7 @@ def _build_excel_matrix_sheet(
             else:
                 sub_estado = f'CON SANCIÓN ({sub_faltas} FALTAS)'
 
-            # Total Reuniones
-            c = ws_matrix.cell(row=curr_row, column=col_idx, value=sub_total)
-            c.alignment = align_center
-            c.border = border_soft
-            c.fill = row_fill
-            c.font = font_data
-            col_idx += 1
-
-            # Asistencias
-            c = ws_matrix.cell(row=curr_row, column=col_idx, value=sub_asist)
-            c.alignment = align_center
-            c.border = border_soft
-            c.fill = row_fill
-            c.font = Font(name="Calibri", size=9, bold=True, color="166534")
-            col_idx += 1
-
-            # Faltas
+            # FALTAS
             c = ws_matrix.cell(row=curr_row, column=col_idx, value=sub_faltas)
             c.alignment = align_center
             c.border = border_soft
@@ -1185,15 +1203,23 @@ def _build_excel_matrix_sheet(
             c.font = Font(name="Calibri", size=9, bold=True, color="991B1B" if sub_faltas > 0 else "64748B")
             col_idx += 1
 
-            # Justificadas
+            # ASISTENCIA
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=sub_asist)
+            c.alignment = align_center
+            c.border = border_soft
+            c.fill = row_fill
+            c.font = Font(name="Calibri", size=9, bold=True, color="166534")
+            col_idx += 1
+
+            # JUSTIFICADAS
             c = ws_matrix.cell(row=curr_row, column=col_idx, value=sub_just)
             c.alignment = align_center
             c.border = border_soft
             c.fill = row_fill
-            c.font = font_data
+            c.font = Font(name="Calibri", size=9, bold=True, color="1E40AF" if sub_just > 0 else "64748B")
             col_idx += 1
 
-            # % Asistencia
+            # % ASISTENCIA
             c = ws_matrix.cell(row=curr_row, column=col_idx, value=f"{sub_pct:.1f}%")
             c.alignment = align_center
             c.border = border_soft
@@ -1201,7 +1227,7 @@ def _build_excel_matrix_sheet(
             c.font = Font(name="Calibri", size=9, bold=True, color="0F172A")
             col_idx += 1
 
-            # Estado en Reuniones
+            # ESTADO EN REUNIONES
             c = ws_matrix.cell(row=curr_row, column=col_idx, value=sub_estado)
             c.alignment = align_center
             c.border = border_soft
@@ -1221,9 +1247,17 @@ def _build_excel_matrix_sheet(
 
         elif categoria == 'FAENA':
             sub_total = len(event_list)
-            sub_asist = sum(1 for ev in event_list if 'ASISTIÓ' in u['eventos'].get(ev.id, 'FALTA'))
-            sub_faltas = sum(1 for ev in event_list if u['eventos'].get(ev.id, 'FALTA') == 'FALTA')
-            sub_just = sum(1 for ev in event_list if 'JUSTIFICADA' in u['eventos'].get(ev.id, 'FALTA'))
+            sub_asist = sum(
+                1 for ev in event_list
+                if ('ASISTI' in str(u['eventos'].get(ev.id, 'FALTA')).upper() or str(u['eventos'].get(ev.id, '')).upper() == 'PENDIENTE')
+            )
+            sub_just = sum(
+                1 for ev in event_list
+                if 'JUSTIFICAD' in str(u['eventos'].get(ev.id, '')).upper()
+            )
+            sub_faltas = sub_total - sub_asist - sub_just
+            if sub_faltas < 0:
+                sub_faltas = 0
             sub_pct = ((sub_asist + sub_just) / sub_total * 100) if sub_total > 0 else 0
             if str(u.get('condicion', '')).upper() == 'EXONERADO' or getattr(u.get('usuario'), 'estado', None) == Usuario.ESTADO_EXONERADO:
                 sub_estado = 'EXONERADO'
@@ -1232,23 +1266,7 @@ def _build_excel_matrix_sheet(
             else:
                 sub_estado = f'ADEUDA {sub_faltas} JORNAL(ES)'
 
-            # Total Faenas
-            c = ws_matrix.cell(row=curr_row, column=col_idx, value=sub_total)
-            c.alignment = align_center
-            c.border = border_soft
-            c.fill = row_fill
-            c.font = font_data
-            col_idx += 1
-
-            # Faenas Asistidas
-            c = ws_matrix.cell(row=curr_row, column=col_idx, value=sub_asist)
-            c.alignment = align_center
-            c.border = border_soft
-            c.fill = row_fill
-            c.font = Font(name="Calibri", size=9, bold=True, color="047857")
-            col_idx += 1
-
-            # Faltas a Faenas (Jornales)
+            # FALTAS
             c = ws_matrix.cell(row=curr_row, column=col_idx, value=sub_faltas)
             c.alignment = align_center
             c.border = border_soft
@@ -1256,15 +1274,23 @@ def _build_excel_matrix_sheet(
             c.font = Font(name="Calibri", size=9, bold=True, color="991B1B" if sub_faltas > 0 else "64748B")
             col_idx += 1
 
-            # Justificadas
+            # ASISTENCIA
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=sub_asist)
+            c.alignment = align_center
+            c.border = border_soft
+            c.fill = row_fill
+            c.font = Font(name="Calibri", size=9, bold=True, color="047857")
+            col_idx += 1
+
+            # JUSTIFICADAS
             c = ws_matrix.cell(row=curr_row, column=col_idx, value=sub_just)
             c.alignment = align_center
             c.border = border_soft
             c.fill = row_fill
-            c.font = font_data
+            c.font = Font(name="Calibri", size=9, bold=True, color="1E40AF" if sub_just > 0 else "64748B")
             col_idx += 1
 
-            # % Cumplimiento
+            # % CUMPLIMIENTO
             c = ws_matrix.cell(row=curr_row, column=col_idx, value=f"{sub_pct:.1f}%")
             c.alignment = align_center
             c.border = border_soft
@@ -1272,7 +1298,7 @@ def _build_excel_matrix_sheet(
             c.font = Font(name="Calibri", size=9, bold=True, color="0F172A")
             col_idx += 1
 
-            # Estado en Faenas
+            # ESTADO EN FAENAS
             c = ws_matrix.cell(row=curr_row, column=col_idx, value=sub_estado)
             c.alignment = align_center
             c.border = border_soft
@@ -1291,63 +1317,69 @@ def _build_excel_matrix_sheet(
             col_idx += 1
 
         else:
-            # Resumen general existente
-            c = ws_matrix.cell(row=curr_row, column=col_idx, value=u.get('total_eventos', len(event_list)))
+            tot_events = len(event_list)
+            tot_asist = sum(
+                1 for ev in event_list
+                if ('ASISTI' in str(u['eventos'].get(ev.id, 'FALTA')).upper() or str(u['eventos'].get(ev.id, '')).upper() == 'PENDIENTE')
+            )
+            tot_just = sum(
+                1 for ev in event_list
+                if 'JUSTIFICAD' in str(u['eventos'].get(ev.id, '')).upper()
+            )
+            tot_faltas = tot_events - tot_asist - tot_just
+            if tot_faltas < 0:
+                tot_faltas = 0
+            tot_pct = ((tot_asist + tot_just) / tot_events * 100) if tot_events > 0 else 0
+
+            if str(u.get('condicion', '')).upper() == 'EXONERADO' or getattr(u.get('usuario'), 'estado', None) == Usuario.ESTADO_EXONERADO:
+                est_comunal = 'EXONERADO'
+            elif tot_faltas == 0:
+                est_comunal = 'AL DÍA (0 FALTAS)'
+            elif tot_faltas <= 2:
+                est_comunal = f'OBSERVADO ({tot_faltas} FALTAS)'
+            else:
+                est_comunal = f'CON SANCIÓN ({tot_faltas} FALTAS)'
+
+            # FALTAS
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=tot_faltas)
             c.alignment = align_center
             c.border = border_soft
             c.fill = row_fill
-            c.font = font_data
+            c.font = Font(name="Calibri", size=9, bold=True, color="991B1B" if tot_faltas > 0 else "64748B")
             col_idx += 1
 
-            c = ws_matrix.cell(row=curr_row, column=col_idx, value=u['asistencias'])
+            # ASISTENCIA
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=tot_asist)
             c.alignment = align_center
             c.border = border_soft
             c.fill = row_fill
             c.font = Font(name="Calibri", size=9, bold=True, color="166534")
             col_idx += 1
 
-            c = ws_matrix.cell(row=curr_row, column=col_idx, value=u['faltas'])
+            # JUSTIFICADAS
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=tot_just)
             c.alignment = align_center
             c.border = border_soft
             c.fill = row_fill
-            c.font = Font(name="Calibri", size=9, bold=True, color="991B1B" if u['faltas'] > 0 else "64748B")
+            c.font = Font(name="Calibri", size=9, bold=True, color="1E40AF" if tot_just > 0 else "64748B")
             col_idx += 1
 
-            c = ws_matrix.cell(row=curr_row, column=col_idx, value=u.get('faltas_asambleas', 0))
-            c.alignment = align_center
-            c.border = border_soft
-            c.fill = row_fill
-            c.font = Font(name="Calibri", size=9, bold=True, color="1E40AF" if u.get('faltas_asambleas', 0) > 0 else "64748B")
-            col_idx += 1
-
-            c = ws_matrix.cell(row=curr_row, column=col_idx, value=u.get('faltas_faenas', 0))
-            c.alignment = align_center
-            c.border = border_soft
-            c.fill = row_fill
-            c.font = Font(name="Calibri", size=9, bold=True, color="047857" if u.get('faltas_faenas', 0) > 0 else "64748B")
-            col_idx += 1
-
-            c = ws_matrix.cell(row=curr_row, column=col_idx, value=u['justificadas'])
-            c.alignment = align_center
-            c.border = border_soft
-            c.fill = row_fill
-            c.font = font_data
-            col_idx += 1
-
-            c = ws_matrix.cell(row=curr_row, column=col_idx, value=f"{u['porcentaje_asistencia']:.1f}%")
+            # % ASISTENCIA
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=f"{tot_pct:.1f}%")
             c.alignment = align_center
             c.border = border_soft
             c.fill = row_fill
             c.font = Font(name="Calibri", size=9, bold=True, color="0F172A")
             col_idx += 1
 
-            c = ws_matrix.cell(row=curr_row, column=col_idx, value=u['estado_comunal'])
+            # ESTADO COMUNAL
+            c = ws_matrix.cell(row=curr_row, column=col_idx, value=est_comunal)
             c.alignment = align_center
             c.border = border_soft
-            matched_badge = badge_styles.get(u['estado_comunal'])
+            matched_badge = badge_styles.get(est_comunal)
             if not matched_badge:
                 for k, b in badge_styles.items():
-                    if k in u['estado_comunal']:
+                    if k in est_comunal:
                         matched_badge = b
                         break
             if matched_badge:
@@ -1448,14 +1480,21 @@ def generate_attendance_excel(unified_list, filename="asistencias.xlsx", system_
     ws_resumen = wb.active
     _build_excel_summary_sheet(ws_resumen, config, evento_nombre, fecha_descarga, stats)
 
-    # 2. Pestaña: Consolidado por Comunero (Récord y balance individual por socio)
+    # 2. Pestaña: Consolidado por Comunero y Mapeo de Eventos para Matriz
     user_grouped = {}
+    event_map = {}
     for r in records:
+        ev = r.get('evento')
+        if ev and getattr(ev, 'id', None) and ev.id not in event_map:
+            event_map[ev.id] = ev
+
         dni = r['dni']
         if dni not in user_grouped:
             user_grouped[dni] = {
+                'usuario': r.get('usuario'),
                 'dni': dni,
                 'nombre_completo': r['nombre_completo'],
+                'socio': r['nombre_completo'],
                 'condicion': r['condicion_socio'],
                 'total_convocadas': 0,
                 'asistencias': 0,
@@ -1467,11 +1506,22 @@ def generate_attendance_excel(unified_list, filename="asistencias.xlsx", system_
                 'reuniones_faltadas': [],
                 'faenas_faltadas': [],
                 'asambleas_faltadas': [],
+                'eventos': {},
             }
         user_grouped[dni]['total_convocadas'] += 1
         cat = r['categoria']
         ev_str = f"{r['fecha_str']} ({r['evento_str']})" if r['evento_str'] else r['fecha_str']
         is_faena = bool(r.get('es_faena'))
+
+        # Mapear estado en eventos para la matriz (ASISTIÓ / FALTÓ / JUSTIFICADA)
+        if ev and getattr(ev, 'id', None):
+            if cat == 'JUSTIFICADA':
+                ev_status = 'JUSTIFICADA'
+            elif cat in ['ASISTIO', 'PENDIENTE']:
+                ev_status = 'ASISTIÓ'
+            else:
+                ev_status = 'FALTÓ'
+            user_grouped[dni]['eventos'][ev.id] = ev_status
 
         if cat == 'FALTA':
             user_grouped[dni]['faltas'] += 1
@@ -1490,7 +1540,49 @@ def generate_attendance_excel(unified_list, filename="asistencias.xlsx", system_
         else:
             user_grouped[dni]['asistencias'] += 1
 
+    event_list = sorted(event_map.values(), key=lambda e: (e.fecha, getattr(e, 'hora_ingreso', None) or time.min))
     sorted_user_grouped = sorted(user_grouped.values(), key=lambda x: str(x['nombre_completo']).upper())
+
+    # Construir Sábana General / Matriz en el reporte filtrado si existen eventos
+    if event_list:
+        matrix_report_data = [{'evento': ev} for ev in event_list]
+        has_asambleas = any(ev.es_asamblea for ev in event_list)
+        has_faenas = any(ev.es_faena for ev in event_list)
+
+        if has_asambleas and has_faenas:
+            ws_matrix_general = wb.create_sheet("Consolidado General")
+            _build_excel_matrix_sheet(
+                ws_matrix_general,
+                config,
+                matrix_report_data,
+                sorted_user_grouped,
+                sheet_title="Consolidado General",
+                tab_color="0D9488",
+                categoria=None,
+            )
+        if has_asambleas:
+            ws_matrix_asambleas = wb.create_sheet("Matriz de Asambleas")
+            _build_excel_matrix_sheet(
+                ws_matrix_asambleas,
+                config,
+                matrix_report_data,
+                sorted_user_grouped,
+                sheet_title="Matriz de Asambleas",
+                tab_color="1E40AF",
+                categoria="ASAMBLEA",
+            )
+        if has_faenas:
+            ws_matrix_faenas = wb.create_sheet("Matriz de Faenas")
+            _build_excel_matrix_sheet(
+                ws_matrix_faenas,
+                config,
+                matrix_report_data,
+                sorted_user_grouped,
+                sheet_title="Matriz de Faenas",
+                tab_color="047857",
+                categoria="FAENA",
+            )
+
     rows_user_grouped = []
     for i, ug in enumerate(sorted_user_grouped, 1):
         presentes = ug['asistencias'] + ug['justificadas']
@@ -1809,7 +1901,10 @@ def generate_pdf_report(template_name, context, filename):
     if HTML is not None:
         try:
             print(f"Generando PDF con WeasyPrint: {filename}")
-            pdf_file = HTML(string=html_string).write_pdf()
+            try:
+                pdf_file = HTML(string=html_string).write_pdf(optimize_size=('fonts', 'images'))
+            except TypeError:
+                pdf_file = HTML(string=html_string).write_pdf()
             response = HttpResponse(pdf_file, content_type='application/pdf')
             response['Content-Disposition'] = f'inline; filename="{filename}"'
             response['Content-Length'] = len(pdf_file)
@@ -1842,14 +1937,23 @@ def generate_pdf_report(template_name, context, filename):
 
     return HttpResponse(f"Error al generar el reporte: {str(weasyprint_error)}", status=500)
 
+_LOGO_BASE64_CACHE = {'data': None, 'time': 0}
+
 def get_logo_base64():
     """
-    Obtiene el logo en formato base64.
+    Obtiene el logo en formato base64 con caché en memoria (5 minutos).
     """
+    import time
+    global _LOGO_BASE64_CACHE
+    now = time.time()
+    if _LOGO_BASE64_CACHE['data'] is not None and (now - _LOGO_BASE64_CACHE['time'] < 300):
+        return _LOGO_BASE64_CACHE['data']
     try:
         config = ConfiguracionSistema.objects.first()
         if config and config.logo:
-            return get_image_base64(config.logo)
+            encoded = get_image_base64(config.logo)
+            _LOGO_BASE64_CACHE = {'data': encoded, 'time': now}
+            return encoded
     except Exception:
         return None
     return None
@@ -2048,9 +2152,9 @@ def generate_global_attendance_excel(report_data, system_config):
                     'eventos': {},
                 }
             
-            # Determinar estado
+            # Determinar estado (siguiendo requerimiento comunal: ASISTIÓ / FALTÓ / JUSTIFICADA)
             if is_absent:
-                status_text = "JUSTIFICADA" if es_justificada else "FALTA"
+                status_text = "JUSTIFICADA" if es_justificada else "FALTÓ"
                 if es_justificada:
                     user_records[dni]['justificadas'] += 1
                 else:
@@ -2068,7 +2172,9 @@ def generate_global_attendance_excel(report_data, system_config):
                 user_records[dni]['exonerados'] += 1
                 user_records[dni]['asistencias'] += 1
             elif not hora_salida:
-                status_text = "PENDIENTE"
+                # El presidente solicitó explícitamente que no se muestre "PENDIENTE" sino ASISTIÓ / FALTÓ / JUSTIFICADA
+                # Al registrar ingreso físico, se computa como asistencia efectiva al evento.
+                status_text = "ASISTIÓ"
                 user_records[dni]['pendientes'] += 1
                 user_records[dni]['asistencias'] += 1
             else:
@@ -2157,15 +2263,15 @@ def generate_global_attendance_excel(report_data, system_config):
             categoria="FAENA",
         )
 
-    # --- HOJA 4: SÁBANA GENERAL (SI HAY TANTO ASAMBLEAS COMO FAENAS) ---
+    # --- HOJA 4: CONSOLIDADO GENERAL (SI HAY TANTO ASAMBLEAS COMO FAENAS) ---
     if has_asambleas and has_faenas:
-        ws_matrix_general = wb.create_sheet("Sábana General")
+        ws_matrix_general = wb.create_sheet("Consolidado General")
         _build_excel_matrix_sheet(
             ws_matrix_general,
             system_config,
             report_data,
             sorted_users,
-            sheet_title="Sábana General",
+            sheet_title="Consolidado General",
             tab_color="0D9488",
             categoria=None,
         )
@@ -2428,6 +2534,14 @@ def generate_user_attendance_excel(usuario, unified_list, stats, system_config=N
             'fill': PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid"),
             'font': Font(name="Calibri", size=10, bold=True, color="991B1B"),
         },
+        'FALTÓ': {
+            'fill': PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid"),
+            'font': Font(name="Calibri", size=10, bold=True, color="991B1B"),
+        },
+        'FALTO': {
+            'fill': PatternFill(start_color="FEE2E2", end_color="FEE2E2", fill_type="solid"),
+            'font': Font(name="Calibri", size=10, bold=True, color="991B1B"),
+        },
         'ASISTIÓ': {
             'fill': PatternFill(start_color="DCFCE7", end_color="DCFCE7", fill_type="solid"),
             'font': Font(name="Calibri", size=10, bold=True, color="166534"),
@@ -2538,10 +2652,10 @@ def generate_user_attendance_excel(usuario, unified_list, stats, system_config=N
             status_text = "JUSTIFICADA" if es_justificada else "FALTA"
         elif getattr(usuario, 'estado', None) == Usuario.ESTADO_EXONERADO:
             status_text = "ASISTIÓ (EXONERADO)"
-        elif not getattr(item, 'hora_salida', None):
-            status_text = "PENDIENTE"
-        else:
+        elif getattr(item, 'confirmada', False) or getattr(item, 'hora_salida', None):
             status_text = "ASISTIÓ"
+        else:
+            status_text = "PENDIENTE"
 
         if getattr(usuario, 'estado', None) == Usuario.ESTADO_EXONERADO and not is_absent:
             ingreso_str = "EXONERADO"
