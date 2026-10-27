@@ -1,0 +1,560 @@
+<!-- Modal Regularizar Asistencias Pendientes (100% Nativo, Rápido y Fail-Safe) -->
+<div id="modal-regularizar-pendientes"
+     class="hidden fixed inset-0 z-[999] overflow-y-auto"
+     role="dialog"
+     aria-modal="true">
+
+    <!-- Backdrop con blur moderno -->
+    <div class="fixed inset-0 bg-slate-950/80 backdrop-blur-md transition-opacity"
+         onclick="closeRegularizarModal()"></div>
+
+    <!-- Contenedor centrado -->
+    <div class="relative min-h-screen flex items-center justify-center p-4 sm:p-6 lg:p-8">
+        <div class="relative w-full max-w-4xl bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 overflow-hidden flex flex-col max-h-[90vh] my-auto animate-fade-in"
+             onclick="event.stopPropagation()">
+
+            <!-- Header con gradiente ámbar/slate institucional -->
+            <div class="relative bg-gradient-to-br from-slate-950 via-slate-900 to-amber-950 p-6 sm:p-8 text-white shrink-0 border-b border-white/5">
+                <div class="absolute -right-10 -top-10 h-44 w-44 rounded-full bg-amber-500/15 blur-[60px] pointer-events-none"></div>
+                <div class="flex items-start justify-between gap-4 relative z-10">
+                    <div class="flex items-center gap-4">
+                        <div class="h-14 w-14 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center shadow-lg shadow-amber-500/30 shrink-0 font-black text-2xl">
+                            <i class="bi bi-person-check-fill"></i>
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <span class="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-black uppercase tracking-widest border border-amber-500/30">
+                                    Regularización Rápida
+                                </span>
+                                <span id="reg-header-total" class="text-xs text-amber-400 font-bold"></span>
+                            </div>
+                            <h3 class="text-2xl sm:text-3xl font-black tracking-tight text-white mt-1">
+                                Validar Asistencias Pendientes
+                            </h3>
+                            <p class="text-xs text-slate-300 mt-1 max-w-xl">
+                                Comuneros que marcaron ingreso pero no registraron su salida (salida por otra puerta o fin de reunión). Valídalos aquí para completar su asistencia.
+                            </p>
+                        </div>
+                    </div>
+                    <button type="button"
+                            onclick="closeRegularizarModal()"
+                            class="h-10 w-10 rounded-xl bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors shrink-0">
+                        <i class="bi bi-x-lg text-lg"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Cuerpo del Modal -->
+            <div class="p-6 sm:p-8 overflow-y-auto space-y-6 flex-1">
+
+                <!-- Alert de Notificación (Error o Éxito) -->
+                <div id="reg-alert" class="hidden p-4 rounded-2xl text-xs font-bold flex items-center gap-3"></div>
+
+                <!-- Estado de Carga Inicial -->
+                <div id="reg-loading" class="py-16 text-center space-y-3">
+                    <div class="inline-block h-8 w-8 animate-spin rounded-full border-4 border-amber-500 border-r-transparent"></div>
+                    <p class="text-xs font-bold text-slate-500 uppercase tracking-widest">Consultando reuniones y faenas con comuneros pendientes...</p>
+                </div>
+
+                <!-- Estado cuando NO hay ningún evento con pendientes -->
+                <div id="reg-empty" class="hidden py-14 text-center space-y-4">
+                    <div class="h-20 w-20 mx-auto rounded-3xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-4xl shadow-inner">
+                        <i class="bi bi-check2-all"></i>
+                    </div>
+                    <div>
+                        <h4 class="text-xl font-black text-slate-900">¡Todo al día!</h4>
+                        <p class="text-xs font-medium text-slate-500 max-w-md mx-auto mt-1">
+                            No se encontraron reuniones ni faenas con comuneros pendientes de salida. Todos los registros cuentan con su salida o confirmación correspondiente.
+                        </p>
+                    </div>
+                    <button type="button" onclick="closeRegularizarModal()" class="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black uppercase tracking-wider transition-colors">
+                        Cerrar Ventana
+                    </button>
+                </div>
+
+                <!-- Contenido Principal (Formulario y Selección) -->
+                <div id="reg-content" class="hidden space-y-6">
+
+                    <!-- Paso 1: Selector de Evento -->
+                    <div class="bg-slate-50 border border-slate-200/80 rounded-2xl p-5 space-y-3">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <label class="text-[11px] font-black uppercase tracking-widest text-slate-700 flex items-center gap-2">
+                                <span class="h-5 w-5 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center text-[10px] font-black">1</span>
+                                Selecciona el Evento a Regularizar
+                            </label>
+                            <span id="reg-eventos-count" class="text-[10px] font-bold text-slate-500"></span>
+                        </div>
+
+                        <select id="reg-evento-select"
+                                onchange="onRegularizarEventoChange()"
+                                class="w-full h-12 px-4 bg-white border border-slate-300 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none transition-all shadow-sm">
+                            <option value="">-- Elige una reunión o faena comunal --</option>
+                        </select>
+                    </div>
+
+                    <!-- Paso 2: Detalles del Evento y Parámetros -->
+                    <div id="reg-evento-details" class="hidden space-y-6">
+
+                        <!-- Resumen del evento seleccionado -->
+                        <div class="flex flex-wrap items-center justify-between gap-4 p-4 bg-amber-50/70 border border-amber-200/70 rounded-2xl">
+                            <div class="flex items-center gap-3">
+                                <span id="reg-badge-tipo" class="px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest text-white shadow-sm bg-primary-600">Reunión</span>
+                                <div>
+                                    <h5 id="reg-evento-nombre" class="text-sm font-black text-slate-900"></h5>
+                                    <p id="reg-evento-sub" class="text-[10px] font-semibold text-slate-500"></p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <span class="text-[10px] uppercase font-bold text-amber-800">Total en este evento</span>
+                                <p id="reg-evento-total-pendientes" class="text-2xl font-black text-amber-600 leading-none">0 comuneros</p>
+                            </div>
+                        </div>
+
+                        <!-- Parámetros de Salida (Hora y Observación) -->
+                        <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                            <div class="sm:col-span-5 space-y-1.5">
+                                <label class="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                                    <i class="bi bi-clock-fill text-amber-500"></i>
+                                    Hora de Salida Oficial
+                                </label>
+                                <input type="time"
+                                       id="reg-hora-salida"
+                                       value="13:00"
+                                       class="w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none">
+                                <p class="text-[9px] text-slate-400 font-semibold leading-tight">
+                                    Hora que figurará en los reportes de salida y constancias.
+                                </p>
+                            </div>
+                            <div class="sm:col-span-7 space-y-1.5">
+                                <label class="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                                    <i class="bi bi-chat-left-text-fill text-amber-500"></i>
+                                    Nota para el Registro de Auditoría
+                                </label>
+                                <input type="text"
+                                       id="reg-observacion"
+                                       value="Regularización de asistencia - Salida no marcada en mesa"
+                                       class="w-full h-11 px-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:ring-2 focus:ring-amber-500 outline-none">
+                                <p class="text-[9px] text-slate-400 font-semibold leading-tight">
+                                    Queda registrado con tu usuario para respaldo de directiva.
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Paso 3: Selección de Comuneros y Barra de Búsqueda -->
+                        <div class="space-y-3">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div class="flex items-center gap-3">
+                                    <label class="text-[11px] font-black uppercase tracking-widest text-slate-700 flex items-center gap-2">
+                                        <span class="h-5 w-5 rounded-lg bg-amber-500 text-slate-950 flex items-center justify-center text-[10px] font-black">2</span>
+                                        Comuneros a Regularizar
+                                    </label>
+                                    <span id="reg-selected-counter" class="px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-black">
+                                        0 seleccionados
+                                    </span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <button type="button"
+                                            onclick="regSelectAll()"
+                                            class="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors">
+                                        Seleccionar Todos
+                                    </button>
+                                    <button type="button"
+                                            onclick="regDeselectAll()"
+                                            class="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors">
+                                        Deseleccionar
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Buscador en tiempo real dentro del modal -->
+                            <div class="relative">
+                                <i class="bi bi-search absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                                <input type="text"
+                                       id="reg-search-input"
+                                       oninput="regFilterList()"
+                                       placeholder="Filtrar por DNI, nombre o apellido dentro de la lista..."
+                                       class="w-full h-10 pl-10 pr-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold focus:ring-2 focus:ring-amber-500 outline-none">
+                            </div>
+
+                            <!-- Spinner de carga para la lista de pendientes -->
+                            <div id="reg-list-loading" class="hidden py-12 text-center space-y-2">
+                                <div class="inline-block h-6 w-6 animate-spin rounded-full border-3 border-amber-500 border-r-transparent"></div>
+                                <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Cargando comuneros pendientes...</p>
+                            </div>
+
+                            <!-- Lista con scroll -->
+                            <div id="reg-pendientes-container" class="border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100 max-h-72 overflow-y-auto bg-white shadow-inner">
+                                <!-- Filas inyectadas dinámicamente -->
+                            </div>
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <!-- Footer con Botones de Acción -->
+            <div class="p-6 bg-slate-50 border-t border-slate-200/80 flex flex-col-reverse sm:flex-row items-center justify-between gap-4 shrink-0">
+                <button type="button"
+                        onclick="closeRegularizarModal()"
+                        class="w-full sm:w-auto px-6 py-3 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs uppercase tracking-wider transition-colors">
+                    Cerrar
+                </button>
+
+                <div class="flex items-center gap-3 w-full sm:w-auto justify-end">
+                    <button type="button"
+                            id="reg-submit-btn"
+                            disabled
+                            onclick="submitRegularizar()"
+                            class="w-full sm:w-auto flex items-center justify-center gap-3 px-8 py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black rounded-xl shadow-lg shadow-amber-500/30 transition-all transform hover:-translate-y-0.5 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none">
+                        <i class="bi bi-check-circle-fill text-lg"></i>
+                        <span id="reg-submit-text">Marcar Pendientes como Completos</span>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- Lógica Nativa JavaScript (Sin Dependencias Frágiles) -->
+<script>
+(function() {
+    // Estado del modal en memoria
+    const state = {
+        eventos: [],
+        selectedEventoId: null,
+        selectedEvento: null,
+        pendientes: [],
+        submitting: false,
+    };
+
+    function showAlert(msg, isSuccess = false) {
+        const el = document.getElementById('reg-alert');
+        if (!el) return;
+        el.className = isSuccess 
+            ? 'p-4 rounded-2xl text-xs font-bold flex items-center gap-3 bg-emerald-50 border border-emerald-200 text-emerald-800'
+            : 'p-4 rounded-2xl text-xs font-bold flex items-center gap-3 bg-red-50 border border-red-200 text-red-700';
+        el.innerHTML = isSuccess 
+            ? `<i class="bi bi-check-circle-fill text-lg text-emerald-600 shrink-0"></i><span>${msg}</span>`
+            : `<i class="bi bi-exclamation-triangle-fill text-lg text-red-500 shrink-0"></i><span>${msg}</span>`;
+        el.classList.remove('hidden');
+    }
+
+    function clearAlert() {
+        const el = document.getElementById('reg-alert');
+        if (el) {
+            el.innerHTML = '';
+            el.classList.add('hidden');
+        }
+    }
+
+    window.closeRegularizarModal = function() {
+        if (state.submitting) return;
+        const modal = document.getElementById('modal-regularizar-pendientes');
+        if (modal) modal.classList.add('hidden');
+        clearAlert();
+    };
+
+    window.openRegularizarModal = async function(preselectedEventoId = null) {
+        const modal = document.getElementById('modal-regularizar-pendientes');
+        if (!modal) return;
+        modal.classList.remove('hidden');
+        clearAlert();
+
+        const loadingEl = document.getElementById('reg-loading');
+        const emptyEl = document.getElementById('reg-empty');
+        const contentEl = document.getElementById('reg-content');
+        const selectEl = document.getElementById('reg-evento-select');
+
+        loadingEl.classList.remove('hidden');
+        emptyEl.classList.add('hidden');
+        contentEl.classList.add('hidden');
+        document.getElementById('reg-evento-details').classList.add('hidden');
+
+        try {
+            const res = await fetch("{% url 'api_eventos_con_pendientes' %}", {
+                headers: { 'Accept': 'application/json' }
+            });
+            if (!res.ok) throw new Error('No se pudo consultar los eventos con pendientes.');
+            const data = await res.json();
+
+            loadingEl.classList.add('hidden');
+
+            if (!data.success) {
+                showAlert(data.error || 'Error al obtener eventos.');
+                return;
+            }
+
+            state.eventos = data.eventos || [];
+            const totalGlobal = data.total_pendientes_global || 0;
+            const headerTotalEl = document.getElementById('reg-header-total');
+            if (headerTotalEl) {
+                headerTotalEl.textContent = totalGlobal > 0 ? `${totalGlobal} comuneros pendientes` : '';
+            }
+
+            if (state.eventos.length === 0) {
+                emptyEl.classList.remove('hidden');
+                return;
+            }
+
+            contentEl.classList.remove('hidden');
+            document.getElementById('reg-eventos-count').textContent = `${state.eventos.length} reunión(es) con pendientes`;
+
+            // Llenar select
+            selectEl.innerHTML = '<option value="">-- Elige una reunión o faena comunal --</option>';
+            state.eventos.forEach(ev => {
+                const opt = document.createElement('option');
+                opt.value = ev.id;
+                opt.textContent = `${ev.fecha} - ${ev.nombre} (${ev.total_pendientes} pendientes)`;
+                selectEl.appendChild(opt);
+            });
+
+            // Si se pasa un ID o hay eventos, preseleccionar automáticamente el más reciente
+            if (preselectedEventoId) {
+                selectEl.value = preselectedEventoId;
+                window.onRegularizarEventoChange();
+            } else if (state.eventos.length > 0) {
+                selectEl.value = state.eventos[0].id;
+                window.onRegularizarEventoChange();
+            }
+
+        } catch (err) {
+            loadingEl.classList.add('hidden');
+            showAlert(err.message || 'Error de conexión con el servidor.');
+        }
+    };
+
+    window.onRegularizarEventoChange = async function() {
+        const selectEl = document.getElementById('reg-evento-select');
+        const eventoId = selectEl.value;
+        const detailsEl = document.getElementById('reg-evento-details');
+        const listLoadingEl = document.getElementById('reg-list-loading');
+        const containerEl = document.getElementById('reg-pendientes-container');
+        const submitBtn = document.getElementById('reg-submit-btn');
+
+        if (!eventoId) {
+            detailsEl.classList.add('hidden');
+            submitBtn.disabled = true;
+            return;
+        }
+
+        state.selectedEventoId = eventoId;
+        detailsEl.classList.remove('hidden');
+        listLoadingEl.classList.remove('hidden');
+        containerEl.innerHTML = '';
+        submitBtn.disabled = true;
+        clearAlert();
+
+        try {
+            const url = `{% url 'api_evento_pendientes' 0 %}`.replace('/0/', `/${eventoId}/`);
+            const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+            if (!res.ok) throw new Error('No se pudo obtener la lista de pendientes.');
+            const data = await res.json();
+
+            listLoadingEl.classList.add('hidden');
+
+            if (!data.success) {
+                showAlert(data.error || 'Error al obtener pendientes.');
+                return;
+            }
+
+            state.selectedEvento = data.evento;
+            state.pendientes = data.pendientes || [];
+
+            // Actualizar datos del evento en pantalla
+            document.getElementById('reg-evento-nombre').textContent = data.evento.nombre;
+            document.getElementById('reg-evento-sub').textContent = `Fecha: ${data.evento.fecha} | Ingreso programado: ${data.evento.hora_ingreso} hrs`;
+            document.getElementById('reg-evento-total-pendientes').textContent = `${data.total} comuneros`;
+            
+            const badgeTipo = document.getElementById('reg-badge-tipo');
+            if (badgeTipo) {
+                badgeTipo.textContent = data.evento.tipo || 'Reunión';
+                badgeTipo.style.backgroundColor = data.evento.color_badge || '#1e40af';
+            }
+
+            if (data.sugerencia_hora_salida) {
+                document.getElementById('reg-hora-salida').value = data.sugerencia_hora_salida;
+            }
+
+            // Renderizar la lista con checkboxes
+            renderPendientesList(state.pendientes);
+
+        } catch (err) {
+            listLoadingEl.classList.add('hidden');
+            showAlert(err.message || 'Error de conexión.');
+        }
+    };
+
+    function renderPendientesList(items) {
+        const container = document.getElementById('reg-pendientes-container');
+        container.innerHTML = '';
+
+        if (!items || items.length === 0) {
+            container.innerHTML = '<div class="py-8 text-center text-slate-400 text-xs font-semibold">No se encontraron comuneros en esta lista.</div>';
+            updateSelectedCounter();
+            return;
+        }
+
+        items.forEach(item => {
+            const label = document.createElement('label');
+            label.className = 'flex items-center gap-4 p-3.5 hover:bg-amber-50/50 cursor-pointer transition-colors select-none reg-item-row';
+            label.dataset.name = (item.nombre_completo || '').toLowerCase();
+            label.dataset.dni = (item.dni || '').toLowerCase();
+
+            const badgePuntualidad = item.es_tarde
+                ? '<span class="text-[9px] px-2 py-0.5 rounded-full font-bold bg-amber-100 text-amber-700">Tardanza</span>'
+                : '<span class="text-[9px] px-2 py-0.5 rounded-full font-bold bg-emerald-100 text-emerald-700">Puntual</span>';
+
+            label.innerHTML = `
+                <input type="checkbox" value="${item.asistencia_id}" checked onchange="updateSelectedCounter()"
+                       class="reg-checkbox h-5 w-5 rounded-lg border-slate-300 text-amber-600 focus:ring-amber-500 transition-all cursor-pointer">
+                <div class="h-10 w-10 rounded-xl bg-slate-100 overflow-hidden shrink-0 border border-slate-200 flex items-center justify-center">
+                    <img src="${item.foto_url}" alt="${item.nombre_completo}" class="h-full w-full object-cover"
+                         onerror="this.onerror=null; this.src='/static/images/default_avatar.svg';">
+                </div>
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2">
+                        <h6 class="text-xs font-black text-slate-900 truncate">${item.nombre_completo}</h6>
+                        <span class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-mono font-bold">${item.dni}</span>
+                    </div>
+                    <div class="flex items-center gap-2 mt-0.5">
+                        <span class="text-[10px] text-slate-400 font-semibold">Ingreso: ${item.hora_ingreso}</span>
+                        ${badgePuntualidad}
+                    </div>
+                </div>
+                <div class="text-right shrink-0">
+                    <span class="text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                        Sin Salida
+                    </span>
+                </div>
+            `;
+            container.appendChild(label);
+        });
+
+        updateSelectedCounter();
+    }
+
+    window.updateSelectedCounter = function() {
+        const checked = document.querySelectorAll('.reg-checkbox:checked');
+        const all = document.querySelectorAll('.reg-checkbox');
+        const counterEl = document.getElementById('reg-selected-counter');
+        const submitBtn = document.getElementById('reg-submit-btn');
+        const submitText = document.getElementById('reg-submit-text');
+
+        if (counterEl) {
+            counterEl.textContent = `${checked.length} de ${all.length} seleccionados`;
+        }
+
+        if (submitBtn) {
+            submitBtn.disabled = (checked.length === 0 || state.submitting);
+        }
+
+        if (submitText) {
+            submitText.textContent = checked.length > 0 
+                ? `Marcar ${checked.length} Pendiente(s) como Completos`
+                : 'Selecciona al menos un comunero';
+        }
+    };
+
+    window.regSelectAll = function() {
+        const visibleRows = document.querySelectorAll('.reg-item-row:not(.hidden) .reg-checkbox');
+        visibleRows.forEach(cb => cb.checked = true);
+        updateSelectedCounter();
+    };
+
+    window.regDeselectAll = function() {
+        const all = document.querySelectorAll('.reg-checkbox');
+        all.forEach(cb => cb.checked = false);
+        updateSelectedCounter();
+    };
+
+    window.regFilterList = function() {
+        const q = (document.getElementById('reg-search-input').value || '').toLowerCase().trim();
+        const rows = document.querySelectorAll('.reg-item-row');
+        rows.forEach(row => {
+            const name = row.dataset.name || '';
+            const dni = row.dataset.dni || '';
+            if (!q || name.includes(q) || dni.includes(q)) {
+                row.classList.remove('hidden');
+            } else {
+                row.classList.add('hidden');
+            }
+        });
+    };
+
+    window.submitRegularizar = async function() {
+        if (state.submitting || !state.selectedEventoId) return;
+
+        const checkedBoxes = Array.from(document.querySelectorAll('.reg-checkbox:checked'));
+        if (checkedBoxes.length === 0) return;
+
+        const ids = checkedBoxes.map(cb => parseInt(cb.value));
+        const horaSalida = document.getElementById('reg-hora-salida').value;
+        const observacion = document.getElementById('reg-observacion').value;
+        const submitBtn = document.getElementById('reg-submit-btn');
+        const submitText = document.getElementById('reg-submit-text');
+
+        state.submitting = true;
+        submitBtn.disabled = true;
+        submitText.textContent = 'Procesando regularización...';
+        clearAlert();
+
+        const cookieValue = document.cookie
+            .split('; ')
+            .find(row => row.startsWith('csrftoken='))
+            ?.split('=')[1] || '{{ csrf_token }}';
+
+        try {
+            const res = await fetch("{% url 'regularizar_pendientes_evento' %}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': cookieValue
+                },
+                body: JSON.stringify({
+                    evento_id: parseInt(state.selectedEventoId),
+                    marcar_todos: ids.length === state.pendientes.length,
+                    asistencia_ids: ids,
+                    hora_salida: horaSalida,
+                    observacion: observacion
+                })
+            });
+
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                throw new Error(data.error || 'Ocurrió un error al procesar la regularización.');
+            }
+
+            showAlert(data.message || `¡Éxito! Se regularizó la asistencia de ${data.count} comuneros.`, true);
+
+            setTimeout(() => {
+                window.location.reload();
+            }, 1200);
+
+        } catch (err) {
+            state.submitting = false;
+            submitBtn.disabled = false;
+            updateSelectedCounter();
+            showAlert(err.message || 'Error al conectar con el servidor.');
+        }
+    };
+
+    // Auto-apertura si la URL tiene ?abrir_regularizar=1
+    function checkAutoOpen() {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('abrir_regularizar') === '1') {
+            setTimeout(() => {
+                window.openRegularizarModal();
+            }, 150);
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', checkAutoOpen);
+    } else {
+        checkAutoOpen();
+    }
+})();
+</script>

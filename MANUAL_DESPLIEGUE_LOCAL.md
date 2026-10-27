@@ -159,7 +159,7 @@ python manage.py createsuperuser
 # Si tienes fixtures o datos de prueba
 python manage.py loaddata initial_data.json
 
-# O crea manualmente desde el admin de Django (http://localhost:8000/admin)
+# O crea manualmente desde el admin de Django (http://localhost:8000/gestionsegura)
 ```
 
 ### Paso 7: 🚀 Ejecutar el Servidor (CRÍTICO)
@@ -213,21 +213,21 @@ ipconfig
 
 ### Paso 2: Configurar la URL Base en Flutter
 
-**Archivo a modificar:** `asistencia_scanner_app/lib/api_service.dart`
+**Proyecto Flutter:** `asistencia_scanner_app_3`
 
 ```bash
-# Abrir el archivo
-code asistencia_scanner_app/lib/api_service.dart
+# Ejecuta la app apuntando a tu backend local
+flutter run --dart-define=API_BASE_URL=http://192.168.1.100:8000
 ```
 
-**Busca la línea 9:**
-```dart
-static const String baseUrl = "https://oversophisticated-dedra-overgross.ngrok-free.dev";
+**Ejemplo para Android Emulator:**
+```bash
+flutter run --dart-define=API_BASE_URL=http://10.0.2.2:8000
 ```
 
-**Cámbiala por tu IP local:**
-```dart
-static const String baseUrl = "http://192.168.1.100:8000";  // Reemplaza con TU IP
+**Si usas dispositivo físico:**
+```bash
+flutter run --dart-define=API_BASE_URL=http://192.168.1.100:8000
 ```
 
 > ⚠️ **Nota**: Usa `http://` (no `https://`) para desarrollo local, a menos que configures SSL.
@@ -280,7 +280,7 @@ flutter doctor --android-licenses  # Acepta las licencias de Android
 ### Paso 2: Navegar al Proyecto Flutter
 
 ```bash
-cd asistencia_scanner_app
+cd asistencia_scanner_app_3
 ```
 
 ### Paso 3: Instalar Dependencias
@@ -382,20 +382,20 @@ flutter build ios --release
 
 - [ ] **Backend Django corriendo**
   ```bash
-  # Abre http://localhost:8000/admin en tu navegador
+  # Abre http://localhost:8000/gestionsegura en tu navegador
   # Debes ver la página de login del admin
   ```
 
 - [ ] **Superusuario creado**
   ```bash
-  # Inicia sesión en http://localhost:8000/admin
+  # Inicia sesión en http://localhost:8000/gestionsegura
   # Usuario/contraseña que creaste con createsuperuser
   ```
 
 - [ ] **API accesible desde la red**
   ```bash
   # Desde tu teléfono/emulador, abre el navegador
-  # Visita: http://TU_IP_LOCAL:8000/admin
+  # Visita: http://TU_IP_LOCAL:8000/gestionsegura
   # Debe cargar la página
   ```
 

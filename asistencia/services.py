@@ -8,7 +8,7 @@ de negocio relacionada con el registro de asistencias, separándola de las vista
 from django.core.exceptions import ValidationError
 from django.contrib.auth.models import User
 from datetime import date, datetime, timedelta
-from .models import Usuario, Evento, Asistencia, Ubicacion, LogAccion
+from .models import Usuario, Evento, Asistencia, Ubicacion, LogAccion, ConfiguracionSistema
 
 
 class AsistenciaService:
@@ -55,16 +55,22 @@ class AsistenciaService:
         else:
             # Escaneo en tiempo real
             from django.utils import timezone
-            now = timezone.now()
+            now = timezone.localtime(timezone.now())
             today = now.date()
             current_time = now.time()
         
-        # Buscar asistencia existente
-        existing_asistencia = Asistencia.objects.filter(
-            usuario=usuario,
-            evento=evento,
-            fecha=today
-        ).first()
+        # Buscar asistencia existente (por evento si existe para evitar duplicados en la misma reunión)
+        if evento:
+            existing_asistencia = Asistencia.objects.filter(
+                usuario=usuario,
+                evento=evento
+            ).first()
+        else:
+            existing_asistencia = Asistencia.objects.filter(
+                usuario=usuario,
+                evento__isnull=True,
+                fecha=today
+            ).first()
         
         # Validar que no haya ingreso duplicado
         AsistenciaService._validar_ingreso_duplicado(existing_asistencia, usuario, evento)
@@ -72,6 +78,7 @@ class AsistenciaService:
         # Registrar ingreso
         if existing_asistencia:
             existing_asistencia.hora_ingreso = current_time
+            existing_asistencia.puntualidad = AsistenciaService._calcular_puntualidad(evento, current_time)
             existing_asistencia.save()
             asistencia = existing_asistencia
         else:
@@ -79,7 +86,8 @@ class AsistenciaService:
                 usuario=usuario,
                 hora_ingreso=current_time,
                 ubicacion=ubicacion,
-                evento=evento
+                evento=evento,
+                puntualidad=AsistenciaService._calcular_puntualidad(evento, current_time),
             )
         
         # Registrar log si se proporciona el usuario que realiza la acción
@@ -128,16 +136,22 @@ class AsistenciaService:
         else:
             # Escaneo en tiempo real
             from django.utils import timezone
-            now = timezone.now()
+            now = timezone.localtime(timezone.now())
             today = now.date()
             current_time = now.time()
         
-        # Buscar asistencia existente
-        existing_asistencia = Asistencia.objects.filter(
-            usuario=usuario,
-            evento=evento,
-            fecha=today
-        ).first()
+        # Buscar asistencia existente (por evento si existe para evitar duplicados en la misma reunión)
+        if evento:
+            existing_asistencia = Asistencia.objects.filter(
+                usuario=usuario,
+                evento=evento
+            ).first()
+        else:
+            existing_asistencia = Asistencia.objects.filter(
+                usuario=usuario,
+                evento__isnull=True,
+                fecha=today
+            ).first()
         
         # Validar que existe ingreso previo
         if not existing_asistencia or not existing_asistencia.hora_ingreso:
@@ -155,8 +169,9 @@ class AsistenciaService:
             usuario
         )
         
-        # Registrar salida
+        # Registrar salida y validar automáticamente
         existing_asistencia.hora_salida = current_time
+        existing_asistencia.confirmada = True  # Auto-validación al salida
         existing_asistencia.save()
         
         # Registrar log si se proporciona el usuario que realiza la acción
@@ -169,6 +184,67 @@ class AsistenciaService:
         
         message = f'Salida registrada para {usuario.nombre} {usuario.apellido} en el evento {evento.nombre if evento else "sin evento"} con éxito.'
         return existing_asistencia, message, existing_asistencia.hora_salida
+    
+    @staticmethod
+    def regularizar_pendientes(evento, asistencia_ids=None, hora_salida=None, observacion=None, request_user=None):
+        """
+        Regulariza asistencias pendientes (comuneros que marcaron ingreso pero no registraron salida).
+        Marca su hora_salida y confirmada=True para que figuren como asistencia completa.
+
+        Args:
+            evento (Evento): El evento al que corresponden las asistencias
+            asistencia_ids (list, optional): Lista de IDs específicos a regularizar. Si es None, regulariza todos los pendientes del evento.
+            hora_salida (time, optional): Hora de salida a asignar. Si no se especifica, usa la hora actual o estimada.
+            observacion (str, optional): Motivo o comentario adicional para el registro de auditoría.
+            request_user (User, optional): Usuario que realiza la acción (para auditoría).
+
+        Returns:
+            tuple: (total_regularizados, lista_asistencias_actualizadas)
+        """
+        from django.db import transaction
+        from django.utils import timezone
+
+        qs = Asistencia.objects.filter(
+            evento=evento,
+            hora_ingreso__isnull=False,
+            hora_salida__isnull=True,
+            es_justificada=False,
+        ).exclude(usuario__estado=Usuario.ESTADO_EXONERADO)
+
+        if asistencia_ids is not None:
+            qs = qs.filter(id__in=asistencia_ids)
+
+        asistencias = list(qs.select_related('usuario'))
+        if not asistencias:
+            return 0, []
+
+        if not hora_salida:
+            hora_salida = timezone.localtime(timezone.now()).time()
+
+        updated = []
+        with transaction.atomic():
+            for a in asistencias:
+                salida_asig = hora_salida
+                # Si la hora de ingreso registrada es posterior o igual a la salida elegida,
+                # ajustar la salida 15 minutos después del ingreso para mantener coherencia cronológica.
+                if a.hora_ingreso and salida_asig <= a.hora_ingreso:
+                    temp_dt = datetime.combine(date.today(), a.hora_ingreso) + timedelta(minutes=15)
+                    salida_asig = temp_dt.time()
+
+                a.hora_salida = salida_asig
+                a.confirmada = True
+                a.save(update_fields=['hora_salida', 'confirmada'])
+                updated.append(a)
+
+            if request_user:
+                obs_txt = f" - Obs: {observacion}" if observacion else ""
+                AsistenciaService._registrar_log(
+                    request_user,
+                    'Regularización de Asistencias Pendientes',
+                    f"{request_user.username} regularizó la salida de {len(updated)} comunero(s) en el evento '{evento.nombre}' ({evento.fecha.strftime('%d/%m/%Y')}) con salida asignada {hora_salida.strftime('%H:%M')}.{obs_txt}"
+                )
+
+        return len(updated), updated
     
     # ==================== Métodos de Validación ====================
     
@@ -200,11 +276,29 @@ class AsistenciaService:
         Raises:
             ValidationError: Si el evento no es para hoy
         """
-        if evento and evento.fecha != date.today():
+        if not evento:
+            raise ValidationError(
+                'Debes seleccionar un evento activo antes de registrar asistencias.'
+            )
+
+        if evento.fecha != date.today():
             raise ValidationError(
                 f'El evento {evento.nombre} no está programado para hoy.'
             )
     
+    @staticmethod
+    def _calcular_puntualidad(evento, hora_ingreso):
+        if not evento or not hora_ingreso:
+            return Asistencia.PUNTUALIDAD_NO_APLICA
+
+        config = ConfiguracionSistema.objects.first()
+        tolerancia = config.tolerancia_minutos if config else 15
+
+        fecha_ref = date.today()
+        hora_limite = datetime.combine(fecha_ref, evento.hora_ingreso) + timedelta(minutes=tolerancia)
+        ingreso = datetime.combine(fecha_ref, hora_ingreso)
+        return Asistencia.PUNTUALIDAD_PUNTUAL if ingreso <= hora_limite else Asistencia.PUNTUALIDAD_TARDE
+
     @staticmethod
     def _validar_ingreso_duplicado(asistencia, usuario, evento):
         """

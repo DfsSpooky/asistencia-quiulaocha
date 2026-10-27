@@ -2,7 +2,17 @@
 
 {% block title %}Dashboard - Quiulacocha{% endblock %}
 {% block content %}
-    <div class="space-y-12 animate-fade-in">
+    <div x-data="{ showBackupModal: false }"
+         x-init="$watch('showBackupModal', value => {
+             if (value) {
+                 document.body.classList.add('overflow-hidden');
+             } else {
+                 document.body.classList.remove('overflow-hidden');
+             }
+         })"
+         @close-backup-modal.window="showBackupModal = false"
+         @keydown.escape.window="showBackupModal = false">
+        <div class="space-y-12 animate-fade-in">
         <!-- Header Section -->
         <div class="flex flex-col md:flex-row md:items-end justify-between gap-6">
             <div>
@@ -16,7 +26,7 @@
         </div>
         <!-- KPI Grid -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <!-- Total Usuarios -->
+            <!-- Padrón Electoral -->
             <div class="group bg-white rounded-[2.5rem] p-8 shadow-premium border border-slate-100 hover:border-primary-200 transition-all duration-500 relative overflow-hidden">
                 <div class="absolute top-0 right-0 w-32 h-32 bg-primary-50 rounded-full -mr-16 -mt-16 group-hover:scale-110 transition-transform duration-700 opacity-50">
                 </div>
@@ -24,10 +34,11 @@
                     <div class="h-16 w-16 rounded-2xl bg-primary-100 text-primary-600 flex items-center justify-center mb-6 group-hover:rotate-6 transition-all duration-300">
                         <i class="bi bi-people-fill text-3xl"></i>
                     </div>
-                    <h3 class="text-5xl font-extrabold text-slate-900 mb-2 tracking-tighter">{{ total_usuarios }}</h3>
-                    <p class="text-slate-400 font-bold uppercase text-[10px] tracking-[0.2em]">Total Usuarios</p>
+                    <h3 class="text-5xl font-extrabold text-slate-900 mb-2 tracking-tighter">{{ padron_activo }}</h3>
+                    <p class="text-slate-400 font-bold uppercase text-[10px] tracking-[0.2em]">Padrón Electoral</p>
+                    <div class="mt-2 text-[10px] text-slate-400 font-medium">De un total de {{ total_comunidad }} en la comunidad</div>
                 </div>
-                <div class="mt-6 h-1 w-full bg-slate-50 rounded-full overflow-hidden">
+                <div class="mt-4 h-1 w-full bg-slate-50 rounded-full overflow-hidden">
                     <div class="h-full bg-primary-500 w-full opacity-60"></div>
                 </div>
             </div>
@@ -75,6 +86,7 @@
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {% if can_scan_qr %}
                             <a href="{% url 'escanear_qr' %}"
+                               hx-boost="false"
                                class="group flex items-center gap-6 p-6 bg-white/5 border border-white/10 rounded-[2rem] hover:bg-white/10 transition-all duration-300 transform hover:-translate-y-1">
                                 <div class="h-14 w-14 rounded-2xl bg-primary-600 text-white flex items-center justify-center shadow-lg shadow-primary-600/20 group-hover:scale-110 transition-transform">
                                     <i class="bi bi-camera-fill text-2xl"></i>
@@ -97,8 +109,9 @@
                             </div>
                             <i class="bi bi-chevron-right ml-auto text-slate-500 group-hover:text-white transition-colors"></i>
                         </a>
-                        <a href="{% url 'exportar_asistencias_excel' %}"
+                        <a href="{% url 'exportar_reporte_global_excel' %}"
                            hx-boost="false"
+                           hx-disable
                            class="group flex items-center gap-6 p-6 bg-emerald-600/10 border border-emerald-600/20 rounded-[2rem] hover:bg-emerald-600/20 transition-all duration-300 transform hover:-translate-y-1">
                             <div class="h-14 w-14 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shadow-lg shadow-emerald-600/20 group-hover:scale-110 transition-transform">
                                 <i class="bi bi-file-earmark-excel-fill text-2xl"></i>
@@ -109,22 +122,621 @@
                             </div>
                             <i class="bi bi-download ml-auto text-slate-500 group-hover:text-white transition-colors"></i>
                         </a>
+                        {% if perms.asistencia.can_manage_users or user.is_staff %}
+                            <a href="{% url 'historial_asistencias' %}?abrir_regularizar=1"
+                               class="group flex items-center gap-6 p-6 bg-amber-500/10 border border-amber-500/20 rounded-[2rem] hover:bg-amber-500/20 transition-all duration-300 transform hover:-translate-y-1">
+                                <div class="h-14 w-14 rounded-2xl bg-amber-500 text-slate-950 flex items-center justify-center shadow-lg shadow-amber-500/20 group-hover:scale-110 transition-transform">
+                                    <i class="bi bi-person-check-fill text-2xl"></i>
+                                </div>
+                                <div class="text-left">
+                                    <h6 class="text-lg font-bold text-white mb-1">Validar Pendientes</h6>
+                                    <p class="text-slate-400 text-xs font-medium">Regularizar salidas no marcadas</p>
+                                </div>
+                                <i class="bi bi-chevron-right ml-auto text-slate-500 group-hover:text-white transition-colors"></i>
+                            </a>
+                        {% endif %}
+                        {% if user.is_superuser %}
+                            <a href="javascript:void(0)"
+                               @click="showBackupModal = true"
+                               hx-boost="false"
+                               class="group flex items-center gap-6 p-6 bg-slate-800/40 border border-slate-700 rounded-[2rem] hover:bg-slate-800 transition-all duration-300 transform hover:-translate-y-1">
+                                <div class="h-14 w-14 rounded-2xl bg-slate-700 text-white flex items-center justify-center shadow-lg shadow-slate-900/20 group-hover:scale-110 transition-transform">
+                                    <i class="bi bi-shield-lock-fill text-2xl text-amber-500"></i>
+                                </div>
+                                <div class="text-left">
+                                    <h6 class="text-lg font-bold text-white mb-1">Centro de Backups</h6>
+                                    <p class="text-slate-400 text-xs font-medium">Gestionar seguridad del sistema</p>
+                                </div>
+                                <i class="bi bi-gear-wide-connected ml-auto text-slate-500 group-hover:text-amber-500 transition-colors"></i>
+                            </a>
+                        {% endif %}
                         <a href="{% url 'registrar_usuario' %}"
                            class="group flex items-center gap-6 p-6 bg-primary-600 rounded-[2rem] hover:bg-primary-700 transition-all duration-300 transform hover:-translate-y-1 shadow-xl shadow-primary-600/20">
                             <div class="h-14 w-14 rounded-2xl bg-white/20 text-white flex items-center justify-center group-hover:scale-110 transition-transform">
                                 <i class="bi bi-person-plus-fill text-2xl"></i>
                             </div>
                             <div class="text-left">
-                                <h6 class="text-lg font-bold text-white mb-1">Registrar Nuevo Usuario</h6>
-                                <p class="text-primary-100/70 text-xs font-medium italic">Enrolamiento rápido</p>
+                                <h6 class="text-lg font-bold text-white mb-1">Registrar Socio</h6>
+                                <p class="text-primary-100 text-xs font-medium italic">Agregar nuevo integrante</p>
                             </div>
-                            <i class="bi bi-arrow-right-circle-fill ml-auto text-white text-3xl opacity-50 group-hover:opacity-100 transition-opacity"></i>
+                            <i class="bi bi-chevron-right ml-auto text-white/50 group-hover:text-white transition-colors"></i>
                         </a>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+
+        <!-- Backup/Restore Management Modal -->
+        <div x-cloak
+             x-show="showBackupModal" 
+             class="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto overscroll-contain" 
+             style="display: none; overscroll-behavior: contain;"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0">
+            
+            <!-- Backdrop with click-outside dismiss & overscroll containment -->
+            <div class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm transition-opacity"
+                 style="overscroll-behavior: contain;"
+                 @click="showBackupModal = false"></div>
+
+            <!-- Modal Card (Centered, Fixed in Viewport, Scroll-isolated) -->
+            <div class="relative bg-white rounded-[2rem] sm:rounded-[2.5rem] max-w-2xl w-full p-6 sm:p-8 shadow-2xl transform transition-all border border-slate-100 my-auto max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3rem)] overflow-y-auto overscroll-contain"
+                 style="overscroll-behavior: contain;"
+                 x-transition:enter="transition ease-out duration-300"
+                 x-transition:enter-start="opacity-0 translate-y-4 scale-95"
+                 x-transition:enter-end="opacity-100 translate-y-0 scale-100">
+                    
+                    <!-- Modal Header -->
+                    <div class="flex items-center justify-between mb-8">
+                        <div class="flex items-center gap-4">
+                            <div class="h-12 w-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center">
+                                <i class="bi bi-shield-lock-fill text-xl"></i>
+                            </div>
+                            <div>
+                                <h3 class="text-2xl font-bold text-slate-900">Gestión de Backups</h3>
+                                <p class="text-sm text-slate-500 font-medium">Sistema de Seguridad y Recuperación</p>
+                            </div>
+                        </div>
+                        <button @click="showBackupModal = false" class="text-slate-400 hover:text-slate-600 transition-colors p-2">
+                            <i class="bi bi-x-lg text-xl"></i>
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <!-- Option 1: Create Backup -->
+                        <div class="p-6 rounded-[2rem] bg-slate-50 border border-slate-100 hover:border-primary-200 transition-all flex flex-col items-center text-center">
+                            <div class="h-16 w-16 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center mb-4">
+                                <i class="bi bi-cloud-download text-3xl"></i>
+                            </div>
+                            <h4 class="font-bold text-slate-900 mb-2">Descargar Backup</h4>
+                            <p class="text-xs text-slate-500 mb-6">Genera un snapshot completo de la base de datos y archivos multimedia.</p>
+                            <a href="{% url 'descargar_backup' %}" 
+                               hx-boost="false"
+                               hx-disable
+                               class="w-full py-3 bg-primary-600 text-white rounded-xl font-bold hover:bg-primary-700 transition-all flex items-center justify-center gap-2">
+                                <i class="bi bi-download"></i>
+                                Generar Ahora
+                            </a>
+                        </div>
+
+                        <!-- Option 2: Restore Backup -->
+                        <div class="p-6 rounded-[2rem] bg-amber-50/50 border border-amber-100 hover:border-amber-200 transition-all flex flex-col items-center text-center">
+                            <div class="h-16 w-16 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mb-4">
+                                <i class="bi bi-arrow-counterclockwise text-3xl"></i>
+                            </div>
+                            <h4 class="font-bold text-slate-900 mb-2">Restaurar Sistema</h4>
+                            <p class="text-xs text-slate-500 mb-4">Sube un archivo .tar.gz para restaurar el estado completo del sistema (Base de Datos + Fotos + Carnets QR).</p>
+                            
+                            <form id="restore-backup-form" action="{% url 'restaurar_backup' %}" method="POST" enctype="multipart/form-data" 
+                                  class="w-full space-y-3">
+                                {% csrf_token %}
+                                <!-- Selector de Archivo Unificado y Elegante -->
+                                <div class="w-full">
+                                    <input type="file" name="backup_file" id="backup_file" required accept=".tar.gz" class="hidden">
+
+                                    <!-- Estado 1: Sin archivo seleccionado (Botón Dashed) -->
+                                    <div id="file-picker-empty" 
+                                         onclick="document.getElementById('backup_file').click();"
+                                         class="group/pick w-full py-3 px-3.5 border-2 border-dashed border-amber-300 hover:border-amber-400 rounded-2xl bg-amber-50/80 hover:bg-amber-100/80 transition-all flex items-center justify-center gap-2.5 cursor-pointer shadow-sm">
+                                        <div class="h-8 w-8 rounded-xl bg-amber-200/80 text-amber-700 flex items-center justify-center group-hover/pick:scale-105 transition-transform flex-shrink-0">
+                                            <i class="bi bi-file-earmark-zip text-base"></i>
+                                        </div>
+                                        <div class="text-left min-w-0">
+                                            <span class="block text-xs font-bold text-amber-900 leading-tight">SELECCIONAR ARCHIVO</span>
+                                            <span class="block text-[10px] font-medium text-amber-700 truncate">Formato requerido: .tar.gz</span>
+                                        </div>
+                                    </div>
+
+                                    <!-- Estado 2: Archivo seleccionado (Tarjeta refinada sin desbordamiento) -->
+                                    <div id="file-picker-selected" class="hidden w-full p-2.5 bg-white border border-amber-300 rounded-2xl shadow-sm transition-all flex items-center gap-2.5 text-left">
+                                        <div class="h-9 w-9 flex-shrink-0 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                                            <i class="bi bi-file-earmark-check-fill text-lg"></i>
+                                        </div>
+                                        <div class="min-w-0 flex-1">
+                                            <p id="file-card-name" class="text-xs font-bold text-slate-800 truncate" title=""></p>
+                                            <div class="flex items-center gap-1.5 mt-0.5">
+                                                <span id="file-card-size" class="inline-block px-1.5 py-0.2 bg-amber-50 text-amber-800 font-semibold text-[10px] rounded border border-amber-200"></span>
+                                                <span class="text-[10px] text-emerald-600 font-semibold flex items-center gap-0.5">
+                                                    <i class="bi bi-check2"></i> Listo
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <button type="button" id="file-card-remove" 
+                                                class="flex-shrink-0 p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition-colors"
+                                                title="Cambiar o quitar archivo">
+                                            <i class="bi bi-x-circle-fill text-base"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <button type="submit" id="start-restore-btn"
+                                        class="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold shadow-lg shadow-amber-600/20 transition-all flex items-center justify-center gap-2 text-xs">
+                                    <i class="bi bi-upload"></i>
+                                    Iniciar Restauración Completa
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="mt-8 p-4 bg-rose-50 rounded-2xl border border-rose-100 flex gap-4 items-start">
+                        <i class="bi bi-exclamation-triangle-fill text-rose-500 text-xl"></i>
+                        <p class="text-xs text-rose-600 font-medium leading-relaxed">
+                            <strong class="block mb-1">ADVERTENCIA:</strong>
+                            La restauración reemplazará la base de datos actual y sincronizará todas las fotos y carnets QR contenidos en el backup.
+                        </p>
+                    </div>
+                </div>
+        </div>
+    </div>
+
+    <!-- Modal Interactivo de Progreso de Restauración -->
+    <div id="restore-progress-modal" 
+         class="hidden fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-md p-4 overflow-y-auto overscroll-contain"
+         style="overscroll-behavior: contain;">
+        <div class="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-lg w-full p-6 sm:p-8 animate-fade-in relative overflow-hidden my-auto max-h-[calc(100vh-2rem)] overscroll-contain"
+             style="overscroll-behavior: contain;">
+            <!-- Header -->
+            <div class="text-center mb-6">
+                <div id="modal-icon-container" class="h-16 w-16 mx-auto rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mb-3">
+                    <i id="modal-icon" class="bi bi-database-fill-gear text-3xl animate-spin"></i>
+                </div>
+                <h3 id="modal-title" class="text-xl font-black text-slate-900 tracking-tight">Restaurando Sistema</h3>
+                <p id="modal-subtitle" class="text-xs text-slate-500 mt-1">Por favor espera un momento. No cierres ni recargues esta página.</p>
+            </div>
+
+            <!-- Progress Bar -->
+            <div class="space-y-2 mb-6">
+                <div class="flex justify-between text-xs font-bold">
+                    <span id="restore-status-stage" class="text-amber-700">Subiendo archivo al servidor...</span>
+                    <span id="restore-status-percentage" class="text-slate-700">0%</span>
+                </div>
+                <div class="w-full h-3.5 bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200">
+                    <div id="restore-progress-bar" class="h-full bg-gradient-to-r from-amber-500 via-primary-500 to-emerald-500 rounded-full transition-all duration-300 w-0"></div>
+                </div>
+                <p id="restore-status-detail" class="text-[11px] text-slate-400 text-right">0 MB / 0 MB</p>
+            </div>
+
+            <!-- Steps List -->
+            <div class="space-y-2.5 bg-slate-50 p-4 rounded-2xl border border-slate-100 mb-6 text-xs">
+                <div id="step-upload" class="flex items-center gap-3 font-semibold text-amber-700">
+                    <i class="bi bi-arrow-repeat animate-spin text-base"></i>
+                    <span>Paso 1: Subiendo archivo de respaldo (.tar.gz)</span>
+                </div>
+                <div id="step-extract" class="flex items-center gap-3 font-medium text-slate-400">
+                    <i class="bi bi-circle text-base"></i>
+                    <span>Paso 2: Desempaquetando y verificando integridad</span>
+                </div>
+                <div id="step-db" class="flex items-center gap-3 font-medium text-slate-400">
+                    <i class="bi bi-circle text-base"></i>
+                    <span>Paso 3: Restaurando registros en PostgreSQL / SQLite</span>
+                </div>
+                <div id="step-migrate" class="flex items-center gap-3 font-medium text-slate-400">
+                    <i class="bi bi-circle text-base"></i>
+                    <span>Paso 4: Sincronizando migraciones y esquema</span>
+                </div>
+                <div id="step-media" class="flex items-center gap-3 font-medium text-slate-400">
+                    <i class="bi bi-circle text-base"></i>
+                    <span>Paso 5: Restaurando fotos de perfil y carnets QR</span>
+                </div>
+            </div>
+
+            <!-- Success Summary Box (Hidden Initially) -->
+            <div id="restore-success-box" class="hidden bg-emerald-50 border border-emerald-200 rounded-2xl p-4 md:p-5 mb-6 text-left">
+                <div class="flex items-center gap-2.5 text-emerald-800 font-bold text-sm mb-2">
+                    <i class="bi bi-check-circle-fill text-emerald-600 text-xl"></i>
+                    <span>¡Restauración Finalizada con Éxito!</span>
+                </div>
+                <p id="restore-success-message" class="text-xs text-emerald-700 mb-4 leading-relaxed font-medium"></p>
+                
+                <!-- 6 Metric Cards -->
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-2 text-center mb-4">
+                    <div class="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-sm">
+                        <span class="block text-slate-400 text-xs mb-0.5 font-medium">👥 Comuneros</span>
+                        <span id="stat-usuarios" class="block font-black text-slate-900 text-lg md:text-xl">0</span>
+                        <span class="text-[10px] text-emerald-600 font-semibold">En Padrón</span>
+                    </div>
+                    <div class="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-sm">
+                        <span class="block text-slate-400 text-xs mb-0.5 font-medium">📋 Asistencias</span>
+                        <span id="stat-asistencias" class="block font-black text-slate-900 text-lg md:text-xl">0</span>
+                        <span class="text-[10px] text-emerald-600 font-semibold">Historial</span>
+                    </div>
+                    <div class="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-sm">
+                        <span class="block text-slate-400 text-xs mb-0.5 font-medium">📅 Reuniones</span>
+                        <span id="stat-eventos" class="block font-black text-slate-900 text-lg md:text-xl">0</span>
+                        <span class="text-[10px] text-slate-500 font-semibold">Totales</span>
+                    </div>
+                    <div class="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-sm">
+                        <span class="block text-slate-400 text-xs mb-0.5 font-medium">📸 Fotos Perfil</span>
+                        <span id="stat-fotos" class="block font-black text-slate-900 text-lg md:text-xl">0</span>
+                        <span class="text-[10px] text-emerald-600 font-semibold">Restauradas</span>
+                    </div>
+                    <div class="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-sm">
+                        <span class="block text-slate-400 text-xs mb-0.5 font-medium">📱 Códigos QR</span>
+                        <span id="stat-qr" class="block font-black text-slate-900 text-lg md:text-xl">0</span>
+                        <span class="text-[10px] text-emerald-600 font-semibold">Carnets QR</span>
+                    </div>
+                    <div class="bg-white p-2.5 rounded-xl border border-emerald-100 shadow-sm">
+                        <span class="block text-slate-400 text-xs mb-0.5 font-medium">💾 Multimedia</span>
+                        <span id="stat-media" class="block font-black text-slate-900 text-lg md:text-xl">0 MB</span>
+                        <span class="text-[10px] text-slate-500 font-semibold">En /media/</span>
+                    </div>
+                </div>
+
+                <!-- Classification Status Pills -->
+                <div class="flex flex-wrap gap-2 text-[11px] justify-center text-slate-700 bg-white/80 p-2.5 rounded-xl border border-emerald-100">
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-semibold">
+                        <i class="bi bi-shield-check"></i> Base PostgreSQL: OK
+                    </span>
+                    <span id="badge-faenas" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-semibold">
+                        🚜 Faenas: 0
+                    </span>
+                    <span id="badge-asambleas" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-indigo-100 text-indigo-800 font-semibold">
+                        🏛️ Asambleas: 0
+                    </span>
+                    <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-100 text-blue-800 font-semibold">
+                        <i class="bi bi-folder-check"></i> Archivos Multimedia: OK
+                    </span>
+                </div>
+            </div>
+
+            <!-- Error Box (Hidden Initially) -->
+            <div id="restore-error-box" class="hidden bg-rose-50 border border-rose-200 rounded-2xl p-4 mb-6">
+                <div class="flex items-center gap-2 text-rose-800 font-bold text-sm mb-1">
+                    <i class="bi bi-exclamation-triangle-fill text-rose-600 text-lg"></i>
+                    <span>No se pudo completar la restauración</span>
+                </div>
+                <p id="restore-error-message" class="text-xs text-rose-700 leading-relaxed break-words"></p>
+            </div>
+
+            <!-- Modal Action Buttons -->
+            <div class="flex gap-3">
+                <button type="button" id="restore-close-btn" class="hidden flex-1 py-3 bg-slate-900 hover:bg-black text-white rounded-xl font-bold text-xs transition-all shadow-md">
+                    Cerrar y Reintentar
+                </button>
+                <button type="button" id="restore-reload-btn" class="hidden flex-1 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs transition-all shadow-md flex items-center justify-center gap-2">
+                    <i class="bi bi-arrow-clockwise"></i>
+                    <span>Recargar Dashboard</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            const form = document.getElementById('restore-backup-form');
+            const fileInput = document.getElementById('backup_file');
+            const filePickerEmpty = document.getElementById('file-picker-empty');
+            const filePickerSelected = document.getElementById('file-picker-selected');
+            const fileCardName = document.getElementById('file-card-name');
+            const fileCardSize = document.getElementById('file-card-size');
+            const fileCardRemove = document.getElementById('file-card-remove');
+
+            const modal = document.getElementById('restore-progress-modal');
+            const modalIcon = document.getElementById('modal-icon');
+            const modalIconContainer = document.getElementById('modal-icon-container');
+            const modalTitle = document.getElementById('modal-title');
+            const modalSubtitle = document.getElementById('modal-subtitle');
+            const progressBar = document.getElementById('restore-progress-bar');
+            const statusStage = document.getElementById('restore-status-stage');
+            const statusPercentage = document.getElementById('restore-status-percentage');
+            const statusDetail = document.getElementById('restore-status-detail');
+
+            const stepUpload = document.getElementById('step-upload');
+            const stepExtract = document.getElementById('step-extract');
+            const stepDb = document.getElementById('step-db');
+            const stepMigrate = document.getElementById('step-migrate');
+            const stepMedia = document.getElementById('step-media');
+
+            const successBox = document.getElementById('restore-success-box');
+            const successMessage = document.getElementById('restore-success-message');
+            const statUsuarios = document.getElementById('stat-usuarios');
+            const statAsistencias = document.getElementById('stat-asistencias');
+            const statEventos = document.getElementById('stat-eventos');
+
+            const errorBox = document.getElementById('restore-error-box');
+            const errorMessage = document.getElementById('restore-error-message');
+            const closeBtn = document.getElementById('restore-close-btn');
+            const reloadBtn = document.getElementById('restore-reload-btn');
+
+            function formatBytes(bytes) {
+                if (bytes === 0) return '0 Bytes';
+                const k = 1024;
+                const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            }
+
+            fileInput.addEventListener('change', function() {
+                if (fileInput.files.length > 0) {
+                    const file = fileInput.files[0];
+                    fileCardName.textContent = file.name;
+                    fileCardName.title = file.name;
+                    fileCardSize.textContent = formatBytes(file.size);
+                    filePickerEmpty.classList.add('hidden');
+                    filePickerSelected.classList.remove('hidden');
+                } else {
+                    filePickerEmpty.classList.remove('hidden');
+                    filePickerSelected.classList.add('hidden');
+                }
+            });
+
+            if (fileCardRemove) {
+                fileCardRemove.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    fileInput.value = '';
+                    filePickerEmpty.classList.remove('hidden');
+                    filePickerSelected.classList.add('hidden');
+                });
+            }
+
+            function markStep(stepEl, state) {
+                // state: 'waiting', 'active', 'done', 'error'
+                if (state === 'active') {
+                    stepEl.className = 'flex items-center gap-3 font-semibold text-amber-700';
+                    stepEl.querySelector('i').className = 'bi bi-arrow-repeat animate-spin text-base text-amber-600';
+                } else if (state === 'done') {
+                    stepEl.className = 'flex items-center gap-3 font-semibold text-emerald-700';
+                    stepEl.querySelector('i').className = 'bi bi-check-circle-fill text-base text-emerald-600';
+                } else if (state === 'error') {
+                    stepEl.className = 'flex items-center gap-3 font-semibold text-rose-700';
+                    stepEl.querySelector('i').className = 'bi bi-x-circle-fill text-base text-rose-600';
+                } else {
+                    stepEl.className = 'flex items-center gap-3 font-medium text-slate-400';
+                    stepEl.querySelector('i').className = 'bi bi-circle text-base';
+                }
+            }
+
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+
+                if (!fileInput.files.length) {
+                    alert('Por favor selecciona un archivo .tar.gz');
+                    return;
+                }
+
+                const file = fileInput.files[0];
+                if (!file.name.endsWith('.tar.gz')) {
+                    alert('El archivo seleccionado debe tener la extensión .tar.gz');
+                    return;
+                }
+
+                if (!confirm('¡ATENCIÓN! Esta acción restaurará la base de datos y los archivos multimedia desde la copia de seguridad. ¿Deseas proceder?')) {
+                    return;
+                }
+
+                // Cerrar modal de selección y abrir modal de progreso con scroll lock
+                window.dispatchEvent(new CustomEvent('close-backup-modal'));
+                document.body.classList.add('overflow-hidden');
+                modal.classList.remove('hidden');
+                successBox.classList.add('hidden');
+                errorBox.classList.add('hidden');
+                closeBtn.classList.add('hidden');
+                reloadBtn.classList.add('hidden');
+
+                modalIconContainer.className = 'h-16 w-16 mx-auto rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mb-3';
+                modalIcon.className = 'bi bi-database-fill-gear text-3xl animate-spin';
+                modalTitle.textContent = 'Restaurando Sistema';
+                modalSubtitle.textContent = 'Por favor espera un momento. No cierres ni recargues esta página.';
+
+                markStep(stepUpload, 'active');
+                markStep(stepExtract, 'waiting');
+                markStep(stepDb, 'waiting');
+                markStep(stepMigrate, 'waiting');
+                markStep(stepMedia, 'waiting');
+
+                progressBar.style.width = '0%';
+                statusPercentage.textContent = '0%';
+                statusStage.textContent = 'Subiendo archivo de respaldo...';
+                statusDetail.textContent = '0 / ' + formatBytes(file.size);
+
+                const formData = new FormData(form);
+                const xhr = new XMLHttpRequest();
+
+                xhr.upload.addEventListener('progress', function(event) {
+                    if (event.lengthComputable) {
+                        const percent = Math.round((event.loaded / event.total) * 100);
+                        // Subida ocupa del 0 al 40% del progreso total
+                        const displayPercent = Math.min(Math.round(percent * 0.4), 40);
+                        progressBar.style.width = displayPercent + '%';
+                        statusPercentage.textContent = percent + '%';
+                        statusDetail.textContent = formatBytes(event.loaded) + ' / ' + formatBytes(event.total);
+
+                        if (percent >= 100) {
+                            markStep(stepUpload, 'done');
+                            markStep(stepExtract, 'active');
+                            statusStage.textContent = 'Desempaquetando archivo en el servidor...';
+                            statusPercentage.textContent = '50%';
+                            progressBar.style.width = '50%';
+                            statusDetail.textContent = 'Extrayendo contenido...';
+
+                            setTimeout(() => {
+                                markStep(stepExtract, 'done');
+                                markStep(stepDb, 'active');
+                                statusStage.textContent = 'Restaurando base de datos PostgreSQL...';
+                                statusPercentage.textContent = '70%';
+                                progressBar.style.width = '70%';
+                                statusDetail.textContent = 'Insertando registros...';
+                            }, 1500);
+
+                            setTimeout(() => {
+                                markStep(stepDb, 'done');
+                                markStep(stepMigrate, 'active');
+                                statusStage.textContent = 'Verificando y aplicando migraciones...';
+                                statusPercentage.textContent = '85%';
+                                progressBar.style.width = '85%';
+                                statusDetail.textContent = 'Comprobando integridad de tablas...';
+                            }, 3500);
+
+                            setTimeout(() => {
+                                markStep(stepMigrate, 'done');
+                                markStep(stepMedia, 'active');
+                                statusStage.textContent = 'Sincronizando fotos de perfil y carnets QR...';
+                                statusPercentage.textContent = '95%';
+                                progressBar.style.width = '95%';
+                                statusDetail.textContent = 'Instalando multimedia en media/...';
+                            }, 5500);
+                        }
+                    }
+                });
+
+                xhr.addEventListener('load', function() {
+                    progressBar.style.width = '100%';
+                    statusPercentage.textContent = '100%';
+
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        let response = {};
+                        try {
+                            response = JSON.parse(xhr.responseText);
+                        } catch(e) {
+                            response = { ok: true, message: 'Sistema restaurado exitosamente.' };
+                        }
+
+                        markStep(stepUpload, 'done');
+                        markStep(stepExtract, 'done');
+                        markStep(stepDb, 'done');
+                        markStep(stepMigrate, 'done');
+                        markStep(stepMedia, 'done');
+
+                        modalIconContainer.className = 'h-16 w-16 mx-auto rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mb-3';
+                        modalIcon.className = 'bi bi-check-circle-fill text-3xl';
+                        modalTitle.textContent = '¡Restauración Exitosa!';
+                        modalSubtitle.textContent = 'Revisa el resumen completo de datos y multimedia restaurados abajo.';
+
+                        statusStage.textContent = 'Restauración 100% Completada';
+                        statusDetail.textContent = 'Datos, fotos y carnets sincronizados';
+
+                        successMessage.textContent = response.message || 'El sistema fue restaurado correctamente con todos sus datos, fotos y carnets.';
+                        statUsuarios.textContent = response.usuarios !== undefined ? response.usuarios : '-';
+                        statAsistencias.textContent = response.asistencias !== undefined ? response.asistencias : '-';
+                        statEventos.textContent = response.eventos !== undefined ? response.eventos : '-';
+
+                        const statFotos = document.getElementById('stat-fotos');
+                        if (statFotos) statFotos.textContent = response.fotos !== undefined ? response.fotos : '-';
+
+                        const statQr = document.getElementById('stat-qr');
+                        if (statQr) statQr.textContent = response.qr_codes !== undefined ? response.qr_codes : '-';
+
+                        const statMedia = document.getElementById('stat-media');
+                        if (statMedia) statMedia.textContent = response.media_size !== undefined ? response.media_size : '-';
+
+                        const badgeFaenas = document.getElementById('badge-faenas');
+                        if (badgeFaenas) badgeFaenas.textContent = '🚜 Faenas: ' + (response.faenas !== undefined ? response.faenas : '0');
+
+                        const badgeAsambleas = document.getElementById('badge-asambleas');
+                        if (badgeAsambleas) badgeAsambleas.textContent = '🏛️ Asambleas: ' + (response.asambleas !== undefined ? response.asambleas : '0');
+
+                        successBox.classList.remove('hidden');
+
+                        // Mantener la confirmación visible sin recargar bruscamente
+                        reloadBtn.classList.remove('hidden');
+                        reloadBtn.className = 'flex-1 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-sm transition-all shadow-lg hover:shadow-emerald-200 flex items-center justify-center gap-2 cursor-pointer';
+                        reloadBtn.innerHTML = '<i class="bi bi-check-circle-fill text-base"></i> <span>Entrar al Dashboard Actualizado</span>';
+                        reloadBtn.onclick = function() {
+                            reloadBtn.disabled = true;
+                            reloadBtn.innerHTML = '<i class="bi bi-arrow-clockwise animate-spin text-base"></i> <span>Cargando Dashboard...</span>';
+                            window.location.reload();
+                        };
+                    } else {
+                        let errText = 'Error inesperado durante la restauración.';
+                        try {
+                            const errResp = JSON.parse(xhr.responseText);
+                            if (errResp.error) errText = errResp.error;
+                        } catch(e) {
+                            if (xhr.responseText) {
+                                try {
+                                    const doc = new DOMParser().parseFromString(xhr.responseText, 'text/html');
+                                    const titleEl = doc.querySelector('title');
+                                    if (titleEl && titleEl.textContent) {
+                                        errText = titleEl.textContent.trim();
+                                    } else {
+                                        errText = (doc.body && doc.body.textContent) ? doc.body.textContent.trim().substring(0, 200) : 'Error en el servidor.';
+                                    }
+                                } catch(_) {
+                                    errText = xhr.responseText.substring(0, 200);
+                                }
+                            }
+                        }
+
+                        // Marcar paso activo como error y barra en rojo
+                        [stepUpload, stepExtract, stepDb, stepMigrate, stepMedia].forEach(s => {
+                            if (s.className.includes('amber')) {
+                                markStep(s, 'error');
+                            }
+                        });
+                        progressBar.style.width = '100%';
+                        progressBar.className = 'h-full transition-all duration-500 rounded-full bg-rose-500';
+                        statusStage.textContent = 'Proceso interrumpido';
+                        statusDetail.textContent = 'Ocurrió un error antes de finalizar.';
+
+                        modalIconContainer.className = 'h-16 w-16 mx-auto rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mb-3';
+                        modalIcon.className = 'bi bi-x-circle-fill text-3xl';
+                        modalTitle.textContent = 'Fallo en la Restauración';
+                        modalSubtitle.textContent = 'Ocurrió un problema durante el procesamiento.';
+
+                        errorMessage.textContent = errText;
+                        errorBox.classList.remove('hidden');
+                        closeBtn.classList.remove('hidden');
+                    }
+                });
+
+                xhr.addEventListener('error', function() {
+                    [stepUpload, stepExtract, stepDb, stepMigrate, stepMedia].forEach(s => {
+                        if (s.className.includes('amber')) {
+                            markStep(s, 'error');
+                        }
+                    });
+                    progressBar.style.width = '100%';
+                    progressBar.className = 'h-full transition-all duration-500 rounded-full bg-rose-500';
+                    statusStage.textContent = 'Conexión interrumpida';
+                    statusDetail.textContent = 'Fallo en la comunicación con el servidor.';
+
+                    modalIconContainer.className = 'h-16 w-16 mx-auto rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center mb-3';
+                    modalIcon.className = 'bi bi-x-circle-fill text-3xl';
+                    modalTitle.textContent = 'Error de Red o Conexión';
+                    modalSubtitle.textContent = 'La conexión se interrumpió durante la subida.';
+                    errorMessage.textContent = 'No se pudo comunicar con el servidor. Verifica tu conexión o intenta con un archivo más pequeño.';
+                    errorBox.classList.remove('hidden');
+                    closeBtn.classList.remove('hidden');
+                });
+
+                closeBtn.onclick = function() {
+                    modal.classList.add('hidden');
+                    document.body.classList.remove('overflow-hidden');
+                };
+
+                xhr.open('POST', form.action);
+                xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+                xhr.setRequestHeader('Accept', 'application/json');
+                xhr.send(formData);
+            });
+        })();
+    </script>
+
     <style>
         @keyframes fade-in {
             from {

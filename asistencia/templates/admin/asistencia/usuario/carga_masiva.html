@@ -1,0 +1,378 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static admin_modify %}
+
+{% block extrahead %}{{ block.super }}
+<style>
+    #content {
+        background:
+            radial-gradient(circle at 20% 20%, rgba(13, 148, 136, 0.08), transparent 42%),
+            radial-gradient(circle at 90% 15%, rgba(14, 116, 144, 0.10), transparent 38%),
+            #f1f5f9;
+        min-height: calc(100vh - 120px);
+    }
+    .mass-upload-layout {
+        max-width: 860px;
+        margin: 24px auto 0;
+        padding: 0 12px 24px;
+    }
+    .mass-upload-card {
+        background: #ffffff;
+        border: 1px solid #d9e2ec;
+        border-radius: 20px;
+        box-shadow: 0 12px 28px rgba(9, 30, 66, 0.12);
+        overflow: hidden;
+        animation: card-rise .42s ease;
+    }
+    @keyframes card-rise {
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .mass-upload-head {
+        padding: 24px 26px 16px;
+        border-bottom: 1px solid #dbe4ef;
+        background: linear-gradient(135deg, #0b2545, #0e7490);
+        color: #f8fafc;
+    }
+    .mass-upload-head h2 {
+        margin: 0;
+        font-size: 24px;
+        letter-spacing: 0.01em;
+    }
+    .mass-upload-head p {
+        margin: 8px 0 0;
+        color: #d8e9f5;
+        max-width: 68ch;
+    }
+    .mass-upload-body {
+        padding: 22px 26px 26px;
+    }
+    .dropzone {
+        border: 2px dashed #7ab8de;
+        border-radius: 16px;
+        padding: 24px 18px;
+        background: linear-gradient(180deg, #f7fbff, #f1f5f9);
+        transition: border-color .2s ease, transform .2s ease, box-shadow .2s ease;
+    }
+    .dropzone.is-active {
+        border-color: #0284c7;
+        box-shadow: 0 8px 20px rgba(2, 132, 199, 0.18);
+        transform: translateY(-1px);
+    }
+    .dropzone label {
+        display: block;
+        margin-bottom: 10px;
+        color: #0f172a;
+        font-weight: 700;
+    }
+    .dropzone input[type="file"] {
+        width: 100%;
+    }
+    .help-text {
+        margin-top: 10px;
+        color: #334155;
+        font-size: 13px;
+        display: block;
+    }
+    .hint-strip {
+        margin-top: 14px;
+        padding: 12px 14px;
+        border-left: 4px solid #0284c7;
+        background: #e8f3fb;
+        color: #0f172a;
+        border-radius: 10px;
+        font-size: 13px;
+    }
+    .submit-row {
+        margin-top: 20px;
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+    }
+    .submit-row .default {
+        background: linear-gradient(135deg, #0b2545, #0e7490) !important;
+        color: #ffffff !important;
+        border: 1px solid #0b5f77 !important;
+        border-radius: 12px;
+        padding: 10px 18px;
+        font-weight: 700;
+        text-shadow: none;
+        box-shadow: 0 6px 14px rgba(14, 116, 144, 0.24);
+    }
+    .submit-row .default:hover,
+    .submit-row .default:focus {
+        background: linear-gradient(135deg, #0a1f3a, #0b647d) !important;
+        color: #ffffff !important;
+    }
+    .file-counter {
+        margin-right: 12px;
+        color: #334155;
+        font-size: 13px;
+    }
+    .upload-status {
+        margin-top: 18px;
+        border: 1px solid #dbe4ef;
+        border-radius: 14px;
+        padding: 14px;
+        background: #f8fbff;
+        display: none;
+    }
+    .upload-status.is-visible {
+        display: block;
+    }
+    .upload-status-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+    }
+    .upload-status-title {
+        font-weight: 700;
+        color: #0f172a;
+    }
+    .upload-status-badge {
+        font-size: 12px;
+        font-weight: 700;
+        padding: 4px 10px;
+        border-radius: 999px;
+        border: 1px solid #bfdbfe;
+        color: #0c4a6e;
+        background: #e0f2fe;
+    }
+    .upload-progress-track {
+        width: 100%;
+        height: 10px;
+        border-radius: 999px;
+        background: #e2e8f0;
+        overflow: hidden;
+    }
+    .upload-progress-fill {
+        height: 100%;
+        width: 0;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #0284c7, #0e7490);
+        transition: width .2s ease;
+    }
+    .upload-status-note {
+        margin-top: 8px;
+        color: #475569;
+        font-size: 13px;
+    }
+    .upload-result {
+        margin-top: 14px;
+        border-radius: 12px;
+        padding: 12px 14px;
+        font-size: 13px;
+        line-height: 1.5;
+        display: none;
+    }
+    .upload-result.is-visible {
+        display: block;
+    }
+    .upload-result.is-success {
+        border: 1px solid #86efac;
+        background: #f0fdf4;
+        color: #14532d;
+    }
+    .upload-result.is-warning {
+        border: 1px solid #fde68a;
+        background: #fffbeb;
+        color: #854d0e;
+    }
+    .upload-result.is-error {
+        border: 1px solid #fecaca;
+        background: #fef2f2;
+        color: #7f1d1d;
+    }
+    .upload-result ul {
+        margin: 8px 0 0;
+        padding-left: 18px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <div class="mass-upload-layout">
+        <div class="mass-upload-card">
+            <div class="mass-upload-head">
+                <h2>Carga Masiva de Fotos</h2>
+                <p>Sube varias imágenes a la vez. Cada archivo debe llevar como nombre el DNI del usuario (8 dígitos), por ejemplo: <strong>12345678.jpg</strong>.</p>
+            </div>
+            <div class="mass-upload-body">
+                <form method="post" enctype="multipart/form-data" id="mass-upload-form">
+                    {% csrf_token %}
+
+                    {% if form.errors %}
+                        <p class="errornote">Por favor corrija los errores abajo.</p>
+                    {% endif %}
+
+                    <div class="dropzone" id="dropzone">
+                        {{ form.fotos.label_tag }}
+                        {{ form.fotos }}
+                        {% if form.fotos.help_text %}
+                            <span class="help-text">{{ form.fotos.help_text }}</span>
+                        {% endif %}
+                        {{ form.fotos.errors }}
+                        <div class="hint-strip">
+                            Formatos permitidos: JPG, JPEG, PNG y WEBP. Tamaño máximo por foto: 5 MB.
+                        </div>
+                    </div>
+
+                    <div class="submit-row">
+                        <span class="file-counter" id="file-counter">Ningún archivo seleccionado.</span>
+                        <input type="submit" value="Cargar Fotos" class="default" name="_save" id="submit-upload">
+                    </div>
+                </form>
+                <div class="upload-status" id="upload-status">
+                    <div class="upload-status-head">
+                        <span class="upload-status-title" id="upload-stage">Esperando archivos...</span>
+                        <span class="upload-status-badge" id="upload-percent">0%</span>
+                    </div>
+                    <div class="upload-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="upload-track">
+                        <div class="upload-progress-fill" id="upload-fill"></div>
+                    </div>
+                    <div class="upload-status-note" id="upload-note">El progreso aparecerá al iniciar la carga.</div>
+                </div>
+                <div class="upload-result" id="upload-result" aria-live="polite"></div>
+            </div>
+        </div>
+    </div>
+    <script>
+        (function () {
+            var form = document.getElementById('mass-upload-form');
+            var input = document.getElementById('id_fotos');
+            var zone = document.getElementById('dropzone');
+            var counter = document.getElementById('file-counter');
+            var submit = document.getElementById('submit-upload');
+            var status = document.getElementById('upload-status');
+            var stage = document.getElementById('upload-stage');
+            var percent = document.getElementById('upload-percent');
+            var fill = document.getElementById('upload-fill');
+            var note = document.getElementById('upload-note');
+            var result = document.getElementById('upload-result');
+            var track = document.getElementById('upload-track');
+            if (!form || !input || !zone || !counter || !submit || !status || !stage || !percent || !fill || !note || !result || !track) return;
+
+            var setProgress = function (value) {
+                var safe = Math.max(0, Math.min(100, Math.round(value)));
+                fill.style.width = safe + '%';
+                percent.textContent = safe + '%';
+                track.setAttribute('aria-valuenow', String(safe));
+            };
+
+            var resetResult = function () {
+                result.className = 'upload-result';
+                result.innerHTML = '';
+            };
+
+            var refreshCounter = function () {
+                var amount = input.files ? input.files.length : 0;
+                counter.textContent = amount > 0
+                    ? amount + (amount === 1 ? ' archivo listo para subir.' : ' archivos listos para subir.')
+                    : 'Ningún archivo seleccionado.';
+            };
+
+            input.addEventListener('change', refreshCounter);
+            ['dragenter', 'dragover'].forEach(function (ev) {
+                zone.addEventListener(ev, function (e) {
+                    e.preventDefault();
+                    zone.classList.add('is-active');
+                });
+            });
+            ['dragleave', 'drop'].forEach(function (ev) {
+                zone.addEventListener(ev, function (e) {
+                    e.preventDefault();
+                    zone.classList.remove('is-active');
+                });
+            });
+            zone.addEventListener('drop', function (e) {
+                if (!e.dataTransfer || !e.dataTransfer.files) return;
+                input.files = e.dataTransfer.files;
+                refreshCounter();
+            });
+
+            form.addEventListener('submit', function (e) {
+                if (!window.XMLHttpRequest || !window.FormData) return;
+                e.preventDefault();
+
+                if (!input.files || !input.files.length) {
+                    return;
+                }
+
+                status.classList.add('is-visible');
+                result.classList.remove('is-visible');
+                resetResult();
+                submit.disabled = true;
+                submit.value = 'Cargando...';
+                stage.textContent = 'Subiendo archivos...';
+                note.textContent = 'No cierres esta ventana. La carga puede tardar unos minutos.';
+                setProgress(0);
+
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', form.action || window.location.href, true);
+                xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+
+                xhr.upload.addEventListener('progress', function (ev) {
+                    if (!ev.lengthComputable) return;
+                    var ratio = (ev.loaded / ev.total) * 90;
+                    setProgress(ratio);
+                    note.textContent = 'Transferidos ' + Math.round(ev.loaded / 1024 / 1024) + ' MB de ' + Math.max(1, Math.round(ev.total / 1024 / 1024)) + ' MB.';
+                });
+
+                xhr.onreadystatechange = function () {
+                    if (xhr.readyState !== 4) return;
+
+                    var payload = null;
+                    try {
+                        payload = JSON.parse(xhr.responseText || '{}');
+                    } catch (err) {
+                        payload = null;
+                    }
+
+                    if (xhr.status >= 200 && xhr.status < 300 && payload && payload.ok) {
+                        stage.textContent = 'Procesamiento completado';
+                        note.textContent = 'Las fotos terminaron de procesarse correctamente.';
+                        setProgress(100);
+
+                        var conAlertas = (payload.no_encontrados && payload.no_encontrados.length) ||
+                            (payload.nombres_invalidos && payload.nombres_invalidos.length) ||
+                            (payload.archivos_invalidos && payload.archivos_invalidos.length);
+                        var stateClass = conAlertas ? 'is-warning' : 'is-success';
+                        var resumen = '<strong>Resultado:</strong> ' + payload.actualizados + ' de ' + payload.total_recibidos + ' fotos actualizadas.';
+                        var detalles = [];
+
+                        if (payload.no_encontrados && payload.no_encontrados.length) {
+                            detalles.push('<li>DNI no encontrados: ' + payload.no_encontrados.join(', ') + '</li>');
+                        }
+                        if (payload.nombres_invalidos && payload.nombres_invalidos.length) {
+                            detalles.push('<li>Archivos con nombre inválido: ' + payload.nombres_invalidos.join(', ') + '</li>');
+                        }
+                        if (payload.archivos_invalidos && payload.archivos_invalidos.length) {
+                            detalles.push('<li>Imágenes rechazadas por validación: ' + payload.archivos_invalidos.join(', ') + '</li>');
+                        }
+
+                        result.className = 'upload-result is-visible ' + stateClass;
+                        result.innerHTML = resumen + (detalles.length ? '<ul>' + detalles.join('') + '</ul>' : '');
+                    } else {
+                        stage.textContent = 'Carga interrumpida';
+                        note.textContent = 'Revisa los errores y vuelve a intentarlo.';
+                        setProgress(100);
+                        var errores = (payload && payload.errors && payload.errors.length) ? payload.errors : ['No se pudo completar la carga.'];
+                        result.className = 'upload-result is-visible is-error';
+                        result.innerHTML = '<strong>No se pudo procesar la carga.</strong><ul><li>' + errores.join('</li><li>') + '</li></ul>';
+                    }
+
+                    submit.disabled = false;
+                    submit.value = 'Cargar Fotos';
+                };
+
+                var formData = new FormData(form);
+                xhr.send(formData);
+            });
+
+            refreshCounter();
+        })();
+    </script>
+</div>
+{% endblock %}

@@ -1,0 +1,92 @@
+{% extends "asistencia/base.html" %}
+
+{% block title %}Registrar Módulo de Carnet - {{ usuario.nombre|title }} {% endblock title %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto py-10 px-4 animate-fade-in">
+    <div class="mb-8">
+        <h2 class="text-3xl font-extrabold text-slate-800">Registrar Credencial</h2>
+        <p class="text-slate-500 mt-2">Para el socio <span class="font-bold text-slate-700">{{ usuario.nombre }} {{ usuario.apellido }}</span> (DNI: {{ usuario.dni }})</p>
+    </div>
+
+    <div class="bg-white rounded-3xl shadow-xl shadow-slate-200/50 p-8 border border-slate-100">
+        <form method="post" action="{% url 'entregar_carnet' usuario.id %}">
+            {% csrf_token %}
+
+            <div class="space-y-6">
+                <!-- Motivo -->
+                <div class="space-y-2">
+                    <label for="{{ form.motivo.id_for_label }}" class="text-sm font-bold text-slate-700 block">
+                        Motivo de Emisión
+                    </label>
+                    {{ form.motivo }}
+                    {% if form.motivo.errors %}
+                    <p class="text-red-500 text-xs mt-1">{{ form.motivo.errors|striptags }}</p>
+                    {% endif %}
+                </div>
+
+                <!-- Fecha de Vencimiento -->
+                <div class="space-y-2">
+                    <label for="{{ form.fecha_vencimiento.id_for_label }}" class="text-sm font-bold text-slate-700 block gap-2 flex items-center">
+                        Fecha de Vencimiento <span class="text-slate-400 text-xs font-normal">(Opcional)</span>
+                    </label>
+                    {{ form.fecha_vencimiento }}
+                    {% if form.fecha_vencimiento.errors %}
+                    <p class="text-red-500 text-xs mt-1">{{ form.fecha_vencimiento.errors|striptags }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="space-y-2">
+                    <label for="{{ form.estado_entrega.id_for_label }}" class="text-sm font-bold text-slate-700 block">
+                        Estado de Entrega
+                    </label>
+                    {{ form.estado_entrega }}
+                    {% if form.estado_entrega.errors %}
+                    <p class="text-red-500 text-xs mt-1">{{ form.estado_entrega.errors|striptags }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="space-y-2">
+                    <label for="{{ form.entregado_a.id_for_label }}" class="text-sm font-bold text-slate-700 block gap-2 flex items-center">
+                        Entregado a <span class="text-slate-400 text-xs font-normal">(Opcional)</span>
+                    </label>
+                    {{ form.entregado_a }}
+                    {% if form.entregado_a.errors %}
+                    <p class="text-red-500 text-xs mt-1">{{ form.entregado_a.errors|striptags }}</p>
+                    {% endif %}
+                </div>
+
+                <div class="space-y-2">
+                    <label for="{{ form.observaciones_entrega.id_for_label }}" class="text-sm font-bold text-slate-700 block gap-2 flex items-center">
+                        Observaciones de Entrega <span class="text-slate-400 text-xs font-normal">(Opcional)</span>
+                    </label>
+                    {{ form.observaciones_entrega }}
+                    {% if form.observaciones_entrega.errors %}
+                    <p class="text-red-500 text-xs mt-1">{{ form.observaciones_entrega.errors|striptags }}</p>
+                    {% endif %}
+                </div>
+
+                <!-- Observaciones -->
+                <div class="space-y-2">
+                    <label for="{{ form.observaciones.id_for_label }}" class="text-sm font-bold text-slate-700 block gap-2 flex items-center">
+                        Observaciones <span class="text-slate-400 text-xs font-normal">(Opcional)</span>
+                    </label>
+                    {{ form.observaciones }}
+                    {% if form.observaciones.errors %}
+                    <p class="text-red-500 text-xs mt-1">{{ form.observaciones.errors|striptags }}</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="flex items-center gap-4 mt-8 pt-6 border-t border-slate-100">
+                <button type="submit" class="flex-1 bg-slate-900 text-white py-3 px-6 rounded-xl font-bold uppercase text-xs tracking-widest hover:bg-black transition-all hover:-translate-y-0.5 shadow-lg shadow-slate-900/20 text-center">
+                    Guardar Registro
+                </button>
+                <a href="{% url 'detalle_usuario' usuario.dni %}" class="flex-1 bg-slate-100 text-slate-600 py-3 px-6 rounded-xl font-bold uppercase text-xs tracking-widest hover:bg-slate-200 transition-all text-center">
+                    Cancelar
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

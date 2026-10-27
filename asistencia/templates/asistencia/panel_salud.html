@@ -1,0 +1,63 @@
+{% extends "asistencia/base.html" %}
+
+{% block title %}
+    Panel de Salud - Quiulacocha
+{% endblock title %}
+
+{% block content %}
+    <div class="max-w-6xl mx-auto space-y-8 animate-fade-in">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+                <h2 class="text-4xl font-black text-slate-900 tracking-tight">Panel de Salud</h2>
+                <p class="text-slate-500 font-bold italic">Estado operativo del sistema en tiempo real</p>
+            </div>
+            <a href="{% url 'dashboard' %}"
+               class="px-4 py-2 bg-slate-100 text-slate-600 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-slate-200 transition">
+                Volver al dashboard
+            </a>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+            <div class="bg-white rounded-3xl border border-slate-100 shadow-premium p-6">
+                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Base de datos</p>
+                <p class="text-2xl font-black mt-2 {% if health.db_status == 'OK' %}text-emerald-600{% else %}text-red-600{% endif %}">
+                    {{ health.db_status }}
+                </p>
+                <p class="text-xs text-slate-500 mt-2">Motor: {{ health.db_engine }}</p>
+                <p class="text-xs text-slate-500">Latencia: {{ health.db_latency_ms|default:"N/A" }} ms</p>
+            </div>
+
+            <div class="bg-white rounded-3xl border border-slate-100 shadow-premium p-6">
+                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Migraciones pendientes</p>
+                <p class="text-2xl font-black mt-2 {% if health.pending_migrations == 0 %}text-emerald-600{% else %}text-amber-600{% endif %}">
+                    {{ health.pending_migrations }}
+                </p>
+                <p class="text-xs text-slate-500 mt-2">Aplicar antes de cambios de produccion</p>
+            </div>
+
+            <div class="bg-white rounded-3xl border border-slate-100 shadow-premium p-6">
+                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Uso de disco</p>
+                <p class="text-2xl font-black mt-2 text-slate-900">{{ health.disk_used }}</p>
+                <p class="text-xs text-slate-500 mt-2">Libre: {{ health.disk_free }}</p>
+                <p class="text-xs text-slate-500">Total: {{ health.disk_total }}</p>
+            </div>
+
+            <div class="bg-white rounded-3xl border border-slate-100 shadow-premium p-6">
+                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Almacenamiento</p>
+                <p class="text-sm font-bold mt-2 text-slate-700">Media: {{ health.media_size }}</p>
+                <p class="text-sm font-bold text-slate-700">Backups: {{ health.backups_size }}</p>
+                <p class="text-xs text-slate-500 mt-2">Ultima restauracion: {{ health.last_restore }}</p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-3xl border border-slate-100 shadow-premium p-8 space-y-4">
+            <h3 class="text-lg font-black text-slate-900">Ultimo backup detectado</h3>
+            <p class="text-sm text-slate-600">
+                <span class="font-bold">Archivo:</span> {{ health.latest_backup }}
+            </p>
+            <p class="text-sm text-slate-600">
+                <span class="font-bold">Fecha:</span> {{ health.latest_backup_at }}
+            </p>
+        </div>
+    </div>
+{% endblock content %}
