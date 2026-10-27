@@ -1134,7 +1134,11 @@ def descargar_reporte_global_pdf(request):
         
         # Procesar récords unificados para este evento
         records = []
+        seen_user_ids = set()
         for a in asistencias:
+            if a.usuario_id in seen_user_ids:
+                continue
+            seen_user_ids.add(a.usuario_id)
             is_late_absent = bool(
                 tardanza_activa
                 and getattr(a, 'puntualidad', None) == Asistencia.PUNTUALIDAD_TARDE
@@ -1152,6 +1156,9 @@ def descargar_reporte_global_pdf(request):
                 total_general_asistencias += 1
                 
         for u in no_asistentes:
+            if u.id in seen_user_ids:
+                continue
+            seen_user_ids.add(u.id)
             records.append({
                 'usuario': u,
                 'is_absent': True,
@@ -1725,7 +1732,11 @@ def exportar_reporte_global_excel(request):
         no_asistentes = data.get('usuarios_no_asistentes', [])
         
         records = []
+        seen_user_ids = set()
         for a in asistencias:
+            if a.usuario_id in seen_user_ids:
+                continue
+            seen_user_ids.add(a.usuario_id)
             is_late_absent = bool(
                 tardanza_activa
                 and getattr(a, 'puntualidad', None) == Asistencia.PUNTUALIDAD_TARDE
@@ -1741,6 +1752,9 @@ def exportar_reporte_global_excel(request):
             })
                 
         for u in no_asistentes:
+            if u.id in seen_user_ids:
+                continue
+            seen_user_ids.add(u.id)
             records.append({
                 'usuario': u,
                 'is_absent': True,

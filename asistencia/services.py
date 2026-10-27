@@ -59,12 +59,18 @@ class AsistenciaService:
             today = now.date()
             current_time = now.time()
         
-        # Buscar asistencia existente
-        existing_asistencia = Asistencia.objects.filter(
-            usuario=usuario,
-            evento=evento,
-            fecha=today
-        ).first()
+        # Buscar asistencia existente (por evento si existe para evitar duplicados en la misma reunión)
+        if evento:
+            existing_asistencia = Asistencia.objects.filter(
+                usuario=usuario,
+                evento=evento
+            ).first()
+        else:
+            existing_asistencia = Asistencia.objects.filter(
+                usuario=usuario,
+                evento__isnull=True,
+                fecha=today
+            ).first()
         
         # Validar que no haya ingreso duplicado
         AsistenciaService._validar_ingreso_duplicado(existing_asistencia, usuario, evento)
@@ -134,12 +140,18 @@ class AsistenciaService:
             today = now.date()
             current_time = now.time()
         
-        # Buscar asistencia existente
-        existing_asistencia = Asistencia.objects.filter(
-            usuario=usuario,
-            evento=evento,
-            fecha=today
-        ).first()
+        # Buscar asistencia existente (por evento si existe para evitar duplicados en la misma reunión)
+        if evento:
+            existing_asistencia = Asistencia.objects.filter(
+                usuario=usuario,
+                evento=evento
+            ).first()
+        else:
+            existing_asistencia = Asistencia.objects.filter(
+                usuario=usuario,
+                evento__isnull=True,
+                fecha=today
+            ).first()
         
         # Validar que existe ingreso previo
         if not existing_asistencia or not existing_asistencia.hora_ingreso:
